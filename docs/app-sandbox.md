@@ -60,7 +60,7 @@ evidence. "Flow" means an `e2e/flows/packaging-distribution/sandbox-*` flow that
 | Files outside the container (`@legendapp/spark/file-system` paths) | Fails `E_PERMISSION_DENIED` until the person grants the file (open or save panel, `files.user-selected.read-write`; a drop; opening it with the app); a bookmark keeps the grant | Native test (listing a folder outside the container is denied); the PDF and diagnostics export flows, which write to a temporary folder outside the container, get `E_PERMISSION_DENIED` against the variant |
 | Security-scoped bookmarks | Work with `files.bookmarks.app-scope`; without it they reject `E_UNAVAILABLE` | `tests/file-integration.test.ts` (sandboxed runs) |
 | Full Disk Access status | `indeterminate` unless a probe succeeds | `tests/file-integration.test.ts` |
-| File versions (`@legendapp/spark/documents` versions) | Fail `E_PERMISSION_DENIED` for a document in the container | `documents-operations` flow against the variant (passes against the direct build); [#462](https://github.com/LegendApp/legend-spark/issues/462) |
+| File versions (`@legendapp/spark/documents` versions) | Work for a document in the container: listing, adding, reading (`readDocumentVersionText`) and restoring. On macOS 27 a version's file in the revision store is readable only while its `NSFileVersion` lives (macOS 26 still allows it), so versions are read by id and have no path ([#462](https://github.com/LegendApp/legend-spark/issues/462)) | Flow `document-model/documents-versions-sandbox`; `tests/document-files-native.test.ts` (sandboxed run) |
 | Opening a file the app was not given by macOS | Fails: the test driver's `openFile` delivers a path without the sandbox extension Finder's open would carry | `documents-open-file` flow against the variant (passes against the direct build); Finder's open not tested; [#463](https://github.com/LegendApp/legend-spark/issues/463) |
 | Child processes (`@legendapp/spark/processes`) | Work; every child inherits the sandbox: the container is its home, and it is denied what the app is denied | Native test |
 | Outgoing network connections | Work with `network.client`; `EPERM` without | Native test |
@@ -106,6 +106,6 @@ bun run e2e:run e2e/flows/packaging-distribution --backend driver \
   ([#463](https://github.com/LegendApp/legend-spark/issues/463)).
 - **The other flows.** The gate runs only `variant: sandbox` flows against the variant. On 2026-10-13, 102 runs of the
   driver flows of 14 areas against the Kitchen Sink's variant passed 81; besides the expected privileged helper
-  answers, the failures caused by the sandbox are the file versions, `openFile`, promised-file drop and export rows
-  above, and the rest also fail against the direct build. Running such flows in the gate is
+  answers, the failures caused by the sandbox were the file versions (since fixed, #462), `openFile`, promised-file
+  drop and export rows above, and the rest also fail against the direct build. Running such flows in the gate is
   [#466](https://github.com/LegendApp/legend-spark/issues/466).

@@ -104,6 +104,7 @@
     "listDocumentVersions",
     "noteRecentDocument",
     "openSelectedDocumentPath",
+    "readDocumentVersionText",
     "restoreDocumentVersion",
     "subscribeToOpenRequests",
     "useDocumentAppController",

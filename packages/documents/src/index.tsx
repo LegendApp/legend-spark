@@ -5,7 +5,7 @@ export { createDocumentTransitionGuard } from "./documentTransition";
 export * from "./controller";
 export * from "./reload";
 export { createDocumentSession, findDocumentSession, getDocumentSessionAvailability, type DocumentSession, type DocumentSessionOptions, type DocumentState, type DocumentSaveOptions, type DocumentSaveResult } from "./session";
-export { getDocumentVersionsAvailability, listDocumentVersions, addDocumentVersion, restoreDocumentVersion, type DocumentVersion } from "./versions";
+export { getDocumentVersionsAvailability, listDocumentVersions, addDocumentVersion, readDocumentVersionText, restoreDocumentVersion, type DocumentVersion } from "./versions";
 export * from "./hooks";
 
 /** Options for `openSelectedDocumentPath`. `allowedFileTypes` are extensions without the dot; `invalidSelectionMessage` replaces the default error text when no selected path passes `isDocumentPath`. */

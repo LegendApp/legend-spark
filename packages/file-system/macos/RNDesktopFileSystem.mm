@@ -231,6 +231,7 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
       }
       else if ([method isEqual:@"versions"]) result = SparkListFileVersions(url, &error);
       else if ([method isEqual:@"addVersion"]) result = SparkAddFileVersion(url, &error);
+      else if ([method isEqual:@"readVersion"]) result = SparkReadFileVersion(url, args[@"id"], &error);
       else if ([method isEqual:@"restoreVersion"]) SparkRestoreFileVersion(url, args[@"id"], &error);
       else if ([method isEqual:@"documentState"]) result = SparkDocumentFileState(url, &error);
       else if ([method isEqual:@"setLocked"]) SparkSetFileLocked(url, [args[@"locked"] boolValue], &error);

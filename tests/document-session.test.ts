@@ -48,7 +48,7 @@ vi.mock("@legendapp/spark-file-system/src/native", async () => {
     call: vi.fn(async (method: string, args: any, valid: (value: unknown) => boolean) => {
       mocks.calls.push({ method, args });
       const list = () => mocks.versions.get(args.path) ?? [];
-      const describe = (version: { id: string }, index: number) => ({ id: version.id, name: "doc", path: `/revisions/${version.id}`, modifiedAt: index + 1 });
+      const describe = (version: { id: string }, index: number) => ({ id: version.id, name: "doc", modifiedAt: index + 1 });
       let value: unknown = null;
       if (method === "documentState") { read(args.path); value = { locked: mocks.locked.has(args.path), writable: !mocks.locked.has(args.path) && !mocks.readOnly.has(args.path) }; }
       else if (method === "setLocked") { read(args.path); if (args.locked) mocks.locked.add(args.path); else mocks.locked.delete(args.path); }
@@ -57,6 +57,7 @@ vi.mock("@legendapp/spark-file-system/src/native", async () => {
         const version = { id: `v${mocks.calls.length}`, text: read(args.path) };
         mocks.versions.set(args.path, [...list(), version]); value = describe(version, list().length - 1);
       } else if (method === "versions") { read(args.path); value = list().map(describe).reverse(); }
+      else if (method === "readVersion") { read(args.path); value = (list().find(entry => entry.id === args.id) ?? fail("E_NOT_FOUND")).text; }
       else if (method === "restoreVersion") {
         const version = list().find(entry => entry.id === args.id) ?? fail("E_NOT_FOUND");
         mocks.versions.set(args.path, [...list(), { id: `v${mocks.calls.length}`, text: read(args.path) }]);
@@ -91,7 +92,7 @@ test("availability is macOS-only; Windows and a missing module fail typed before
   expect(documents.getDocumentSessionAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
   expect(documents.getDocumentVersionsAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
   expect(() => create()).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
-  for (const attempt of [() => documents.listDocumentVersions("/a"), () => documents.addDocumentVersion("/a"), () => documents.restoreDocumentVersion("/a", "v")]) {
+  for (const attempt of [() => documents.listDocumentVersions("/a"), () => documents.addDocumentVersion("/a"), () => documents.readDocumentVersionText("/a", "v"), () => documents.restoreDocumentVersion("/a", "v")]) {
     await expect(attempt()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   }
   expect(mocks.calls).toEqual([]);
@@ -231,6 +232,10 @@ test("duplicate, rename, move to, versions and locking", async () => {
 
   const versions = await documents.listDocumentVersions("/archive/renamed.md");
   expect(versions.map(version => mocks.versions.get("/archive/renamed.md")!.find(entry => entry.id === version.id)!.text)).toEqual(["unsaved", "v1"]);
+  expect(await Promise.all(versions.map(version => documents.readDocumentVersionText("/archive/renamed.md", version.id)))).toEqual(["unsaved", "v1"]);
+  expect(methods("readVersion").at(-1)!.args).toEqual({ path: "/archive/renamed.md", id: versions.at(-1)!.id });
+  await expect(documents.readDocumentVersionText("/archive/renamed.md", "")).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(documents.readDocumentVersionText("/archive/renamed.md", "missing")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
   session.setText("dirty");
   await expect(session.restoreVersion(versions.at(-1)!.id)).rejects.toMatchObject({ code: "E_BUSY" });
   await session.revertToSaved();

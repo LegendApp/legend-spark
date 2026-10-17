@@ -128,12 +128,14 @@ await session.remove();              // awaits accepted work, autosaves pending 
   app is reported to `onError` (`E_NOT_FOUND`); the session does not follow it.
 - **Versions.** Like `NSDocument`, the contents as opened are recorded before the session's first write, and each
   `save()` / `saveAs()` records the saved contents. Autosaves record nothing. `listDocumentVersions(path)` lists
-  saved versions newest first (`{ id, name, path, modifiedAt }`; `path` is a read-only file in the revision store
-  to preview with `readText`), `addDocumentVersion(path)` records the current contents, and
+  saved versions newest first (`{ id, name, modifiedAt }`), `readDocumentVersionText(path, id)` reads one to preview
+  it, `addDocumentVersion(path)` records the current contents, and
   `restoreDocumentVersion(path, id)` (or `session.restoreVersion(id)`, which rejects `E_BUSY` with unsaved edits)
   replaces the file inside one coordinated write after recording the replaced contents, so a restore can be undone.
   Volumes without a revision store (FAT, most network volumes) reject version calls with `E_UNAVAILABLE`; saving
-  there still works without versions.
+  there still works without versions. Versions work in the [App Sandbox](app-sandbox.md): a sandboxed process may read
+  a version's file in the revision store only while macOS's `NSFileVersion` for it lives, so versions are read by id
+  in one native call and have no path ([#462](https://github.com/LegendApp/legend-spark/issues/462)).
 - **One session per file.** `open()` and `saveAs()` reject `E_BUSY` when another live session has the file, and
   `open()` rejects `E_BUSY` when this session has unsaved edits. `findDocumentSession(path)` returns the session that
   has a path open, so reopening a document can `showWindow(session.windowId, { focus: true })`. Paths are compared
@@ -173,6 +175,7 @@ Against the Document model epic (#23). "App" means the application composes it f
 
 Kitchen Sink: Document model › Documents (`spark-ks://document-model/documents`) runs each operation on a
 document in a temporary folder. Launched with `--ks-documents-run` it runs them all once and shows
-`document-model-documents-check-<id>-passed` per check (`e2e/flows/document-model/documents-operations.yaml`).
+`document-model-documents-check-<id>-passed` per check (`e2e/flows/document-model/documents-operations.yaml`;
+`documents-versions-sandbox.yaml` runs the versions check against the App Sandbox variant).
 Native tests: `tests/document-files-native.test.ts` (NSFileVersion, locking, coordinated conditional writes and a FAT
-volume on temp files); TypeScript: `tests/document-session.test.ts`.
+volume on temp files, and the versions again in a sandboxed process on a folder in its container); TypeScript: `tests/document-session.test.ts`.
