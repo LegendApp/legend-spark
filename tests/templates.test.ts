@@ -1,9 +1,12 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { readConfig } from "@legendapp/spark/config";
+import { prepareGoProfile } from "../packages/cli/src/go-profile.ts";
+import { run } from "../packages/cli/src/commands.ts";
+vi.mock("../packages/cli/src/commands.ts", () => ({ run: vi.fn() }));
 const { initializeTemplate } = createRequire(import.meta.url)("../packages/cli/src/init-template.cjs");
 const templates = path.resolve(import.meta.dirname, "../packages/cli/templates");
 const { pointer, claudePointer } = createRequire(import.meta.url)("../packages/cli/src/migrations.cjs");
@@ -65,4 +68,23 @@ test("all templates retain the tested desktop matrix", () => {
       expect(pkg.pnpm.onlyBuiltDependencies).toContain(name);
     }
   }
+});
+
+test("Runner profile trusts enriched-markdown postinstall before installing with Bun", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-runner-install-"));
+  try {
+    writeFileSync(path.join(root, "package.json"), readFileSync(path.join(templates, "blank-typescript/package.json")));
+    const manifest = path.join(root, "manifest.json");
+    writeFileSync(manifest, JSON.stringify({ "@legendapp/spark": "spark.tgz" }));
+    vi.mocked(run).mockImplementationOnce(async (_root, command) => {
+      const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+      expect(command).toEqual(["bun", "install"]);
+      expect(pkg.trustedDependencies).toContain("react-native-enriched-markdown");
+      expect(pkg["enriched-markdown"]?.enableCodeHighlight).not.toBe(false);
+      expect(pkg["enriched-markdown"]?.enableMath).not.toBe(false);
+      return "";
+    });
+    await prepareGoProfile(root, manifest, "macos", "bun");
+    expect(run).toHaveBeenCalledTimes(1);
+  } finally { vi.clearAllMocks(); rmSync(root, { recursive: true, force: true }); }
 });
