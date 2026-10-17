@@ -81,3 +81,10 @@ checks:
     spec: "#211 FUT.plugins"
     covers:
       - ./ui/uniwind#Button
+  FUT-PLUGINVISUAL-02:
+    title: "With Hello's panel mounted (a ThreadedReactSurface rendering in the plugin's runtime), the Plugins screen's scroll content and the panel match their golden in light and dark, English and Arabic; the surface draws nothing outside its own bounds"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins; #396"
+    covers:
+      - ./plugins#createPluginHost
