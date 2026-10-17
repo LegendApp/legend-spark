@@ -7,22 +7,28 @@ import type { WindowInstance } from "./types";
 export type WindowRequests = { [type: string]: (payload: any) => unknown };
 /** Broadcast types and their payloads. */
 export type WindowBroadcasts = { [type: string]: unknown };
+/** The payload type of request `K`: its handler's first parameter. */
 export type WindowRequestPayload<R extends WindowRequests, K extends keyof R> = Parameters<R[K]>[0];
+/** The result type of request `K`: what its handler returns, awaited. */
 export type WindowRequestResult<R extends WindowRequests, K extends keyof R> = Awaited<ReturnType<R[K]>>;
 /** Answers one request type for one window. `from` is the sending window, or null for app code such as the main window. */
 export type WindowRequestHandler<R extends WindowRequests, K extends keyof R> =
   (payload: WindowRequestPayload<R, K>, from: WindowInstance | null) => WindowRequestResult<R, K> | Promise<WindowRequestResult<R, K>>;
+/** Receives broadcast `K`. `from` is the sending window, or null for app code. */
 export type WindowBroadcastListener<B extends WindowBroadcasts, K extends keyof B> = (payload: B[K], from: WindowInstance | null) => void;
+/** Options for `WindowMessages.request`. */
 export interface WindowRequestOptions {
   /** The sending window, passed to the handler. */
   from?: WindowInstance;
   /** Rejects `E_TIMEOUT` when the handler has not settled by then. 1–2147483647 ms; defaults to 30000. */
   timeoutMs?: number;
 }
+/** Options for `WindowMessages.broadcast`. */
 export interface WindowBroadcastOptions {
   /** The sending window: its own listeners are skipped. */
   from?: WindowInstance;
 }
+/** Options for `WindowMessages.addListener`. */
 export interface WindowBroadcastListenerOptions {
   /** The listening window: the listener ends when it closes and skips that window's own broadcasts. */
   window?: WindowInstance;
@@ -69,6 +75,7 @@ function fn(value: unknown, name: string) {
 
 type Listener = { type: string; listener: (payload: unknown, from: WindowInstance | null) => void; window?: WindowInstance };
 
+/** Creates a typed request and broadcast channel between navigator windows in the shared JavaScript runtime. */
 export function createWindowMessages<R extends WindowRequests = WindowRequests, B extends WindowBroadcasts = WindowBroadcasts>(): WindowMessages<R, B> {
   let handlers = new WeakMap<WindowInstance, Map<string, (payload: unknown, from: WindowInstance | null) => unknown>>();
   const listeners = new Set<Listener>(), pending = new Set<(error: SparkError) => void>();

@@ -11,10 +11,13 @@ import type { WindowBounds, WindowId, WindowOpenOptions } from "./types";
 // frames and opacity on the main thread, follows Reduce Motion, and in driver runs follows motion's virtual clock.
 // macOS only for now.
 
+/** A feature `getWindowChoreographyAvailability` reports: `zoom` (`openWindowFrom`), `frame` (`animateWindowBounds`), `closeTransition` (`setWindowCloseTransition`), `attach` (`attachWindow`). */
 export type WindowChoreographyFeature = "zoom" | "frame" | "closeTransition" | "attach";
 const FEATURES: readonly WindowChoreographyFeature[] = ["zoom", "frame", "closeTransition", "attach"];
+/** The cubic easing curve of a window animation. */
 export type WindowEasing = "linear" | "easeIn" | "easeOut" | "easeInOut";
 const EASINGS: readonly WindowEasing[] = ["linear", "easeIn", "easeOut", "easeInOut"];
+/** Duration and easing of a window choreography animation. */
 export interface WindowTransition {
   /** 0–5000, default 250. */
   durationMs?: number;
@@ -73,6 +76,7 @@ export async function stopWindowAnimation(id: WindowId): Promise<void> {
   await windowCommand("stopAnimation", { id });
 }
 
+/** A close transition for `setWindowCloseTransition`: where the closing window shrinks to and which window takes focus. */
 export interface WindowCloseTransition {
   /** Where the window shrinks to as it closes; `null` fades it out where it is. */
   to: WindowSourceRect | null;
@@ -99,6 +103,7 @@ export async function setWindowCloseTransition(id: WindowId, value: WindowCloseT
   await windowCommand("closeTransition", { id, transition: native });
 }
 
+/** The zoom for `openWindowFrom`: where the window grows from and how it closes back. */
 export interface WindowZoomOptions {
   /** The element the window grows from: a list row, a thumbnail, a tab or panel being torn off. */
   from: WindowSourceRect;
@@ -108,6 +113,7 @@ export interface WindowZoomOptions {
   focusOnClose?: WindowId;
   transition?: WindowTransition;
 }
+/** What `openWindowFrom` resolves with: the opened window and its running zoom. */
 export interface WindowZoom {
   readonly id: WindowId;
   /** Where the window lands: the frame `openWindow` gave it. */
@@ -142,8 +148,10 @@ export async function openWindowFrom(options: WindowOpenOptions, zoom: WindowZoo
   return { id: options.id, bounds: info.bounds, finished };
 }
 
+/** The parent edge `attachWindow` docks a window at. `leading` and `trailing` follow the app's layout direction. */
 export type WindowAttachmentEdge = "leading" | "trailing" | "left" | "right" | "top" | "bottom";
 const EDGES: readonly WindowAttachmentEdge[] = ["leading", "trailing", "left", "right", "top", "bottom"];
+/** Options for `attachWindow`. */
 export interface WindowAttachOptions {
   /** The parent's edge. Leading and trailing follow the app's layout direction. */
   edge: WindowAttachmentEdge;
@@ -161,6 +169,7 @@ export interface WindowAttachOptions {
   onChange?: (event: { windowId: WindowId; attached: boolean }) => void;
   onError?: (error: SparkError) => void;
 }
+/** The registration `attachWindow` resolves with; `remove()` undocks the window where it is. */
 export interface WindowAttachment extends AsyncRegistration {
   readonly id: WindowId;
   readonly parentId: WindowId;

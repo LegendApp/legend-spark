@@ -33,6 +33,7 @@ export type WorkspaceRestoreResult =
   | { restored: true; windows: WindowInstance[]; placements: WorkspacePlacement[] }
   | { restored: false; reason: Extract<CloseResult, { closed: false }>["reason"]; windowId: WindowId; rolledBack: boolean }
   | { restored: false; reason: "failed"; error: unknown; rolledBack: boolean };
+/** Titles of the Workspaces menu and its Save Workspace item. Default "Workspaces" and "Save Workspace…". */
 export interface WorkspaceMenuLabels { workspaces: string; save: string }
 /**
  * A Workspaces menu, before the Window menu: Save Workspace…, then one item per saved workspace that restores it. Its own
@@ -47,6 +48,7 @@ export interface WorkspaceMenuOptions {
   /** Shortcuts for the first workspaces in list order, such as `Ctrl+CmdOrCtrl+1`…`9`. */
   restoreShortcuts?: readonly string[];
 }
+/** Options for `createWindowWorkspaces`. */
 export interface WindowWorkspacesOptions {
   menu?: WorkspaceMenuOptions;
   /** Menu action failures and menu updates that could not read the workspaces. Defaults to console.error. */
@@ -204,11 +206,6 @@ async function fileSystem() {
   });
 }
 
-/**
- * Saved, named window layouts for a navigator, persisted in the app's data directory and restored onto the displays
- * connected now. With `menu`, publishes a Workspaces menu: Save Workspace… and one item per workspace, with shortcuts.
- * Resolves once the menu is published. macOS only for now.
- */
 function validLabels(labels: unknown): asserts labels is WorkspaceMenuLabels {
   if (!plain(labels) || !exactKeys(labels, ["workspaces", "save"]) || Object.values(labels).some(label => typeof label !== "string" || !label.trim())) throw new SparkError("E_INVALID_ARGUMENT", "Workspace menu labels need workspaces and save");
 }
@@ -221,6 +218,12 @@ function subset(session: WindowSession, ids: Set<string>): WindowSession {
   return { version: 1, windows, tabGroups, keyWindowId: session.keyWindowId !== null && ids.has(session.keyWindowId) ? session.keyWindowId : null };
 }
 
+/**
+ * Saved, named window layouts for a navigator, persisted in the app's data directory and restored onto the displays
+ * connected now. With `menu`, publishes a Workspaces menu: Save Workspace… and one item per workspace, with shortcuts.
+ * Resolves once the menu is published. macOS only for now: rejects `E_UNSUPPORTED_PLATFORM` elsewhere, and
+ * `E_MODULE_UNAVAILABLE` without `@legendapp/spark-file-system`.
+ */
 export async function createWindowWorkspaces<T extends WindowsConfig>(navigator: WindowsNavigator<T>, options: WindowWorkspacesOptions = {}): Promise<WindowWorkspaces> {
   available();
   const check = sessionChecks.get(navigator);

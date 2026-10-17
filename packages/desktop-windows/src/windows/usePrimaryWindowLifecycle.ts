@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { createPrimaryWindowLifecycle, type PrimaryWindowLifecycleOptions } from "./primaryWindowLifecycle";
+/** Options for `usePrimaryWindowLifecycle`; see `PrimaryWindowLifecycleOptions`. */
 export type UsePrimaryWindowLifecycleOptions = PrimaryWindowLifecycleOptions;
 
+/** Registers the lifecycle callbacks of one logical window while mounted, once per `windowId`, always calling the latest callbacks. */
 export function usePrimaryWindowLifecycle(options: UsePrimaryWindowLifecycleOptions): void {
   const latest = useRef(options);
   useLayoutEffect(() => { latest.current = options; });

@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { nativeError, type AsyncRegistration, type SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { addWindowListener } from "../api";
 import { useWindowId } from "./WindowProvider";
+/** Options for window hooks. `onError` receives registration and listener failures; default `console.error`. */
 export interface WindowHookOptions { onError?: (error: SparkError) => void }
+/** Calls `callback` each time the current window (`useWindowId`) gains focus. */
 export function useWindowFocusEffect(callback: () => void, options: WindowHookOptions = {}) {
   const id = useWindowId(), latest = useRef({ callback, onError: options.onError });
   useLayoutEffect(() => { latest.current = { callback, onError: options.onError }; }, [callback, options.onError]);

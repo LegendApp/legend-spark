@@ -1,5 +1,9 @@
 import { parseNativeResult } from "@legendapp/spark-desktop-app/src/contracts";
 import { macosNative } from "./macos-adapter";
+/**
+ * Startup markers as `getStartupTiming` reports them, in milliseconds on the native monotonic clock; a marker the run
+ * did not record is absent. Add `clockOffsetMs` to a marker for Unix epoch milliseconds. macOS only.
+ */
 export interface StartupTiming {
   clockOffsetMs?: number;
   startTime?: number;
