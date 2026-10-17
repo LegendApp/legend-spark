@@ -1,8 +1,10 @@
 import { expect, test } from "vitest";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { copyKitchenSinkScreens, prepareKitchenSink } from "../scripts/prepare-kitchen-sink.ts";
+import { planMigrations } from "../packages/cli/src/migrations.cjs";
 
 test("packaged consumers receive screens without workspace manifests or native projects", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "kitchen-copy-"));
@@ -41,5 +43,21 @@ test("packaged preparation refuses the checked-in or any unmanaged application",
   try {
     writeFileSync(path.join(root, "package.json"), "{}");
     await expect(prepareKitchenSink(root)).rejects.toThrow("Refusing to overwrite");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a clean checkout of kitchen sink has no pending migrations", () => {
+  const file = "examples/kitchen-sink/.spark/version";
+  expect(execFileSync("git", ["ls-files", "--error-unmatch", "--", file], { encoding: "utf8" }).trim()).toBe(file);
+  // Ignore local startup state: a fresh clone only receives the committed stamp.
+  const stamp = execFileSync("git", ["show", `HEAD:${file}`], { encoding: "utf8" });
+  const version = JSON.parse(readFileSync("packages/cli/package.json", "utf8")).version;
+  const root = mkdtempSync(path.join(os.tmpdir(), "kitchen-migrations-"));
+  try {
+    mkdirSync(path.join(root, ".spark"));
+    writeFileSync(path.join(root, ".spark/version"), stamp);
+    const plan = planMigrations(root, version, { automatic: true });
+    expect(plan.versions).toEqual([]);
+    expect(plan.manualSteps).toEqual([]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

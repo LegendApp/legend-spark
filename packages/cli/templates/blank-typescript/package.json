@@ -53,5 +53,22 @@
         "react-native"
       ]
     }
+  },
+  "allowScripts": {
+    "@legendapp/spark": true,
+    "react-native-enriched-markdown": true,
+    "fsevents": true
+  },
+  "trustedDependencies": [
+    "@legendapp/spark",
+    "react-native-enriched-markdown",
+    "fsevents"
+  ],
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@legendapp/spark",
+      "react-native-enriched-markdown",
+      "fsevents"
+    ]
   }
 }

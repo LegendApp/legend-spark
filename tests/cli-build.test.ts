@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -12,13 +12,19 @@ test("rebuilding the source CLI preserves helpers used by active dev sessions", 
     mkdirSync(source, { recursive: true });
     writeFileSync(path.join(source, "index.ts"), "export const value: number = 1;");
     writeFileSync(path.join(source, "helper.cjs"), "module.exports = true;");
+    const launcher = path.join(source, "npm");
+    writeFileSync(launcher, "#!/usr/bin/env node\n");
+    chmodSync(launcher, 0o755);
     buildCLI(root);
     const directory = statSync(output).ino;
     const helper = statSync(path.join(output, "helper.cjs")).ino;
+    if (process.platform !== "win32") expect(statSync(path.join(output, "npm")).mode & 0o777).toBe(0o755);
+    chmodSync(path.join(output, "npm"), 0o644);
     writeFileSync(path.join(source, "index.ts"), "export const value: number = 2;");
     buildCLI(root);
     expect(statSync(output).ino).toBe(directory);
     expect(statSync(path.join(output, "helper.cjs")).ino).toBe(helper);
+    if (process.platform !== "win32") expect(statSync(path.join(output, "npm")).mode & 0o777).toBe(0o755);
     expect(readFileSync(path.join(output, "index.js"), "utf8")).toContain("value = 2");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

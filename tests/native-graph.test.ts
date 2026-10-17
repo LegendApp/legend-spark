@@ -124,6 +124,29 @@ test("native source content changes invalidate hashes without build-directory no
     rmSync(root, { recursive: true, force: true });
   }
 });
+test("enriched-markdown postinstall assets do not change Runner compatibility", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-markdown-hash-"));
+  try {
+    const name = "react-native-enriched-markdown";
+    const module = path.join(root, "node_modules", name);
+    mkdirSync(path.join(module, "cpp/highlight"), { recursive: true });
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { [name]: "1.1.1" } }));
+    writeFileSync(path.join(module, "package.json"), JSON.stringify({ name, version: "1.1.1", codegenConfig: { name: "MarkdownSpec" } }));
+    const manifest = path.join(module, "cpp/highlight/grammar-versions.json");
+    writeFileSync(manifest, "pinned grammars");
+    const initial = nativePackages(root);
+    for (const directory of ["cpp/highlight/vendor/grammars", "cpp/highlight/vendor/tree-sitter", "ios/vendor"]) {
+      mkdirSync(path.join(module, directory), { recursive: true });
+      writeFileSync(path.join(module, directory, "asset"), "restored by postinstall");
+    }
+    expect(nativePackages(root)[0]!.signature).toBe(initial[0]!.signature);
+    writeFileSync(manifest, "changed grammar pin");
+    const changed = nativePackages(root)[0]!.signature;
+    expect(changed).not.toBe(initial[0]!.signature);
+    writeFileSync(path.join(module, "ios/Module.mm"), "changed shipped native source");
+    expect(nativePackages(root)[0]!.signature).not.toBe(changed);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 test("Go permits ordinary identity but rejects app-specific native configuration", () => {
   expect(
     goConfigurationIssues({

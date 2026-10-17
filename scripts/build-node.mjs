@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -35,7 +35,11 @@ export function buildCLI(root = path.resolve(import.meta.dirname, "..")) {
         const errors = result.diagnostics?.filter(d => d.category === ts.DiagnosticCategory.Error) ?? [];
         if (errors.length) throw new Error(ts.formatDiagnosticsWithColorAndContext(errors, { getCanonicalFileName: f => f, getCurrentDirectory: () => root, getNewLine: () => "\n" }));
         write(name.replace(/\.ts$/, ".js"), result.outputText);
-      } else write(name, readFileSync(path.join(source, name)));
+      } else {
+        write(name, readFileSync(path.join(source, name)));
+        // PATH launchers such as npm-bin/npm must remain executable.
+        chmodSync(path.join(output, name), statSync(path.join(source, name)).mode);
+      }
     }
   }
   visit("");
