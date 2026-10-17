@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: Closing documents with unsaved changes in the App Sandbox variant
+intent: >
+  In the sandboxed app, New removes the open document before it shows a new untitled one (result: ok), so no control
+  reaches a removed document (#490; tests/kitchen-sink-documents.test.ts taps Edit during the removal). The new
+  document, edited, saved into the container and edited again, closes without a prompt: Close awaits the close-time
+  autosave and a new untitled document replaces it (result: closed). The untitled document's Save changes? alert needs
+  a black-box backend (documents-close-prompt, #50).
+checks: [DOC-CLOSE-01, DOC-DIRTY-01]
+tags: [document-model]
+platforms: [macos]
+variant: sandbox
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://document-model/documents" }
+- extendedWaitUntil: { visible: { id: document-model-documents-edited }, timeout: 15s }
+- tapOn: { id: document-model-documents-new }
+- assertText: { id: document-model-documents-result, equals: "Last result: ok" }
+- assertText: { id: document-model-documents-name, equals: Untitled }
+- tapOn: { id: document-model-documents-edit }
+- assertVisible: { id: document-model-documents-edited }
+- tapOn: { id: document-model-documents-save-as }
+- assertText: { id: document-model-documents-name, equals: Document.txt }
+- assertVisible: { id: document-model-documents-saved }
+- tapOn: { id: document-model-documents-edit }
+- assertVisible: { id: document-model-documents-edited }
+- tapOn: { id: document-model-documents-close }
+- assertText: { id: document-model-documents-result, equals: "Last result: closed" }
+- assertText: { id: document-model-documents-name, equals: Untitled }
+- assertVisible: { id: document-model-documents-saved }

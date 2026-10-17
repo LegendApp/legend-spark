@@ -73,10 +73,18 @@ class DocumentsDemo {
     await this.state.session?.remove();
     if (this.folder) await remove(this.folder, { recursive: true });
   }
+  // The session leaves the state before it is removed, so no control can reach it while removal (which awaits the
+  // close-time autosave and the window update) runs. When removal or the next session fails, the window gets a new
+  // untitled document and the error goes to the result line.
   private async replaceSession(next: () => DocumentSession | Promise<DocumentSession>) {
-    await this.state.session?.remove();
+    const previous = this.state.session;
     this.set({ session: undefined, versions: [] });
-    this.set({ session: await next() });
+    try {
+      await previous?.remove();
+      this.set({ session: await next() });
+    } finally {
+      if (!this.state.session) this.set({ session: this.create({ windowId: WINDOW }) });
+    }
   }
   private async refreshVersions() {
     const path = this.session.getState().path;
@@ -95,13 +103,20 @@ class DocumentsDemo {
       this.set({ focused: this.state.focused + 1 });
       return `focused ${open.windowId ?? WINDOW}`;
     }
-    await this.replaceSession(async () => { const session = this.create({ windowId: WINDOW }); await session.open(path); return session; });
+    await this.replaceSession(async () => {
+      const session = this.create({ windowId: WINDOW });
+      try { await session.open(path); } catch (error) { await session.remove(); throw error; }
+      return session;
+    });
     this.set({ opened: [...this.state.opened, this.session.getState().name] });
     return `opened ${this.session.getState().name}`;
   }
 
   newDocument = () => this.action(() => this.replaceSession(() => this.create({ windowId: WINDOW })));
-  edit = () => { const state = this.session.getState(); this.session.setText(`${state.text}Line ${++this.edits}\n`); };
+  edit = () => {
+    try { const state = this.session.getState(); this.session.setText(`${state.text}Line ${++this.edits}\n`); }
+    catch (error) { this.report(error); }
+  };
   saveAs = () => this.action(() => this.session.saveAs(`${this.folder}/Document.txt`));
   save = (overwrite = false) => this.action(async () => { const result = await this.session.save({ overwrite }); return result.saved ? "saved" : result.reason; });
   duplicate = () => this.action(async () => {
