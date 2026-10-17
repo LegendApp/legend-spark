@@ -60,7 +60,7 @@ plugin and closes the host.
 | Contribution | Needs capability | What the host does |
 | --- | --- | --- |
 | `commands` `{ id, title }` | `commands` | `execute(pluginId, command, args)` runs the plugin's handler in its runtime |
-| `panels` `{ id, title, component }` | `panels` | Records the threaded component name; render it with `ThreadedReactSurface` and the plugin's `runtimeName` |
+| `panels` `{ id, title, component }` | `panels` | Records the threaded component name; render it with `ThreadedReactSurface` and the plugin's `runtimeName`. On macOS the panel lays out in the layout direction where it is rendered, including one set by a `direction: "rtl"` style on an ancestor, and follows changes to it |
 | `fileTypes` `{ id, name, extensions, command }` | `fileTypes` | `findFileHandlers(path)` returns loaded plugins whose extensions match; run the file type's `command` with `{ path }` |
 | `menuItems` `{ id, title, command }` | `menuItems` | Records the item; publish it with `@legendapp/spark/menus` and run its `command` when chosen |
 
