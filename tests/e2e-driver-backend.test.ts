@@ -204,6 +204,17 @@ describe("command mapping", () => {
     expect(passed.result.status).toBe("passed");
     const failed = await run("- launchApp\n- assertAppIntents: { lastInvocation: { error: null }, timeout: 200ms }", app2);
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('the last invocation\'s error is "E_TIMEOUT", expected null') });
+    // Entities: declared and queried through the simulation; a query is asserted by its kind and the ids it returned.
+    const { result: queried, app: app3 } = await run("- launchApp\n- simulateAppIntents: { entities: [{ id: Note, title: Note }], query: { entity: Note, kind: search, text: gro, timeoutMs: 100 } }\n- assertAppIntents: { pending: 1, queries: 0 }");
+    expect(queried.status).toBe("passed");
+    expect(app3.log.filter(line => line.includes("AppIntents"))[0]).toBe('simulateAppIntents {"entities":[{"id":"Note","title":"Note"}],"query":{"entity":"Note","kind":"search","text":"gro","timeoutMs":100}}');
+    app2.appIntents.registeredEntities = ["Note"];
+    app2.appIntents.queries = [{ entity: "Note", query: { kind: "suggested" }, entities: [{ id: "a", title: "A" }, { id: "b", title: "B", subtitle: "S" }] }, { entity: "Note", query: { kind: "identifiers", identifiers: ["x"] }, error: { code: "E_NOT_FOUND", message: "No x" } }];
+    expect((await run("- launchApp\n- assertAppIntents: { registeredEntities: [Note], queries: 2, lastQuery: { entity: Note, kind: identifiers, entities: null, error: E_NOT_FOUND } }", app2)).result.status).toBe("passed");
+    app2.appIntents.queries.pop();
+    expect((await run("- launchApp\n- assertAppIntents: { lastQuery: { kind: suggested, entities: [a, b], error: null } }", app2)).result.status).toBe("passed");
+    const wrong = await run("- launchApp\n- assertAppIntents: { lastQuery: { entities: [b, a] }, timeout: 200ms }", app2);
+    expect(wrong.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('the last query\'s entities is ["a","b"], expected ["b","a"]') });
   });
 
   test("simulateCapture sets the simulated devices; assertSimulatedCapture checks sessions, outputs and flowing frames", async () => {

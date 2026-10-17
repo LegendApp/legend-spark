@@ -1,0 +1,38 @@
+appId: so.legend.spark.examples.kitchensink
+name: App Entity queries list, find and search the Kitchen Sink's notes, and Open Note opens one (simulated)
+intent: >
+  Shortcuts asks an entity's query for the entities to suggest, those matching search text, and those with given ids,
+  and passes an intent the id of the one the person picked. In driver mode the simulation asks the KsNote query handler
+  as Shortcuts would: before the simulation declares KsNote a query ends SparkError:E_NOT_FOUND; afterwards the
+  handler suggests the three notes, finds Packing list by case-insensitive search, and returns only the ids it knows.
+  Open Note gets the note's id and answers with its title, and fails with the handler's SparkError:E_NOT_FOUND for an id
+  it does not know. Nothing reaches the system.
+checks: [SYS-INTENTSENTITY-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/app-intents" }
+- assertText: { id: system-integration-app-intents-status-KsNote, equals: SparkError:E_NOT_FOUND }
+- simulateAppIntents: { query: { entity: KsNote, kind: suggested } }
+- assertAppIntents: { queries: 1, pending: 0, lastQuery: { entity: KsNote, kind: suggested, entities: null, error: E_NOT_FOUND } }
+- runFlow: { file: subflows/declare-app-intents.yaml }
+- tapOn: { id: system-integration-app-intents-listen }
+- assertText: { id: system-integration-app-intents-status-KsNote, equals: listening }
+- assertAppIntents: { registeredEntities: [KsNote] }
+- simulateAppIntents: { query: { entity: KsNote, kind: suggested } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "KsNote suggested: groceries, packing, recipes" }
+- assertAppIntents: { queries: 2, pending: 0, lastQuery: { entity: KsNote, kind: suggested, entities: [groceries, packing, recipes], error: null } }
+- simulateAppIntents: { query: { entity: KsNote, kind: search, text: PACK } }
+- assertText: { id: system-integration-app-intents-event-0, equals: 'KsNote search "PACK": packing' }
+- assertAppIntents: { queries: 3, lastQuery: { kind: search, entities: [packing], error: null } }
+- simulateAppIntents: { query: { entity: KsNote, kind: identifiers, identifiers: [recipes, missing] } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "KsNote identifiers: recipes" }
+- assertAppIntents: { queries: 4, lastQuery: { kind: identifiers, entities: [recipes], error: null } }
+- simulateAppIntents: { invoke: { id: ksOpenNote, parameters: { note: recipes } } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "ksOpenNote: Recipes to try" }
+- assertAppIntents: { invocations: 1, lastInvocation: { id: ksOpenNote, parameters: { note: recipes }, text: Opened Recipes to try, error: null } }
+- simulateAppIntents: { invoke: { id: ksOpenNote, parameters: { note: missing } } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "ksOpenNote: no note missing" }
+- assertAppIntents: { invocations: 2, pending: 0, lastInvocation: { id: ksOpenNote, error: E_NOT_FOUND } }
+- takeScreenshot: app-intents-entities
+- assertNotVisible: { id: system-integration-app-intents-error }

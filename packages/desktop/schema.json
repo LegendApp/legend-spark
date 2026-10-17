@@ -344,7 +344,7 @@
           }
         },
         "appIntents": {
-          "description": "App Intents the app offers to Shortcuts, Spotlight and Siri; each runs the JavaScript handler addAppIntentHandler registers for its id. spark build compiles them into the app target (docs/app-intents.md).",
+          "description": "App Intents the app offers to Shortcuts, Spotlight and Siri; each runs the JavaScript handler addAppIntentHandler registers for its id. spark build compiles them into the app target, with a strings catalog of their translated titles (docs/app-intents.md).",
           "type": "array",
           "items": {
             "type": "object",
@@ -360,12 +360,10 @@
                 "description": "The intent's identity: shortcuts that use it break when it changes."
               },
               "title": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "#/$defs/localizedText"
               },
               "description": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "#/$defs/localizedText"
               },
               "parameters": {
                 "type": "array",
@@ -383,22 +381,42 @@
                       "pattern": "^[a-z][A-Za-z0-9]{0,63}$"
                     },
                     "title": {
-                      "type": "string",
-                      "minLength": 1
+                      "$ref": "#/$defs/localizedText"
                     },
                     "type": {
-                      "enum": [
-                        "string",
-                        "number",
-                        "integer",
-                        "boolean"
+                      "description": "string, number, integer, boolean, or the id of an enum (macos.appEnums) or entity (macos.appEntities).",
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "string",
+                            "number",
+                            "integer",
+                            "boolean"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Za-z0-9]{0,63}$"
+                        }
                       ]
                     },
                     "optional": {
                       "type": "boolean"
+                    },
+                    "default": {
+                      "description": "The value the system starts with: of the parameter's type (an enum's case value). Entities have none.",
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
                     }
                   }
                 }
+              },
+              "parameterSummary": {
+                "description": "How Shortcuts shows the action, naming parameters as ${name}: \"Show ${recipe} for ${servings}\".",
+                "$ref": "#/$defs/localizedText"
               },
               "returnsText": {
                 "type": "boolean",
@@ -421,15 +439,13 @@
                   "phrases": {
                     "type": "array",
                     "minItems": 1,
-                    "uniqueItems": true,
+                    "description": "Each names the app once as ${applicationName}, and may name enum parameters as ${name}.",
                     "items": {
-                      "type": "string",
-                      "pattern": "\\$\\{applicationName\\}"
+                      "$ref": "#/$defs/localizedText"
                     }
                   },
                   "shortTitle": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/$defs/localizedText"
                   },
                   "systemImage": {
                     "type": "string",
@@ -437,6 +453,73 @@
                     "description": "An SF Symbol name."
                   }
                 }
+              }
+            }
+          }
+        },
+        "appEnums": {
+          "description": "Enums App Intent parameters can take: Shortcuts offers their cases in a picker, and App Shortcut phrases can name them (docs/app-intents.md#enums).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "title",
+              "cases"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Za-z0-9]{0,63}$",
+                "description": "Parameters name it as their type."
+              },
+              "title": {
+                "$ref": "#/$defs/localizedText"
+              },
+              "cases": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "value",
+                    "title"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "value": {
+                      "type": "string",
+                      "pattern": "^[a-z][A-Za-z0-9]{0,63}$",
+                      "description": "What JavaScript gets."
+                    },
+                    "title": {
+                      "$ref": "#/$defs/localizedText"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "appEntities": {
+          "description": "Entities App Intent parameters can take; the JavaScript handler addAppEntityQueryHandler registers lists and finds them (docs/app-intents.md#entities).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "title"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Za-z0-9]{0,63}$",
+                "description": "Parameters name it as their type."
+              },
+              "title": {
+                "$ref": "#/$defs/localizedText"
               }
             }
           }
@@ -699,5 +782,24 @@
         ]
       }
     }
-  ]
+  ],
+  "$defs": {
+    "localizedText": {
+      "description": "Text as written, or translated into each of the app's localizations: { \"en\": \"Show Recipe\", \"ar\": \"اعرض الوصفة\" }.",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    }
+  }
 }

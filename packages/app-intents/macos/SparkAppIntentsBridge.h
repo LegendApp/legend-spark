@@ -14,6 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 // Runs the intent's JavaScript handler and completes once, with the text it returned (nil for intents that return
 // none) or an error whose description the system shows. Any thread.
 + (void)performIntent:(NSString *)identifier parameters:(NSDictionary<NSString *, id> *)parameters completion:(void (^)(NSString *_Nullable text, NSError *_Nullable error))completion;
+// Runs the entity's JavaScript query handler: `query` is { kind: "identifiers", identifiers }, { kind: "suggested" } or
+// { kind: "search", text }. Completes once, with its entities ([{ id, title, subtitle? }]) or an error. Any thread.
++ (void)queryEntities:(NSString *)entity query:(NSDictionary<NSString *, id> *)query completion:(void (^)(NSArray<NSDictionary<NSString *, id> *> *_Nullable entities, NSError *_Nullable error))completion;
 @end
 
 NS_ASSUME_NONNULL_END

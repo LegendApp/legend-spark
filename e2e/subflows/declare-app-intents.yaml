@@ -1,7 +1,11 @@
-# System integration > App Intents & Shortcuts: declares the Kitchen Sink's two intents in the App Intents simulation, as
-# the Info.plist of a build with macos.appIntents set to KS_APP_INTENTS (screens/system-integration/app-intents-demo.ts)
-# lists them (tests/app-intents-build.test.ts keeps the two equal). The Kitchen Sink itself declares none.
+# System integration > App Intents & Shortcuts: declares the Kitchen Sink's three intents and its KsNote entity in the App
+# Intents simulation, as the Info.plist of a build with macos.appIntents, appEnums and appEntities set to KS_APP_INTENTS,
+# KS_APP_ENUMS and KS_APP_ENTITIES (screens/system-integration/app-intents-config.ts) lists them
+# (tests/app-intents-build.test.ts keeps the two equal). The Kitchen Sink itself declares none.
 - simulateAppIntents:
     intents:
-      - { id: ksShowRecipe, title: Show Kitchen Sink Recipe, returnsText: true, parameters: [{ name: recipe, title: Recipe, type: string, optional: false }, { name: servings, title: Servings, type: integer, optional: true }] }
+      - { id: ksShowRecipe, title: Show Kitchen Sink Recipe, returnsText: true, parameters: [{ name: recipe, title: Recipe, type: enum, values: [pancakes, gazpacho, soup], optional: false }, { name: servings, title: Servings, type: integer, optional: false, default: 1 }] }
       - { id: ksStartTimer, title: Start Kitchen Sink Timer, returnsText: false, parameters: [{ name: minutes, title: Minutes, type: number, optional: false }] }
+      - { id: ksOpenNote, title: Open Kitchen Sink Note, returnsText: true, parameters: [{ name: note, title: Note, type: entity, entity: KsNote, optional: false }] }
+    entities:
+      - { id: KsNote, title: Note }

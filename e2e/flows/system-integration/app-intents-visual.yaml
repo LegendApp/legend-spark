@@ -2,7 +2,7 @@ appId: so.legend.spark.examples.kitchensink
 name: App Intents & Shortcuts screen matches its golden
 intent: >
   System integration > App Intents & Shortcuts opens from spark-ks://system-integration/app-intents with App Intents
-  available (simulated), no declared intents and both handlers rejected (the Kitchen Sink declares no intents). The
+  available (simulated), no declared intents and every handler rejected (the Kitchen Sink declares no intents). The
   main window matches the approved golden for the appearance and locale (light and dark, English and Arabic), with the
   shell sidebar masked.
 checks: [SYS-INTENTSVISUAL-01]
@@ -16,4 +16,6 @@ matrix:
 - assertText: { id: system-integration-app-intents-declared, equals: none }
 - assertText: { id: system-integration-app-intents-status-ksShowRecipe, equals: SparkError:E_NOT_FOUND }
 - assertText: { id: system-integration-app-intents-status-ksStartTimer, equals: SparkError:E_NOT_FOUND }
+- assertText: { id: system-integration-app-intents-status-ksOpenNote, equals: SparkError:E_NOT_FOUND }
+- assertText: { id: system-integration-app-intents-status-KsNote, equals: SparkError:E_NOT_FOUND }
 - assertScreenshot: { golden: system-integration-app-intents, mask: [{ id: infra-shell-sidebar }] }

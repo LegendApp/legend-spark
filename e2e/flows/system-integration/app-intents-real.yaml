@@ -4,11 +4,13 @@ intent: >
   The real system paths of @legendapp/spark/app-intents, which no automated run may reach: a build with intents adds
   actions to Shortcuts, Spotlight and Siri on the Mac that runs it, and donations feed Siri suggestions. The Kitchen
   Sink therefore declares no intents. manual: true keeps the gate from running this flow. Run it by hand on a Mac where
-  that is acceptable: add the macos.appIntents block from docs/app-intents.md#kitchen-sink (KS_APP_INTENTS in
-  screens/system-integration/app-intents-demo.ts) to examples/kitchen-sink/desktop.config.json, rebuild the development
-  app (bun run rebuild:macos in examples/kitchen-sink) and launch it with spark dev; remove the block and rebuild
-  afterwards. Automated coverage of the same paths: tests/app-intents-build.test.ts checks the metadata Xcode extracts
-  from the generated Swift, tests/app-intents.native.mm the native invocation path, and the driver flows the handlers.
+  that is acceptable: add the macos.appIntents, appEnums and appEntities blocks from docs/app-intents.md#kitchen-sink
+  (KS_APP_INTENTS, KS_APP_ENUMS and KS_APP_ENTITIES in screens/system-integration/app-intents-config.ts) to
+  examples/kitchen-sink/desktop.config.json, rebuild the development app (bun run rebuild:macos in
+  examples/kitchen-sink) and launch it with spark dev; remove the blocks and rebuild afterwards. Automated coverage of
+  the same paths: tests/app-intents-build.test.ts checks the metadata Xcode extracts from the generated Swift and the
+  compiled strings catalogs, tests/app-intents.native.mm the native invocation and query path, and the driver flows the
+  handlers.
 checks: [SYS-INTENTSREAL-01]
 tags: [system-integration]
 platforms: [macos]
@@ -20,19 +22,32 @@ manual: true
     instruction: >-
       Check Availability, Declared intents and the two handler statuses on the screen.
     expect: >-
-      Availability reads {"available":true}, Declared intents reads ksShowRecipe, ksStartTimer, and both handlers read
-      listening. (A build without the block reads host-restriction, none and SparkError:E_UNAVAILABLE.)
+      Availability reads {"available":true}, Declared intents reads ksShowRecipe, ksStartTimer, ksOpenNote, and all four
+      handlers read listening. (A build without the blocks reads host-restriction, none and SparkError:E_UNAVAILABLE.)
     evidence: none
     signoff: required
 - manualStep:
     instruction: >-
-      Open the Shortcuts app, create a shortcut, and search the actions for KitchenSink. Add Show Kitchen Sink Recipe
-      with Recipe Soup and Servings 3, then Show Result, and run the shortcut. Then replace it with Start Kitchen Sink
-      Timer for 90 minutes and run it again, and once more for 5 minutes.
+      Open the Shortcuts app, create a shortcut, and search the actions for KitchenSink. Add Show Kitchen Sink Recipe,
+      open its Recipe picker, choose Soup, set Servings to 3, then add Show Result, and run the shortcut. Then replace it
+      with Start Kitchen Sink Timer for 90 minutes and run it again, and once more for 5 minutes.
     expect: >-
-      Both actions are listed under KitchenSink. The first run shows Soup for 3, and ksShowRecipe: Soup for 3 appears at
-      the top of Received. The 90-minute run fails with "A timer runs at most 60 minutes"; the 5-minute run finishes
-      without a result and ksStartTimer: 5 min appears in Received.
+      All three actions are listed under KitchenSink. Show Kitchen Sink Recipe reads "Show Recipe for 1" until its
+      parameters are set (the summary, with Servings defaulting to 1), and its Recipe picker offers Pancakes, Gazpacho
+      and Soup. The first run shows Soup for 3, and ksShowRecipe: Soup for 3 appears at the top of Received. The
+      90-minute run fails with "A timer runs at most 60 minutes"; the 5-minute run finishes without a result and
+      ksStartTimer: 5 min appears in Received.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Replace the action with Open Kitchen Sink Note and open its Note picker: look at the suggestions, then type pack in
+      its search field and pick Packing list. Add Show Result and run the shortcut.
+    expect: >-
+      The picker suggests Groceries (subtitle Eggs, flour, milk), Packing list and Recipes to try (Gazpacho, soup), and
+      KsNote suggested and KsNote search entries appear in Received; searching pack leaves Packing list. The run brings
+      the Kitchen Sink to the front (openApp), shows Opened Packing list, and ksOpenNote: Packing list appears in
+      Received.
     evidence: none
     signoff: required
 - manualStep:
@@ -45,16 +60,30 @@ manual: true
     signoff: required
 - manualStep:
     instruction: >-
-      Open Spotlight (Command-Space) and type Show a recipe in KitchenSink; also look for Show Recipe under KitchenSink
+      Open Spotlight (Command-Space) and type Show Gazpacho in KitchenSink; also look for Show Recipe under KitchenSink
       in the Shortcuts app's App Shortcuts. Then press Donate Show Recipe on the screen.
     expect: >-
-      Spotlight and Shortcuts offer the Show Recipe App Shortcut with the fork and knife symbol, and running it asks for
-      the recipe. Donate Show Recipe shows donated.
+      Spotlight and Shortcuts offer the Show Recipe App Shortcut with the fork and knife symbol, with a phrase for each
+      recipe (Show Pancakes, Show Gazpacho, Show Soup in KitchenSink); running Show Gazpacho shows Gazpacho for 1, and
+      the plain Show a recipe phrase asks for the recipe. Donate Show Recipe shows donated.
     evidence: none
     signoff: required
 - manualStep:
     instruction: >-
-      Delete the test shortcut, remove the macos.appIntents block from desktop.config.json and rebuild.
+      In System Settings > General > Language & Region, make Arabic the Mac's primary language (add it if needed), then
+      quit and reopen Shortcuts and look at the KitchenSink actions and the Show Recipe App Shortcut. Repeat with French,
+      then restore the previous primary language.
+    expect: >-
+      In Arabic the actions read عرض وصفة من Kitchen Sink, بدء مؤقت Kitchen Sink and فتح ملاحظة من Kitchen Sink, the
+      Recipe picker offers فطائر, غازباتشو and حساء, the summary reads اعرض … لـ 1, and the App Shortcut is titled عرض
+      الوصفة; in French they read Afficher une recette Kitchen Sink, Démarrer le minuteur Kitchen Sink and Ouvrir une note
+      Kitchen Sink, with Crêpes, Gaspacho and Soupe. No title stays in English.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Delete the test shortcut, remove the macos.appIntents, appEnums and appEntities blocks from desktop.config.json and
+      rebuild.
     expect: >-
       After the rebuild Availability reads host-restriction again and Shortcuts no longer lists KitchenSink's actions.
     evidence: none

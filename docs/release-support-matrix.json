@@ -4933,11 +4933,11 @@
           },
           "windows-x64": {
             "status": "not-applicable",
-            "reason": "Typed unsupported: getAppIntentsAvailability() reports unsupported-platform, and getAppIntents, addAppIntentHandler and donateAppIntent reject E_UNSUPPORTED_PLATFORM; Windows tracked in #415."
+            "reason": "Typed unsupported: getAppIntentsAvailability() reports unsupported-platform, and getAppIntents, addAppIntentHandler, addAppEntityQueryHandler and donateAppIntent reject E_UNSUPPORTED_PLATFORM; Windows tracked in #415."
           },
           "windows-arm64": {
             "status": "not-applicable",
-            "reason": "Typed unsupported: getAppIntentsAvailability() reports unsupported-platform, and getAppIntents, addAppIntentHandler and donateAppIntent reject E_UNSUPPORTED_PLATFORM; Windows tracked in #415."
+            "reason": "Typed unsupported: getAppIntentsAvailability() reports unsupported-platform, and getAppIntents, addAppIntentHandler, addAppEntityQueryHandler and donateAppIntent reject E_UNSUPPORTED_PLATFORM; Windows tracked in #415."
           },
           "ios": {
             "status": "not-applicable",

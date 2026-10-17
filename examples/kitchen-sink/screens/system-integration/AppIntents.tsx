@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { Button } from "@legendapp/spark/ui/uniwind";
-import { RECIPE_INTENT, TIMER_INTENT } from "./app-intents-config";
+import { NOTE_ENTITY, NOTE_INTENT, RECIPE_INTENT, TIMER_INTENT } from "./app-intents-config";
 import { useAppIntentsDemo } from "./app-intents-demo";
 import { useAppIntentsMessages } from "./app-intents-messages";
 
-// Test IDs: system-integration-app-intents-availability and -declared; -status-<intent id> for each handler and -listen
+// Test IDs: system-integration-app-intents-availability and -declared; -status-<intent or entity id> for each handler and -listen
 // to register them again; -donate with -donation; -event-<n> lists invocations, newest first.
 const ID = "system-integration-app-intents";
 
@@ -16,7 +16,7 @@ function Section({ title, id, children }: { title: string; id: string; children:
   </View>;
 }
 
-/** App Intents handlers, a donation and the declared intents (@legendapp/spark/app-intents). */
+/** App Intents handlers, an entity query handler, a donation and the declared intents (@legendapp/spark/app-intents). */
 export function AppIntents() {
   const t = useAppIntentsMessages();
   const { availability, declared, statuses, events, donation, error, listen, donate } = useAppIntentsDemo();
@@ -31,7 +31,7 @@ export function AppIntents() {
     {error && <Text selectable className="text-sm text-danger" testID={`${ID}-error`}>{`${t.failed} ${error}`}</Text>}
     <Section title={t.handlers} id="handlers">
       <Text className="text-sm text-muted">{t.handlersHint}</Text>
-      {[RECIPE_INTENT, TIMER_INTENT].map(intent => <View key={intent} className="flex-row items-center gap-3">
+      {[RECIPE_INTENT, TIMER_INTENT, NOTE_INTENT, NOTE_ENTITY].map(intent => <View key={intent} className="flex-row items-center gap-3">
         <Text selectable className="w-32 font-mono text-xs text-muted">{intent}</Text>
         <Text selectable className="flex-1 font-mono text-xs text-foreground" testID={`${ID}-status-${intent}`}>{statuses[intent] ?? t.registering}</Text>
       </View>)}

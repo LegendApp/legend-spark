@@ -601,20 +601,25 @@ export function assertSimulatedSpeech(speech: TestSpeech, args: Record<string, u
     throw new Failure("assertion", `speech ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
   }
 }
-/** Each given field matches the App Intents simulation: lastInvocation and lastDonation compare the fields they list. */
+/**
+ * Each given field matches the App Intents simulation: lastInvocation, lastQuery and lastDonation compare the fields
+ * they list (a query's kind, and the ids of the entities it returned).
+ */
 export function assertAppIntents(intents: TestAppIntents, args: Record<string, unknown>) {
   const fail = (what: string, actual: unknown, expected: unknown) => { throw new Failure("assertion", `${what} is ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`); };
-  if (args.registered !== undefined && !isDeepStrictEqual(intents.registered, [...args.registered as string[]].sort())) fail("the intents with a handler", intents.registered, args.registered);
-  for (const key of ["invocations", "donations"] as const)
+  for (const [key, what] of [["registered", "the intents with a handler"], ["registeredEntities", "the entities with a query handler"]] as const)
+    if (args[key] !== undefined && !isDeepStrictEqual(intents[key], [...args[key] as string[]].sort())) fail(what, intents[key], args[key]);
+  for (const key of ["invocations", "queries", "donations"] as const)
     if (args[key] !== undefined && intents[key].length !== args[key]) fail(key, intents[key].length, args[key]);
-  if (args.pending !== undefined && intents.pending !== args.pending) fail("pending invocations", intents.pending, args.pending);
-  for (const [key, list] of [["lastInvocation", intents.invocations], ["lastDonation", intents.donations]] as const) {
+  if (args.pending !== undefined && intents.pending !== args.pending) fail("pending requests", intents.pending, args.pending);
+  const queries = intents.queries.map(({ entity, query, entities, error }) => ({ entity, kind: query.kind, entities: entities?.map(item => item.id), error }));
+  for (const [key, what, list] of [["lastInvocation", "last invocation", intents.invocations], ["lastQuery", "last query", queries], ["lastDonation", "last donation", intents.donations]] as const) {
     if (args[key] === undefined) continue;
     const last = list.at(-1) as Record<string, unknown> | undefined;
-    if (!last) fail(`the ${key === "lastInvocation" ? "last invocation" : "last donation"}`, null, args[key]);
+    if (!last) fail(`the ${what}`, null, args[key]);
     for (const [field, value] of Object.entries(args[key] as Record<string, unknown>)) {
       const actual = field === "error" ? (last!.error as { code: string } | undefined)?.code ?? null : last![field] ?? null;
-      if (!isDeepStrictEqual(actual, value)) fail(`the ${key === "lastInvocation" ? "last invocation" : "last donation"}'s ${field}`, actual, value);
+      if (!isDeepStrictEqual(actual, value)) fail(`the ${what}'s ${field}`, actual, value);
     }
   }
 }

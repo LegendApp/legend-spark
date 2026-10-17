@@ -2,7 +2,8 @@ appId: so.legend.spark.examples.kitchensink
 name: App Intents are typed unsupported on Windows
 intent: >
   On Windows the App Intents & Shortcuts screen reports App Intents unsupported-platform. Listing the declared intents,
-  registering both handlers and donating reject SparkError:E_UNSUPPORTED_PLATFORM, which the screen shows. Not yet run
+  registering the three handlers and the entity query handler, and donating reject SparkError:E_UNSUPPORTED_PLATFORM,
+  which the screen shows. Not yet run
   on Windows. Windows App Actions: #415.
 checks: [SYS-INTENTSUNSUP-01]
 tags: [system-integration]
@@ -14,5 +15,7 @@ platforms: [windows]
 - assertText: { id: system-integration-app-intents-declared, equals: SparkError:E_UNSUPPORTED_PLATFORM }
 - assertText: { id: system-integration-app-intents-status-ksShowRecipe, equals: SparkError:E_UNSUPPORTED_PLATFORM }
 - assertText: { id: system-integration-app-intents-status-ksStartTimer, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: system-integration-app-intents-status-ksOpenNote, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: system-integration-app-intents-status-KsNote, equals: SparkError:E_UNSUPPORTED_PLATFORM }
 - tapOn: { id: system-integration-app-intents-donate }
 - assertText: { id: system-integration-app-intents-donation, equals: SparkError:E_UNSUPPORTED_PLATFORM }

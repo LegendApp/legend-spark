@@ -6246,7 +6246,7 @@
             }
           },
           "simulateAppIntents": {
-            "description": "[driver] Drive the in-process simulation of @legendapp/spark/app-intents: the intents the app's macos.appIntents would declare (replacing the previous ones), and an invocation of one as Shortcuts, Spotlight or Siri would run it, with its parameters and how long it waits for an answer (default 30 s). Never reaches the system: nothing is donated or registered with Shortcuts.",
+            "description": "[driver] Drive the in-process simulation of @legendapp/spark/app-intents: the intents and entities the app's macos.appIntents and macos.appEntities would declare (each replacing the previous ones), an invocation of an intent as Shortcuts, Spotlight or Siri would run it, with its parameters, and an entity query as Shortcuts would ask it (the entities with given ids, the suggested ones, or those matching search text), each with how long it waits for an answer (default 30 s). Never reaches the system: nothing is donated or registered with Shortcuts.",
             "if": {
               "type": "object"
             },
@@ -6287,11 +6287,32 @@
                                 "string",
                                 "number",
                                 "integer",
-                                "boolean"
+                                "boolean",
+                                "enum",
+                                "entity"
                               ]
+                            },
+                            "values": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "minItems": 1
+                            },
+                            "entity": {
+                              "type": "string",
+                              "minLength": 1
                             },
                             "optional": {
                               "type": "boolean"
+                            },
+                            "default": {
+                              "type": [
+                                "string",
+                                "number",
+                                "boolean"
+                              ]
                             }
                           },
                           "required": [
@@ -6310,6 +6331,28 @@
                       "title",
                       "returnsText",
                       "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 0
+                },
+                "entities": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title"
                     ],
                     "additionalProperties": false
                   },
@@ -6343,6 +6386,42 @@
                   ],
                   "additionalProperties": false
                 },
+                "query": {
+                  "type": "object",
+                  "properties": {
+                    "entity": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "enum": [
+                        "identifiers",
+                        "suggested",
+                        "search"
+                      ]
+                    },
+                    "identifiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "minItems": 0
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "timeoutMs": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "entity",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
                 "when": {
                   "$ref": "#/definitions/condition"
                 },
@@ -6359,7 +6438,17 @@
                 },
                 {
                   "required": [
+                    "entities"
+                  ]
+                },
+                {
+                  "required": [
                     "invoke"
+                  ]
+                },
+                {
+                  "required": [
+                    "query"
                   ]
                 }
               ]
@@ -6369,7 +6458,7 @@
             }
           },
           "assertAppIntents": {
-            "description": "[driver] Assert what the @legendapp/spark/app-intents simulation recorded: the intents with a handler (sorted), how many invocations completed and how many still wait, the last completed invocation (its id, parameters, the text it returned, or its error code; null for none), and the number of donations and the last one.",
+            "description": "[driver] Assert what the @legendapp/spark/app-intents simulation recorded: the intents and entities with a handler (sorted), how many invocations and entity queries completed and how many requests still wait, the last completed invocation (its id, parameters, the text it returned, or its error code; null for none), the last completed query (its entity, kind, the ids of the entities it returned in order, or its error code), and the number of donations and the last one.",
             "if": {
               "type": "object"
             },
@@ -6384,7 +6473,19 @@
                   },
                   "minItems": 0
                 },
+                "registeredEntities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 0
+                },
                 "invocations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "queries": {
                   "type": "integer",
                   "minimum": 0
                 },
@@ -6415,6 +6516,41 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "minProperties": 1
+                },
+                "lastQuery": {
+                  "type": "object",
+                  "properties": {
+                    "entity": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "enum": [
+                        "identifiers",
+                        "suggested",
+                        "search"
+                      ]
+                    },
+                    "entities": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "minItems": 0
                     },
                     "error": {
                       "type": [
@@ -6468,7 +6604,17 @@
                 },
                 {
                   "required": [
+                    "registeredEntities"
+                  ]
+                },
+                {
+                  "required": [
                     "invocations"
+                  ]
+                },
+                {
+                  "required": [
+                    "queries"
                   ]
                 },
                 {
@@ -6479,6 +6625,11 @@
                 {
                   "required": [
                     "lastInvocation"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastQuery"
                   ]
                 },
                 {

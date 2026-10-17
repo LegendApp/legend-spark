@@ -45,9 +45,10 @@ extra mouse button synthesis, which uses private CoreGraphics functions. It is o
 default. Turn it on only for apps that are tested and never distributed, such as the
 Kitchen Sink ([test driver](test-driver.md#private-event-functions)).
 
-`macos.appIntents` declares the actions the app offers to Shortcuts, Spotlight and Siri. `spark build`
-compiles them into the app; JavaScript handles them with `@legendapp/spark/app-intents`
-([App Intents](app-intents.md)).
+`macos.appIntents` declares the actions the app offers to Shortcuts, Spotlight and Siri, and
+`macos.appEnums` and `macos.appEntities` the enums and entities their parameters take. Their titles can
+be translated into each of the app's `localizations`. `spark build` compiles them into the app;
+JavaScript handles them with `@legendapp/spark/app-intents` ([App Intents](app-intents.md)).
 
 `macos.authentication` opts in to the restricted entitlements of Sign in with Apple
 (`"signInWithApple": true` adds `com.apple.developer.applesignin`) and passkeys

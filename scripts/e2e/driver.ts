@@ -73,11 +73,16 @@ export type SimulatedCapture = { cameras?: boolean; microphones?: boolean; camer
 export type SimulatedSpeech = { wordMs?: number; recognizerAvailable?: boolean; onDeviceSupported?: boolean; recognitionPartials?: string[]; recognitionTranscript?: string | null };
 /** What the @legendapp/spark/app-intents simulation recorded (the `testAppIntents` driver command). */
 export type TestAppIntents = {
-  declared: string[]; registered: string[]; pending: number;
+  declared: string[]; registered: string[]; entities: string[]; registeredEntities: string[]; pending: number;
   invocations: { id: string; parameters: Record<string, unknown>; text?: string; error?: { code: string; message: string } }[];
+  queries: { entity: string; query: Record<string, unknown>; entities?: { id: string; title: string; subtitle?: string }[]; error?: { code: string; message: string } }[];
   donations: { id: string; parameters: Record<string, unknown> }[];
 };
-export type SimulatedAppIntents = { intents?: Record<string, unknown>[]; invoke?: { id: string; parameters?: Record<string, unknown>; timeoutMs?: number } };
+export type SimulatedAppIntents = {
+  intents?: Record<string, unknown>[]; entities?: { id: string; title: string }[];
+  invoke?: { id: string; parameters?: Record<string, unknown>; timeoutMs?: number };
+  query?: { entity: string; kind: "identifiers" | "suggested" | "search"; identifiers?: string[]; text?: string; timeoutMs?: number };
+};
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = {
   type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;

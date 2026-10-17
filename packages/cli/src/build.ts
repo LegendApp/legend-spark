@@ -432,7 +432,7 @@ async function buildUnlocked(
   )
     throw new Error("Standalone build is missing its JavaScript bundle.");
   if (mode === "release") checkReleaseTestDriver(app, nativeConfig.macos?.testDriverInRelease === true);
-  checkAppIntentsMetadata(app, nativeConfig.macos?.appIntents);
+  checkAppIntentsMetadata(app, nativeConfig.macos);
   const result = {
     app: destination,
     // Older receipts may record a stale bundle selected from DerivedData.
