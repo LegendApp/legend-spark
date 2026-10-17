@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { writeJson } from "../packages/cli/src/project.ts";
 import { CommandError } from "../packages/cli/src/errors.ts";
-import { alreadyPublished, publishedPackages, publishAndWait, waitForReleaseTags } from "./npm-release.ts";
+import { alreadyPublished, changelogSection, publishedPackages, publishAndWait, waitForReleaseTags } from "./npm-release.ts";
 
 type Edit = { file: string; before: string; after: string };
 type State = { schema: 1; version: string; baseRevision: string; revision?: string; latest: boolean; edits: Edit[]; publicationReady?: boolean; complete?: boolean };
@@ -17,12 +17,16 @@ export function signingProject(root: string) {
   return project;
 }
 
-export function nextVersion(current: string, published: string[]) {
+export function releaseTarget(current: string, published: string[]) {
   const match = /^(\d+\.\d+\.\d+)-next\.(\d+)$/.exec(current);
   if (!match) throw new Error(`Expected a next preview version, received ${current}`);
   const prefix = `${match[1]}-next.`;
-  const numbers = [current, ...published].filter(value => value.startsWith(prefix) && /^\d+$/.test(value.slice(prefix.length))).map(value => Number(value.slice(prefix.length)));
-  return `${prefix}${Math.max(...numbers) + 1}`;
+  const numbers = published.filter(value => value.startsWith(prefix) && /^\d+$/.test(value.slice(prefix.length))).map(value => Number(value.slice(prefix.length)));
+  const latest = Math.max(...numbers);
+  if (published.includes(current)) return { version: `${prefix}${latest + 1}`, previous: `v${current}` };
+  if (latest > Number(match[2])) throw new Error(`A higher ${prefix} version is already published; cannot release ${current}`);
+  if (!numbers.length) throw new Error(`No previous published ${prefix} version below ${current}`);
+  return { version: current, previous: `v${prefix}${latest}` };
 }
 
 export function versionEdits(root: string, files: string[], current: string, version: string, notes: string): Edit[] {
@@ -39,19 +43,20 @@ export function versionEdits(root: string, files: string[], current: string, ver
       const matrix = JSON.parse(before);
       if (matrix.version !== current) throw new Error("Release support matrix version does not match the workspace version");
       matrix.version = version;
-      after = JSON.stringify(matrix, null, 2) + "\n";
+      if (version !== current) after = JSON.stringify(matrix, null, 2) + "\n";
     } else if (file === "docs/release-support-matrix.md") {
       const declaration = `Package: \`@legendapp/spark@${current}\``;
       if (!before.includes(declaration)) throw new Error("Release support matrix documentation does not match the workspace version");
       after = before.replace(declaration, `Package: \`@legendapp/spark@${version}\``);
     } else if (file === "docs/releases.md") after = before.replace(`identifies itself as \`${current}\``, `identifies itself as \`${version}\``);
     else if (file === "CHANGELOG.md") {
+      if (changelogSection(before, version) !== undefined) continue;
       if (!before.startsWith("# Changelog\n")) throw new Error("Unrecognized changelog format");
-      after = before.replace("# Changelog\n", `# Changelog\n\n## ${version} — preview\n\nExperimental macOS Apple Silicon preview. Native Windows and Intel macOS\nacceptance remain pending. Automated package checks do not certify native UI\nor clean-recipient Runner acceptance.\n\n${notes.trim()}\n`);
+      after = before.replace("# Changelog\n", `# Changelog\n\n## ${version} — preview\n\nmacOS 14+ (Apple Silicon) supported; Windows preview, not yet verified\n\n${notes.trim()}\n`);
     }
     if (after !== before) edits.push({ file, before, after });
   }
-  if (!edits.some(edit => edit.file === "package.json") || !edits.some(edit => edit.file === "packages/cli/src/project.ts")) throw new Error("Incomplete release version inputs");
+  if (version !== current && (!edits.some(edit => edit.file === "package.json") || !edits.some(edit => edit.file === "packages/cli/src/project.ts"))) throw new Error("Incomplete release version inputs");
   return edits;
 }
 
@@ -163,14 +168,17 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (!state) {
       const current = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version as string;
       const versions = JSON.parse(await run(["npm", "view", "@legendapp/spark", "versions", "--json"], true));
-      const version = nextVersion(current, Array.isArray(versions) ? versions : [versions]);
-      const tag = `v${current}`;
-      const hasTag = await execute(["git", "rev-parse", "--verify", `refs/tags/${tag}`], true);
-      if (hasTag.code) throw new Error(`Missing previous release tag ${tag}; cannot generate release notes`);
-      const notes = await git("log", "--format=- %s", `${tag}..HEAD`);
-      if (!notes) throw new Error("No new committed changes since the previous release");
+      const { version, previous: tag } = releaseTarget(current, Array.isArray(versions) ? versions : [versions]);
+      let notes = changelogSection(readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), version);
+      if (notes === undefined) {
+        const hasTag = await execute(["git", "rev-parse", "--verify", `refs/tags/${tag}`], true);
+        if (hasTag.code) throw new Error(`Missing previous release tag ${tag}; cannot generate release notes`);
+        notes = (await git("log", "--no-merges", "--format=- %s", `${tag}..HEAD`)).split("\n").filter(line => !/^- (?:Revert\b|release(?:\([^)]*\))?:)/i.test(line)).join("\n");
+        if (!notes) throw new Error("No new committed changes since the previous release");
+      }
       const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["bun.lock", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md", "docs/release-support-matrix.json", "docs/release-support-matrix.md"].includes(file));
-      state = { schema: 1, version, baseRevision: revision, latest: options.latest, edits: versionEdits(root, files, current, version, notes) };
+      const edits = versionEdits(root, files, current, version, notes);
+      state = { schema: 1, version, baseRevision: revision, revision: edits.length ? undefined : revision, latest: options.latest, edits };
       writeJson(stateFile, state);
     }
     console.log(`Releasing ${state.version} under next${state.latest ? " and latest" : ""}.`);
