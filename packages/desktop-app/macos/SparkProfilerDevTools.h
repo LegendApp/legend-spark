@@ -9,16 +9,16 @@
 // them itself with a CDP error, so DevTools neither restarts nor stops Spark's sampling. Development builds only.
 #if RCT_DEV
 NS_ASSUME_NONNULL_BEGIN
-// Main thread. What DevTools is recording ("the JavaScript profiler (Profiler.start)", "a Performance panel trace
+// Any thread. What DevTools is recording ("the JavaScript profiler (Profiler.start)", "a Performance panel trace
 // (Tracing.start)", or both), or nil when it records nothing.
 FOUNDATION_EXPORT NSString *_Nullable SparkProfilerDevToolsRecording(void);
-// Main thread. One message the inspector connection received from the development server; `sparkRecording` is whether
+// Any thread (the socket's delegate queue). One message the inspector connection received from the development server; `sparkRecording` is whether
 // Spark's profiler records. Returns whether to pass it on. A start or stop that would touch Spark's recording gets
 // `reply` (a CDP error to the same request, wrapped for the development server) instead. `orphaned` is set when a
 // page's session ended (`connect` again or `disconnect`) while it recorded and no other page records: its sampling is
 // still on, which nothing would turn off.
 FOUNDATION_EXPORT BOOL SparkProfilerInspectorReceived(NSString *message, BOOL sparkRecording, NSString *_Nullable *_Nonnull reply, BOOL *orphaned);
-// Main thread. The inspector connection closed or failed: every page's session ended. Returns whether that orphaned a
+// Any thread. The inspector connection closed or failed: every page's session ended. Returns whether that orphaned a
 // DevTools recording, as SparkProfilerInspectorReceived does.
 FOUNDATION_EXPORT BOOL SparkProfilerInspectorClosed(BOOL sparkRecording);
 // Routes `adapter`'s (React Native's RCTCxxInspectorWebSocketAdapter) received messages and closes through the two

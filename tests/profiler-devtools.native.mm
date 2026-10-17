@@ -2,6 +2,7 @@
 // tests/profiler-devtools-native.test.ts.
 #import <Foundation/Foundation.h>
 #import "SparkProfilerDevTools.h"
+#include <atomic>
 #include <cstdio>
 #include <string>
 #include <string_view>
@@ -106,6 +107,27 @@ int main() { @autoreleasepool {
   deliver(Request(@"3", 2, @"Tracing.start"));
   [adapter webSocket:nil didFailWithError:[NSError errorWithDomain:@"test" code:1 userInfo:nil]];
   CHECK(orphans == 3 && SparkProfilerDevToolsRecording() == nil);
+
+  // Concurrently: the socket's queue receives starts, stops and disconnects while another thread reads the state.
+  dispatch_queue_t socketQueue = dispatch_queue_create("socket", DISPATCH_QUEUE_SERIAL);
+  dispatch_group_t group = dispatch_group_create();
+  static std::atomic<bool> done{false};
+  static std::atomic<int> reads{0};
+  dispatch_group_async(group, socketQueue, ^{
+    for (int round = 0; round < 2000; round++) {
+      NSString *page = [NSString stringWithFormat:@"%d", 10 + round % 5];
+      deliver(Request(page, 1, round % 2 ? @"Tracing.start" : @"Profiler.start"));
+      deliver(Request(page, 2, round % 2 ? @"Tracing.end" : @"Profiler.stop"));
+      if (round % 7 == 0) deliver(Event(@"disconnect", page));
+      if (round % 101 == 0) [adapter webSocket:nil didCloseWithCode:1000 reason:@"" wasClean:YES];
+    }
+    done = true;
+  });
+  dispatch_group_async(group, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    while (!done) { (void)SparkProfilerDevToolsRecording(); reads++; }
+  });
+  dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
+  CHECK(reads > 0 && SparkProfilerDevToolsRecording() == nil);
 
   if (failures) { std::printf("%d failures\n", failures); return 1; }
   std::printf("Profiler DevTools tests passed\n");

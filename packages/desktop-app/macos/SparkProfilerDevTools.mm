@@ -5,14 +5,17 @@
 #include <string_view>
 
 // Per debugged page (the development server's pageId), the DevTools domains recording with Hermes's sampling profiler.
-static NSMutableDictionary<NSString *, NSMutableSet<NSString *> *> *pages;
+// Every access holds SparkPagesLock (recursive): the socket's delegate queue writes it, startProfiling and the
+// Developer menu read it.
+static NSMutableDictionary<NSString *, NSMutableSet<NSString *> *> *pages = [NSMutableDictionary new];
+static NSObject *SparkPagesLock(void) { static NSObject *lock = [NSObject new]; return lock; }
 // Each request that starts or stops sampling: its domain, and whether it starts.
 static NSDictionary<NSString *, NSArray *> *const Requests = @{ @"Profiler.start": @[@"Profiler", @YES], @"Profiler.stop": @[@"Profiler", @NO], @"Tracing.start": @[@"Tracing", @YES], @"Tracing.end": @[@"Tracing", @NO] };
 static NSDictionary<NSString *, NSString *> *const Descriptions = @{ @"Profiler": @"the JavaScript profiler (Profiler.start)", @"Tracing": @"a Performance panel trace (Tracing.start)" };
 
 NSString *SparkProfilerDevToolsRecording(void) {
   NSMutableSet<NSString *> *domains = [NSMutableSet new];
-  for (NSSet *recording in pages.allValues) [domains unionSet:recording];
+  @synchronized (SparkPagesLock()) { for (NSSet *recording in pages.allValues) [domains unionSet:recording]; }
   if (!domains.count) return nil;
   NSMutableArray *described = [NSMutableArray new];
   for (NSString *domain in [domains.allObjects sortedArrayUsingSelector:@selector(compare:)]) [described addObject:Descriptions[domain]];
@@ -30,9 +33,11 @@ static NSString *SparkJSONString(id value) {
 
 /** Forgets `page`'s recordings; whether that left sampling on with nothing to turn it off. */
 static BOOL SparkForget(NSString *page, BOOL sparkRecording) {
-  if (!pages[page].count) { [pages removeObjectForKey:page]; return NO; }
-  [pages removeObjectForKey:page];
-  return !sparkRecording && !SparkProfilerDevToolsRecording();
+  @synchronized (SparkPagesLock()) {
+    BOOL recorded = pages[page].count > 0;
+    [pages removeObjectForKey:page];
+    return recorded && !sparkRecording && !SparkProfilerDevToolsRecording();
+  }
 }
 
 BOOL SparkProfilerInspectorReceived(NSString *message, BOOL sparkRecording, NSString **reply, BOOL *orphaned) {
@@ -44,7 +49,6 @@ BOOL SparkProfilerInspectorReceived(NSString *message, BOOL sparkRecording, NSSt
   NSDictionary *payload = [envelope[@"payload"] isKindOfClass:NSDictionary.class] ? envelope[@"payload"] : nil;
   NSString *page = [payload[@"pageId"] isKindOfClass:NSString.class] ? payload[@"pageId"] : nil;
   if (!page) return YES;
-  if (!pages) pages = [NSMutableDictionary new];
   NSString *event = envelope[@"event"];
   if ([event isEqual:@"connect"] || [event isEqual:@"disconnect"]) { *orphaned = SparkForget(page, sparkRecording); return YES; }
   if (![event isEqual:@"wrappedEvent"]) return YES;
@@ -53,9 +57,11 @@ BOOL SparkProfilerInspectorReceived(NSString *message, BOOL sparkRecording, NSSt
   if (!kind || ![request[@"id"] isKindOfClass:NSNumber.class]) return YES;
   NSString *domain = kind[0];
   BOOL starts = [kind[1] boolValue];
-  NSMutableSet *recording = pages[page] ?: (pages[page] = [NSMutableSet new]);
-  if (starts && !sparkRecording) { [recording addObject:domain]; return YES; }
-  if (!starts && [recording containsObject:domain]) { [recording removeObject:domain]; return YES; }
+  @synchronized (SparkPagesLock()) {
+    NSMutableSet *recording = pages[page] ?: (pages[page] = [NSMutableSet new]);
+    if (starts && !sparkRecording) { [recording addObject:domain]; return YES; }
+    if (!starts && [recording containsObject:domain]) { [recording removeObject:domain]; return YES; }
+  }
   if (!sparkRecording) return YES;
   // A start would share Spark's sampling (Hermes ignores a second enable); a stop of a recording DevTools does not have
   // would turn Spark's sampling off.
@@ -68,9 +74,11 @@ BOOL SparkProfilerInspectorReceived(NSString *message, BOOL sparkRecording, NSSt
 }
 
 BOOL SparkProfilerInspectorClosed(BOOL sparkRecording) {
-  BOOL recorded = SparkProfilerDevToolsRecording() != nil;
-  [pages removeAllObjects];
-  return recorded && !sparkRecording;
+  @synchronized (SparkPagesLock()) {
+    BOOL recorded = SparkProfilerDevToolsRecording() != nil;
+    [pages removeAllObjects];
+    return recorded && !sparkRecording;
+  }
 }
 
 /** Replaces `selector`'s implementation in `adapter` with `make(original)`; NO if `adapter` does not define it. */
