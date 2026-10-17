@@ -18,15 +18,15 @@ export type Message = { id?: number; method?: string; params?: any; result?: any
 export type Cdp = Awaited<ReturnType<DevSession["connect"]>>;
 export type DevSession = Awaited<ReturnType<typeof startDevSession>>;
 
-/** `env` reaches spark dev (and React Native's browser launcher); `prefix` names the scratch directory. */
-export async function startDevSession(options: { prefix: string; env?: Record<string, string> }) {
+/** `env` reaches spark dev (and React Native's browser launcher); `args` are more spark dev options; `prefix` names the scratch directory. */
+export async function startDevSession(options: { prefix: string; env?: Record<string, string>; args?: string[] }) {
   const work = mkdtempSync(path.join(os.tmpdir(), options.prefix));
   const sessionLog = path.join(work, "spark-dev.log"), appLog = path.join(work, "app.log");
   const port = await availablePort();
   const base = `http://127.0.0.1:${port}`;
   const app = new KitchenSinkApp(undefined, new URL(base));
   const log = openSync(sessionLog, "a");
-  const session = spawnProcess([process.execPath, path.join(import.meta.dirname, "../spark.mjs"), "dev", "--platform", "macos", "--no-open", "--port", String(port), "--max-workers", "2"], {
+  const session = spawnProcess([process.execPath, path.join(import.meta.dirname, "../spark.mjs"), "dev", "--platform", "macos", "--no-open", "--port", String(port), "--max-workers", "2", ...options.args ?? []], {
     cwd: KITCHEN_SINK, env: { ...process.env, CI: "false", ...options.env }, stdin: "ignore", stdout: log, stderr: log,
   });
   const sockets: WebSocket[] = [];

@@ -59,7 +59,11 @@
           "audit": {
             "enum": [
               "bundle",
-              "package"
+              "package",
+              "api-docs",
+              "cli",
+              "templates",
+              "dev-loop"
             ],
             "description": "The gate audit step that verifies this check against the release build, instead of a flow (see docs/e2e-flows.md#audits)."
           }

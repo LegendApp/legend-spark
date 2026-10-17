@@ -59,7 +59,8 @@ async function main() {
       process.exit(process.exitCode);
     }
   }
-  if (values.help || !command) {
+  if (values.version && !command) console.log(VERSION);
+  else if (values.help || !command) {
     console.log(`Legend Spark
 
   spark create MyApp  Create an app (--universal for shared Settings; --platform selects a target)
@@ -76,6 +77,7 @@ async function main() {
 Inside an app: npm run dev, npm run build, npm run package (or pnpm, yarn, bun)
 
 Advanced: updates init <feedURL>, credentials, doctor, analyze, open [app], build --dev, build --preview, package --ad-hoc (test package, not notarized)
+Version: spark --version
 Crash reports: symbolicate <report.json> --dsym <MyApp.app.dSYM or folder> (prints the report with symbols and source lines)
 Windows: dev and build --dev; production builds are not yet supported.
 SDK transfer: sdk export <directory> [--runtime <Spark Runner directory>], sdk import <directory>

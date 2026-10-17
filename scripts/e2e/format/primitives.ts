@@ -4,7 +4,7 @@ export type Schema = Record<string, unknown>;
 export const CHECK_ID = "^[A-Z][A-Z0-9]*-[A-Z0-9]+-\\d{2}$";
 export const PLATFORMS = ["macos", "windows"] as const;
 /** Gate audit steps: a check registered with `audit: <name>` is verified by that step against the release build, not by a flow. */
-export const AUDITS = ["bundle", "package"] as const;
+export const AUDITS = ["bundle", "package", "api-docs", "cli", "templates", "dev-loop"] as const;
 export type Audit = typeof AUDITS[number];
 
 const ref = (name: string): Schema => ({ $ref: `#/definitions/${name}` });

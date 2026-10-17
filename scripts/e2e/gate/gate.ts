@@ -7,7 +7,7 @@ import { collect } from "../files.ts";
 import { checkFile } from "../format/lint.ts";
 import type { AuditOptions, AuditResult } from "../audit/bundle.ts";
 import { checkSignoffs, FlowFormatError, formatDiagnostic, type Signoff } from "../format/parser.ts";
-import type { Audit } from "../format/primitives.ts";
+import { AUDITS, type Audit } from "../format/primitives.ts";
 import type { ManualStep } from "../format/signoff.ts";
 import type { BackendFactory } from "../runner/backend.ts";
 import { ms, realClock, type Clock, type FlowResult } from "../runner/executor.ts";
@@ -150,7 +150,12 @@ function judgeFlows(plan: GatePlan, results: FlowResult[] | undefined, runDir: s
 export async function judgeAudits(plan: GatePlan, env: GateEnv, exists: boolean, reasons: Reason[], warnings: string[]): Promise<AuditEntry[]> {
   const build = plan.target && plan.manifest.build[plan.target.platform];
   const options = build && { app: plan.artifact!, platform: plan.target!.platform, arch: plan.target!.arch, appId: plan.manifest.appId, sizeBudgetMB: build.sizeBudgetMB, symbols: plan.symbols, package: plan.package };
-  const results = exists && options ? (await Promise.all([...new Set(plan.audits.map(audit => audit.audit))].map(name => env.audit(name, options)))).flat() : undefined;
+  // One step at a time: steps that build or time apps must not overlap.
+  let results: AuditResult[] | undefined;
+  if (exists && options) {
+    results = [];
+    for (const name of new Set(plan.audits.map(audit => audit.audit))) results.push(...await env.audit(name, options));
+  }
   return plan.audits.map(({ check, audit, title, blocking }) => {
     const result = results?.find(candidate => candidate.check === check);
     const entry: AuditEntry = { check, audit, title, blocking, status: result?.status ?? "not-run", details: result?.details ?? [] };
@@ -366,17 +371,23 @@ export async function gateCommand(args: string[], root: string, env: GateEnv): P
  */
 export async function auditCommand(args: string[], root: string, env: GateEnv): Promise<number> {
   const paths: { artifact?: string; package?: string } = {};
+  const only: string[] = [];
   for (let index = 0; index < args.length; index++) {
     const [flag, inline] = args[index]!.split(/=(.*)/s, 2) as [string, string | undefined];
     const value = inline ?? args[++index];
-    if ((flag !== "--artifact" && flag !== "--package") || !value) { env.stderr("usage: bun run e2e:audit [--artifact <app>] [--package <zip or folder>]"); return 2; }
-    paths[flag.slice(2) as "artifact" | "package"] = path.resolve(value);
+    if (!["--artifact", "--package", "--audit"].includes(flag) || !value || (flag === "--audit" && !(AUDITS as readonly string[]).includes(value))) {
+      env.stderr(`usage: bun run e2e:audit [--artifact <app>] [--package <zip or folder>] [--audit ${AUDITS.join("|")}]…`);
+      return 2;
+    }
+    if (flag === "--audit") only.push(value);
+    else paths[flag.slice(2) as "artifact" | "package"] = path.resolve(value);
   }
   let gatePlan: GatePlan;
   try { gatePlan = plan(root, env.host(), paths); } catch (error) {
     if (error instanceof UsageError || error instanceof FlowFormatError) { env.stderr(error.message); return error instanceof UsageError ? 2 : 1; }
     throw error;
   }
+  if (only.length) gatePlan = { ...gatePlan, audits: gatePlan.audits.filter(audit => only.includes(audit.audit)) };
   const reasons: Reason[] = [...gatePlan.problems], warnings: string[] = [];
   if (!gatePlan.audits.length) reasons.push({ check: "audit", message: "no audit checks apply to this target" });
   const exists = !!gatePlan.artifact && existsSync(gatePlan.artifact);
