@@ -1,0 +1,14 @@
+appId: so.legend.spark.examples.kitchensink
+name: The Web Inspector is typed unsupported on Windows
+intent: >
+  On Windows getWebViewInspectorAvailability reports unsupported-platform, so the Web Inspector screen shows its
+  availability and no WebViews or opt-in toggle.
+checks: [DEVT-UNSUP-05]
+tags: [devtools]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://devtools/web-inspector" }
+- assertText: { id: devtools-web-inspector-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertVisible: { id: devtools-web-inspector-unavailable }
+- assertNotVisible: { id: devtools-web-inspector-default }
+- assertNotVisible: { id: devtools-web-inspector-toggle }

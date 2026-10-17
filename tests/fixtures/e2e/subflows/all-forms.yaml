@@ -89,6 +89,7 @@
 - assertCodeSigning: { app: "${APP_PATH}" }
 - assertNoDebugSurface
 - assertNoDebugSurface: { for: 3s }
+- assertWebView: { id: devtools-web-inspector-default, inspectable: false }
 - assertLoadPaths: "${APP_PATH}"
 - assertLoadPaths: { app: "${APP_PATH}" }
 - assertSandboxVariant: "${APP_PATH}"

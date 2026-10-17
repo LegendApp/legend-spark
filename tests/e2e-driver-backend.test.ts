@@ -227,6 +227,16 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("capture frames is 0, expected at least 3") });
   });
 
+  test("assertWebView checks a WebView's native inspectability and waits for it to mount", async () => {
+    const app = new FakeApp();
+    app.webViews = { web: { inspectable: false, url: "about:blank" } };
+    expect((await run("- launchApp\n- assertWebView: { id: web, inspectable: false }", app)).result.status).toBe("passed");
+    const inspectable = await run("- launchApp\n- assertWebView: { id: web, inspectable: true, timeout: 200ms }", app);
+    expect(inspectable.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("the WebView in web (about:blank) is not inspectable") });
+    const missing = await run("- launchApp\n- assertWebView: { id: other, inspectable: false, timeout: 200ms }", app);
+    expect(missing.result.failure).toMatchObject({ kind: "not-found", message: expect.stringContaining("No visible view with testID other") });
+  });
+
   test("dragAndDrop runs a Spark drag source's drag in process: begin, move, a hold for spring loading, drop", async () => {
     const app = new FakeApp({ source: 1, target: 1 });
     app.dragSources = { source: {} };

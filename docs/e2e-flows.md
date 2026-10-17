@@ -535,6 +535,7 @@ fails with `invalid`.
 | `setAppAppearance` | `setAppAppearance`; lasts until the app quits |
 | `auditAccessibility` | `accessibilityAudit`, judged by the runner ([Accessibility audit](#accessibility-audit)). |
 | `assertAppMenu` | `menus`: the menu bar as AppKit holds it, validated as when a user opens it. `path` matches titles; `exists: false` passes when any segment is missing. Polled like other checks. |
+| `assertWebView` | `webView`: the native WKWebView inside the element `id`, its `isInspectable` compared with `inspectable` and polled until it matches; a missing view or WKWebView is `not-found` ([devtools.md](devtools.md#web-inspector)). |
 | `setClock`, `advanceClock` | The motion engine's `setClock` and `advanceClock` driver commands ([motion.md](motion.md#virtual-clock-for-the-test-driver)); `advanceClock` sends `duration` in milliseconds |
 | `captureMotion`, `assertMotion`, `interruptAt` | Motion telemetry: `motionState`, `waitForMotion` and `sampleMotion` ([Motion and frames](#motion-and-frames)). The target needs a testID. |
 | `assertFrames` | `startFrames`, the `during` command, `stopFrames` ([Motion and frames](#motion-and-frames)) |
@@ -672,7 +673,9 @@ has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and 
   half (`SparkProfiler.mm`) holds as a string. An app with no Mach-O file is a finding too (#272).
 
 It is a `build: release` check: a development build connects to the decoy (or the bundle server) and has the Developer
-menu, so it fails. The gate runs it on the gate's artifact; `bun run harness` runs the gate with the installed artifact
+menu, so it fails. `DEVT-REL-07` (`e2e/flows/devtools/web-inspector-release.yaml`) adds that a release build's WebViews are not
+inspectable: it opens the Kitchen Sink's Web Inspector screen and `assertWebView` reads its default WebView's native
+`isInspectable` (false), and the opt-in WebView's (true, `DEVT-WEB-03`). The gate runs it on the gate's artifact; `bun run harness` runs the gate with the installed artifact
 (`--artifact`), so the probe runs against the signed app it installed.
 
 #### App state

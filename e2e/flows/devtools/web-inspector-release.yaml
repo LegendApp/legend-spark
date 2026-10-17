@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: A release build's WebViews are inspectable only when they opt in
+intent: >
+  In the release build the Web Inspector screen's WebView sets no inspectable prop, and the driver reads its native
+  WKWebView: isInspectable is false, so Safari's Web Inspector cannot attach. The opt-in WebView, which sets inspectable
+  true, is inspectable in the same build, and stops existing when hidden again.
+checks: [DEVT-REL-07, DEVT-WEB-03]
+tags: [devtools, security]
+platforms: [macos]
+build: release
+---
+- launchApp: { openUrl: "spark-ks://devtools/web-inspector" }
+- assertText: { id: devtools-web-inspector-availability, equals: '{"available":true}' }
+- assertVisible: { id: devtools-web-inspector-bundle }
+- assertWebView: { id: devtools-web-inspector-default, inspectable: false }
+- assertNotVisible: { id: devtools-web-inspector-opt-in }
+- tapOn: { id: devtools-web-inspector-toggle }
+- assertWebView: { id: devtools-web-inspector-opt-in, inspectable: true }
+- assertWebView: { id: devtools-web-inspector-default, inspectable: false }
+- tapOn: { id: devtools-web-inspector-toggle }
+- assertNotVisible: { id: devtools-web-inspector-opt-in }

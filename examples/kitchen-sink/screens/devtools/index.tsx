@@ -9,6 +9,8 @@ import { NETWORK_MESSAGES } from "./network-messages";
 import { Profiling } from "./Profiling";
 import { PROFILING_MESSAGES } from "./profiling-messages";
 import { REACT_DEVTOOLS_MESSAGES } from "./react-devtools-messages";
+import { WebInspector } from "./WebInspector";
+import { WEB_INSPECTOR_MESSAGES } from "./web-inspector-messages";
 
 export default defineScreens("devtools", [
   { id: "devtools", title: "React Native DevTools", titles: { ar: DEVTOOLS_MESSAGES.ar.title }, summary: "The Hermes debugger per JavaScript runtime: breakpoints, console, sources with source maps, pause on exceptions; ⌥⌘I.", summaries: { ar: "مصحّح Hermes لكل بيئة تشغيل JavaScript: نقاط التوقف ووحدة التحكم والمصادر مع خرائط المصادر والإيقاف عند الاستثناءات؛ ⌥⌘I." }, component: DevTools },
@@ -16,4 +18,5 @@ export default defineScreens("devtools", [
   { id: "profiling", title: "Profiling", titles: { ar: PROFILING_MESSAGES.ar.title }, summary: "Hermes sampling profiles of every JavaScript runtime, source-mapped, and a frame timeline of main-thread frames and motion as a Chrome trace; heap snapshots in DevTools (development builds).", summaries: { ar: "تحليلات Hermes بالعيّنات لكل بيئات تشغيل JavaScript مربوطة بالمصادر، وخط زمني لإطارات الخيط الرئيسي والحركة في ملف تتبّع Chrome؛ ولقطات الذاكرة في أدوات المطوّر (نسخ التطوير)." }, component: Profiling },
   { id: "dev-menu", title: "Developer menu", titles: { ar: DEVELOPER_MENU_MESSAGES.ar.title }, summary: "The development-only Developer menu: Reload, DevTools, Element Inspector, Performance Monitor, Fast Refresh and bundle info for the key window's runtime.", summaries: { ar: "قائمة «المطوّر» الخاصة بنسخ التطوير: إعادة التحميل وأدوات المطوّر وفاحص العناصر ومراقب الأداء وFast Refresh ومعلومات الحزمة لبيئة تشغيل النافذة النشطة." }, component: DeveloperMenu },
   { id: "react-devtools", title: "React DevTools", titles: { ar: REACT_DEVTOOLS_MESSAGES.ar.title }, summary: "The Components and Profiler panels per JavaScript runtime: component tree, props, state and hooks, select element in any window, highlight updates, commit timings (development builds).", summaries: { ar: "لوحتا Components وProfiler لكل بيئة تشغيل JavaScript: شجرة المكوّنات والخصائص والحالة والخطافات، وتحديد عنصر في أي نافذة، وإبراز التحديثات، وتوقيت كل إيداع (نسخ التطوير)." }, component: ReactDevTools },
+  { id: "web-inspector", title: "Web Inspector", titles: { ar: WEB_INSPECTOR_MESSAGES.ar.title }, summary: "Safari's Web Inspector on a WebView's page: inspectable in development builds by default, in release builds only when a WebView sets inspectable.", summaries: { ar: "فاحص الويب في Safari على صفحة عرض الويب: قابل للفحص في نسخ التطوير افتراضيًا، وفي نسخ الإصدار فقط إذا ضبط عرض الويب inspectable." }, component: WebInspector },
 ]);

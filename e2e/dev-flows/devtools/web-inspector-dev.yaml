@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: WebViews are inspectable with a development bundle
+intent: >
+  With development JavaScript (__DEV__) on macOS, getWebViewInspectorAvailability reports available, the Web Inspector
+  screen says its WebView is inspectable, and the driver reads the native WKWebView of the WebView that sets no
+  inspectable prop and of the one that sets inspectable true: isInspectable is true for both.
+checks: [DEVT-WEB-01]
+tags: [devtools]
+platforms: [macos]
+build: dev
+timeout: 120s
+---
+- launchApp: { openUrl: "spark-ks://devtools/web-inspector" }
+- assertVisible: { id: devtools-web-inspector-root, timeout: 30s }
+- assertText: { id: devtools-web-inspector-availability, equals: '{"available":true}' }
+- assertText: { id: devtools-web-inspector-bundle, equals: "This is a development bundle: the WebView below is inspectable." }
+- assertWebView: { id: devtools-web-inspector-default, inspectable: true }
+- tapOn: { id: devtools-web-inspector-toggle }
+- assertWebView: { id: devtools-web-inspector-opt-in, inspectable: true }

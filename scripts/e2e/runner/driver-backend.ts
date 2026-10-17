@@ -12,7 +12,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech, type SimulatedCapture, type TestCapture,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech, type SimulatedCapture, type TestCapture, type TestWebView,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -60,6 +60,7 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   testAppIntents(): Promise<TestAppIntents>;
   simulateCapture(state: SimulatedCapture): Promise<TestCapture>;
   testCapture(): Promise<TestCapture>;
+  webView(testID: string): Promise<TestWebView>;
   testDrag(request: TestDragRequest): Promise<TestDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
@@ -244,6 +245,16 @@ export class DriverBackend implements Backend {
     assertAppMenu: (args, context) => context.eventually(async () => assertMenu(await this.client().menus(), args)),
     // The release-safety probe (docs/e2e-flows.md#release-safety-probe).
     assertNoDebugSurface: args => this.assertNoDebugSurface(args),
+    // White-box: whether Safari's Web Inspector can attach to a WebView, from its native WKWebView (docs/devtools.md#web-inspector).
+    assertWebView: (args, context) => context.eventually(async () => {
+      const id = args.id as string;
+      let webView: TestWebView;
+      try { webView = await this.client().webView(id); } catch (error) {
+        if (error instanceof DriverError && error.code === "E_NOT_FOUND") throw new Failure("not-found", error.message);
+        throw error;
+      }
+      if (webView.inspectable !== args.inspectable) throw new Failure("assertion", `the WebView in ${id} (${webView.url ?? "no URL"}) is ${webView.inspectable ? "" : "not "}inspectable`);
+    }),
   });
   private session?: Session;
   private opened?: InspectedApp;

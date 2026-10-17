@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Safari's Web Inspector attaches to a development build's WebView
+intent: >
+  Safari's Web Inspector is a separate app that discovers inspectable WebViews through the system's remote inspector;
+  attaching to one, and what its panels show, needs a person with Safari.
+checks: [DEVT-WEB-02]
+tags: [devtools]
+platforms: [macos]
+build: dev
+manual: true
+---
+- manualStep:
+    instruction: In examples/kitchen-sink run bun run macos, open DevTools › Web Inspector and press Show the opt-in WebView. In Safari turn on Settings › Advanced › Show features for web developers, then open the Develop menu, this Mac, KitchenSink.
+    expect: KitchenSink lists both pages. Choosing the first opens Web Inspector on it; Elements shows the p element with id inspected and the text "This page sets no inspectable prop.", and after reloading the page in Web Inspector the Console shows "Web Inspector page loaded".
+    evidence: none
+    signoff: required

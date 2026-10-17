@@ -4,6 +4,7 @@ Development builds on macOS debug their JavaScript with React Native DevTools: t
 the Hermes debugger, served by the development server that `spark dev` starts. It has breakpoints and stepping, the
 console, sources with source maps from the development bundle, pause on exceptions, and Hermes profiling and heap
 snapshots per runtime. Spark adds a [network inspector](#network-inspector) and an app-wide [profiler](#profiling).
+WebViews' pages are debugged with Safari's [Web Inspector](#web-inspector).
 Release builds contain none of it. Windows is typed unsupported.
 
 ## Open DevTools
@@ -300,6 +301,45 @@ native code contains the profiler's marker (`spark-profiler`, which starts every
 timeline's recorder (`SparkFrameTimeline.mm`) also compiles into builds with the test driver, which the gate needs; it
 holds no profiler code.
 
+## Web Inspector
+
+Safari's Web Inspector debugs the page in a WebView (`@legendapp/spark/webview`): elements and styles, the console,
+network, sources with breakpoints, and storage. In development bundles (`__DEV__`) every WebView is inspectable; in
+release bundles a WebView is inspectable only when it sets `inspectable`:
+
+```tsx
+import { WebView, getWebViewInspectorAvailability } from "@legendapp/spark/webview";
+
+<WebView source={{ uri: "https://example.com" }} />                // inspectable in development bundles only
+<WebView source={{ uri: "https://example.com" }} inspectable />    // inspectable in release builds too
+<WebView source={{ uri: "https://example.com" }} inspectable={false} /> // never inspectable
+
+getWebViewInspectorAvailability(); // { available: true } | { available: false, reason }
+```
+
+To attach, turn on Safari's **Settings › Advanced › Show features for web developers**, then choose **Develop › this
+Mac › the app's name** and the page. The app's process lists one entry per inspectable WebView.
+
+`inspectable` sets the WKWebView's `isInspectable` (macOS 13.3 and later; Spark requires macOS 14), through
+react-native-webview's `webviewDebuggingEnabled`. Spark always sets it on macOS: `__DEV__` when `inspectable` is
+unset, so a release build's WebViews cannot be inspected unless they opt in. Opt in only for WebViews whose content and scripts you are willing to expose to anyone
+running the app.
+
+`getWebViewInspectorAvailability()` reports `unsupported-platform` outside macOS and `missing-module` without
+react-native-webview's native module. Setting `inspectable` (true or false) where it is unavailable throws
+`E_UNSUPPORTED_PLATFORM` (`E_MODULE_UNAVAILABLE` without the module), and a value that is not a boolean throws
+`E_INVALID_ARGUMENT`. An unset `inspectable` there leaves the backend's default.
+
+**Windows** is not implemented: WebView2 DevTools (`CoreWebView2Settings.AreDevToolsEnabled`) follow WebView2's own
+default, which enables them, in every build. Making them development-only, as on macOS, is a follow-up.
+
+The Kitchen Sink's DevTools › Web Inspector screen (`spark-ks://devtools/web-inspector`) shows a WebView with the
+default and, on demand, one that sets `inspectable`. The driver's `webView` command reads a WKWebView's
+`isInspectable` natively ([test-driver.md](test-driver.md)), and the `assertWebView` flow command checks it: in
+development bundles both WebViews are inspectable (`e2e/dev-flows/devtools/web-inspector-dev.yaml`, `DEVT-WEB-01`), in
+the release build only the opt-in one (`e2e/flows/devtools/web-inspector-release.yaml`, `DEVT-REL-07`, `DEVT-WEB-03`).
+Attaching Safari needs a person (`e2e/dev-flows/devtools/web-inspector.yaml`, `DEVT-WEB-02`).
+
 ## Release builds
 
 React Native compiles `RCT_DEV` to 0 in release builds, which removes Spark's ⌥⌘I monitor, the target lookup and the
@@ -309,7 +349,8 @@ rejects `E_UNAVAILABLE` without native work. `tests/devtools.test.ts` checks the
 gate's [release-safety probe](e2e-flows.md#release-safety-probe) ([#274](https://github.com/LegendApp/legend-spark/issues/274))
 runs the release build pointed at a decoy development server and fails if it connects to it, holds a network or
 listening socket, shows a Developer menu or other debug menu item, has the network inspector in its JavaScript, or has
-the profiler in its JavaScript or native code.
+the profiler in its JavaScript or native code. A release build's WebViews are inspectable only when they set `inspectable`
+([Web Inspector](#web-inspector), `DEVT-REL-07`).
 
 ## How it works
 

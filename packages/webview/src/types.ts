@@ -27,6 +27,12 @@ export interface WebViewProps extends Omit<ViewProps, "children"> {
   onNavigationChange?: (event: WebViewNavigation) => void;
   /** Synchronous native navigation decision where emitted; not a network security boundary. */
   onNavigationRequest?: (event: WebViewNavigationRequest) => boolean;
+  /**
+   * Whether Safari's Web Inspector can attach to this WebView (WKWebView `isInspectable`, macOS). Default: in
+   * development bundles (`__DEV__`) only. A release build's WebView is inspectable only when this is `true`. Setting it
+   * where `getWebViewInspectorAvailability()` is unavailable throws `E_UNSUPPORTED_PLATFORM`.
+   */
+  inspectable?: boolean;
 }
 /** Ref methods of a `WebView`. Each throws E_CLOSED when the view is not mounted; `postMessage` and `injectJavaScript` take strings (E_INVALID_ARGUMENT). */
 export interface WebViewRef {
