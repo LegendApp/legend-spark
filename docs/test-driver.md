@@ -587,6 +587,7 @@ Measured in `tests/test-driver.native.mm` (both ways), a window that was never s
 | Core Image layer filters (blur, distortion) | Yes | No |
 | 3D transforms (perspective) | Yes | No: drawn flat, untransformed |
 | Particles of an emitter whose layer is paused | Yes | No |
+| `AVPlayerLayer` video frames | Not reliably: drawn only when the player has handed the layer a decoded frame by the time of the render. Kitchen Sink goldens show the test clip's first frame in ar and black in en, so `media/video-visual.yaml` masks the video view | No |
 | Selected source-list rows (the unemphasized selection material; driver windows are never key) | Yes: the vibrant compositing filter the window server applies is rendered | Substituted: the selection is a black layer the window server tints with a vibrant compositing filter (a sublayer of an `NSVisualEffectView` on macOS 27, the selection view's own layer on macOS 26), so `capture` hides it under `unemphasizedSelectedContentBackgroundColor` for the row's appearance and restores it afterwards |
 | Behind-window vibrancy (`NSVisualEffectView`, `BehindWindow`) | No: a light material fill. The blur samples what is behind the window on screen, which only the window server has | No: a flat material gray |
 | Window shadow and rounded corners | No: outside the frame view | No |
