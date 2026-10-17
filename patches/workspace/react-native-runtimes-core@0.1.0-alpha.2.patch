@@ -104,10 +104,32 @@ index 9c1d205..f528c39 100644
  @property (nonatomic, copy) NSString *appName;
  @property (nonatomic, copy) NSString *blockStatus;
 diff --git a/ios/ThreadedRuntimeSurfaceView.mm b/ios/ThreadedRuntimeSurfaceView.mm
-index 0764a63..ff00d43 100644
+index 0764a63..89a0903 100644
 --- a/ios/ThreadedRuntimeSurfaceView.mm
 +++ b/ios/ThreadedRuntimeSurfaceView.mm
-@@ -26,7 +26,9 @@ - (instancetype)initWithFrame:(CGRect)frame
+@@ -7,6 +7,21 @@
+ 
+ #import "ThreadedRuntime.h"
+ 
++#if TARGET_OS_OSX
++#import <React/RCTViewComponentView.h>
++
++@interface RCTViewComponentView (ThreadedRuntimeSurface)
++@property (nonatomic, readonly) facebook::react::LayoutDirection threadedRuntimeLayoutDirection;
++@end
++
++@implementation RCTViewComponentView (ThreadedRuntimeSurface)
++- (facebook::react::LayoutDirection)threadedRuntimeLayoutDirection
++{
++  return _layoutMetrics.layoutDirection;
++}
++@end
++#endif
++
+ static NSString *const ThreadedRuntimeSurfaceDefaultRuntimeName = @"background-list";
+ static NSString *const ThreadedRuntimeSurfaceDefaultHostAppName = @"ThreadedRuntimeHost";
+ 
+@@ -26,7 +41,9 @@ static NSString *const ThreadedRuntimeSurfaceDefaultHostAppName = @"ThreadedRunt
      _mode = @"";
      _runtimeName = ThreadedRuntimeSurfaceDefaultRuntimeName;
      _surfaceKey = @"";
@@ -117,7 +139,44 @@ index 0764a63..ff00d43 100644
    }
    return self;
  }
-@@ -196,7 +198,14 @@ - (void)ensureSurface
+@@ -89,6 +106,36 @@ static NSString *const ThreadedRuntimeSurfaceDefaultHostAppName = @"ThreadedRunt
+   [_surface setSize:self.bounds.size];
+ }
+ 
++#if TARGET_OS_OSX
++// The legacy interop view sets this view's frame on every layout metrics update, the layout direction's included.
++- (void)setFrame:(NSRect)frame
++{
++  [super setFrame:frame];
++  [self constrainSurfaceLayoutDirection];
++}
++
++// RN macOS gives native views no layout direction, and a surface lays out in RCTI18nUtil's direction, so a surface in
++// a right-to-left subtree (such as `direction: "rtl"`) laid out left to right. It takes its Fabric host's direction.
++- (void)constrainSurfaceLayoutDirection
++{
++  NSView *host = self.superview;
++  while (host != nil && ![host isKindOfClass:RCTViewComponentView.class]) {
++    host = host.superview;
++  }
++  if (_surface == nil || host == nil) {
++    return;
++  }
++  const auto &surfaceHandler = _surface.surfaceHandler;
++  auto layoutConstraints = surfaceHandler.getLayoutConstraints();
++  const auto direction = ((RCTViewComponentView *)host).threadedRuntimeLayoutDirection;
++  if (layoutConstraints.layoutDirection == direction) {
++    return;
++  }
++  layoutConstraints.layoutDirection = direction;
++  surfaceHandler.constraintLayout(layoutConstraints, surfaceHandler.getLayoutContext());
++}
++#endif
++
+ - (void)setAppName:(NSString *)appName
+ {
+   NSString *nextAppName = appName.length > 0 ? appName : ThreadedRuntimeSurfaceDefaultHostAppName;
+@@ -196,7 +243,17 @@ static NSString *const ThreadedRuntimeSurfaceDefaultHostAppName = @"ThreadedRunt
    _surfaceView = [[RCTSurfaceHostingView alloc] initWithSurface:_surface
                                                  sizeMeasureMode:RCTSurfaceSizeMeasureModeWidthExact |
                                                                  RCTSurfaceSizeMeasureModeHeightExact];
@@ -126,6 +185,9 @@ index 0764a63..ff00d43 100644
 +  // not clipped to the view: it can be the enclosing clip view's whole visible rect. Any color, clear included, then
 +  // covers or erases a ScrollView's content around the surface, so on macOS neither view has one (nil draws nothing).
 +  _surfaceView.backgroundColor = nil;
++  // Creating the surface's view resets its layout direction to RCTI18nUtil's, so create it before taking the host's.
++  (void)_surface.view;
++  [self constrainSurfaceLayoutDirection];
 +#else
    _surfaceView.backgroundColor = UIColor.clearColor;
 +#endif

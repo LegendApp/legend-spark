@@ -88,3 +88,10 @@ checks:
     spec: "#211 FUT.plugins; #396"
     covers:
       - ./plugins#createPluginHost
+  FUT-PLUGINRTL-01:
+    title: "Hello's panel, a ThreadedReactSurface in the plugin's runtime, takes the host's layout direction: in Arabic its content starts at the right edge, as the screen around it does"
+    platforms: [macos]
+    blocking: true
+    spec: "#486"
+    covers:
+      - ./plugins#createPluginHost

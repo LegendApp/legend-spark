@@ -4,8 +4,9 @@ intent: >
   With Hello loaded, its panel (a ThreadedReactSurface rendering in Hello's runtime) is mounted inside the Plugins
   screen's ScrollView. Scrolled to the end, the scroll content around the panel and the panel itself match the approved
   golden for the appearance and locale, with the shell sidebar masked. The surface's hosting view once filled white
-  over the clip view's whole visible rect, so everything the ScrollView showed was blank (#396).
-checks: [FUT-PLUGINVISUAL-02]
+  over the clip view's whole visible rect, so everything the ScrollView showed was blank (#396). The panel takes the
+  host's layout direction: its Count button sits at the leading edge, on the same side as the first command (#486).
+checks: [FUT-PLUGINVISUAL-02, FUT-PLUGINRTL-01]
 tags: [future-facing-capabilities]
 platforms: [macos]
 matrix:
@@ -20,4 +21,7 @@ matrix:
 - assertText: { id: future-facing-capabilities-plugins-panel-runtime, equals: "spark-plugin.so.legend.ks.hello · main: false" }
 - scroll: { on: { id: future-facing-capabilities-plugins-content }, direction: down, amount: 2000, precise: true }
 - assertVisible: { id: future-facing-capabilities-plugins-panel-hello-panel }
+# The panel's Count button (alignSelf: flex-start) is past the middle command button on the leading side.
+- assertVisible: { id: future-facing-capabilities-plugins-panel-increment, leftOf: { id: future-facing-capabilities-plugins-command-hello-crash }, when: { matrix: { locale: en } } }
+- assertVisible: { id: future-facing-capabilities-plugins-panel-increment, rightOf: { id: future-facing-capabilities-plugins-command-hello-crash }, when: { matrix: { locale: ar } } }
 - assertScreenshot: { golden: future-facing-capabilities-plugins-panel, mask: [{ id: infra-shell-sidebar }] }
