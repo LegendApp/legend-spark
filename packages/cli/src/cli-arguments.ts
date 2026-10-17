@@ -7,9 +7,9 @@ const options = {
   device: { type: "string" }, project: { type: "string" }, platform: { type: "string" },
   packages: { type: "string" }, port: { type: "string" }, runner: { type: "boolean" },
   dev: { type: "boolean" }, release: { type: "boolean" }, preview: { type: "boolean" },
-  force: { type: "boolean" }, dsym: { type: "string", multiple: true }, "submission-id": { type: "string" }, "ad-hoc": { type: "boolean" }, sandbox: { type: "boolean" }, help: { type: "boolean", short: "h" },
+  force: { type: "boolean" }, dsym: { type: "string", multiple: true }, "submission-id": { type: "string" }, "ad-hoc": { type: "boolean" }, sandbox: { type: "boolean" }, help: { type: "boolean", short: "h" }, version: { type: "boolean" },
 } as const;
-const commands: Record<string, { flags: readonly string[]; arguments: readonly [number, number] }> = {
+export const commands: Record<string, { flags: readonly string[]; arguments: readonly [number, number] }> = {
   create: { flags: ["example", "package-manager", "universal", "platform", "packages"], arguments: [1, 1] },
   "add desktop": { flags: ["project", "packages"], arguments: [0, 0] },
   "sdk export": { flags: ["packages", "runtime"], arguments: [1, 1] },
@@ -35,9 +35,10 @@ export function cliArguments(args: string[]) {
   const grouped = ["sdk", "add", "updates"].includes(positionals[0]);
   const command = positionals.slice(0, grouped ? 2 : 1).join(" ");
   if (!command || (grouped && positionals.length === 1 && values.help)) {
-    if (Object.keys(values).some(key => key !== "help")) throw new Error("Choose a command before specifying options. Run spark --help.");
+    if (Object.keys(values).some(key => key !== "help" && key !== "version")) throw new Error("Choose a command before specifying options. Run spark --help.");
     return parsed;
   }
+  if (grouped && positionals.length === 1) throw new Error(`Choose a subcommand: ${Object.keys(commands).filter(name => name.startsWith(`${command} `)).map(name => `spark ${name}`).join(", ")}.`);
   const contract = commands[command];
   if (!contract) throw new Error(`Unknown command: ${command}. Run spark --help.`);
   for (const key of Object.keys(values)) if (key !== "help" && !contract.flags.includes(key)) throw new Error(`--${key} is not an option for spark ${command}`);

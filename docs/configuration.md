@@ -153,5 +153,6 @@ module.exports = withSparkNative({ assets: ['./fonts'] }, __dirname);
 `getDefaultConfig` follows Expo's options. `withSparkMetro` also accepts a promise
 from an asynchronous config wrapper. `withDesktop(config, { runtimes?, watch? })`
 is the lower-level composition helper for an already configured desktop Metro
-instance. It is not needed in either ordinary recipe above. Other backend-specific
+instance. `watch: false` keeps a development session's Runtimes registrations
+from each bundle's first build instead of following the app's changes. It is not needed in either ordinary recipe above. Other backend-specific
 configuration belongs to the upstream tool; unknown Spark options reject.

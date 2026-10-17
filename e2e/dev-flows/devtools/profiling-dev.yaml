@@ -2,13 +2,13 @@ appId: so.legend.spark.examples.kitchensink
 name: Profiling from the Profiling screen and the Developer menu in a development build
 intent: >
   With development JavaScript (__DEV__) on macOS, @legendapp/spark/runtime-entry installs the profiler:
-  getProfilerAvailability reports available. Start profiling records every runtime and the frame timeline; while it
-  records the Developer menu disables Start Profiling and enables Stop Profiling…, although a driven app has no key
-  window. JavaScript runs in the shared runtime, then Stop and save writes the Chrome trace and a .cpuprofile per
-  runtime into a new directory in the app's temporary directory, which the screen lists, and the menu items swap
-  back. The driver's bundle server serves neither the worker runtime's bundle nor /symbolicate, so here the worker
-  stays starting and the shared runtime's profile reports source maps unavailable; scripts/test-profiler.ts
-  (profiling.yaml) checks both against spark dev (#408).
+  getProfilerAvailability reports available, and the screen's ks-devtools worker runtime runs. Start profiling records
+  every runtime and the frame timeline; while it records the Developer menu disables Start Profiling and enables Stop
+  Profiling…, although a driven app has no key window. JavaScript runs in the worker and the shared runtime, then Stop
+  and save writes the Chrome trace and a .cpuprofile per runtime into a new directory in the app's temporary
+  directory, which the screen lists, each runtime's samples source-mapped through the development server's
+  /symbolicate (the driver's bundle server), and the menu items swap back. scripts/test-profiler.ts (profiling.yaml)
+  checks the mapped frames and DevTools against spark dev.
 checks: [DEVT-PROF-04]
 tags: [devtools]
 platforms: [macos]
@@ -20,6 +20,9 @@ timeout: 120s
 - assertText: { id: devtools-profiling-availability, equals: '{"available":true}' }
 - assertVisible: { id: devtools-profiling-available }
 - assertVisible: { id: devtools-profiling-recording-idle }
+# A dev build's first worker in a run can wait for the worker entry the driver bundles in the background from session
+# start (scripts/e2e/bundle-server.ts): about 5 s with a warm Metro cache, so 30 s leaves room for a busy Mac.
+- assertVisible: { id: devtools-profiling-worker-running, timeout: 30s }
 - assertA11y: { id: devtools-profiling-stop, enabled: false }
 - assertAppMenu: { path: "Developer > Start Profiling", enabled: true }
 - assertAppMenu: { path: "Developer > Stop Profiling…", enabled: false }
@@ -28,9 +31,12 @@ timeout: 120s
 - assertA11y: { id: devtools-profiling-start, enabled: false }
 - assertAppMenu: { path: "Developer > Start Profiling", enabled: false }
 - assertAppMenu: { path: "Developer > Stop Profiling…", enabled: true }
+# Each workload reports what it computed; the worker's first, so its answer cannot replace the saved profile's.
+- tapOn: { id: devtools-profiling-worker-workload }
+- assertVisible: { id: devtools-profiling-result, text: '/^\d+$/', timeout: 10s }
 - tapOn: { id: devtools-profiling-workload }
 - tapOn: { id: devtools-profiling-stop }
 - assertVisible: { id: devtools-profiling-recording-saved, timeout: 30s }
-- assertVisible: { id: devtools-profiling-result, text: '/spark-profiler-\d{8}-\d{6}-\d{3}\.trace\.json\n.*spark-profiler-\d{8}-\d{6}-\d{3}-shared\.cpuprofile\n(.*\n)*shared: \d+ samples, source maps unavailable\n/' }
+- assertVisible: { id: devtools-profiling-result, text: '/spark-profiler-\d{8}-\d{6}-\d{3}\.trace\.json\n.*spark-profiler-\d{8}-\d{6}-\d{3}-shared\.cpuprofile\n.*spark-profiler-\d{8}-\d{6}-\d{3}-isolated-ks-devtools\.cpuprofile\nshared: [1-9]\d* samples, source maps applied\nks-devtools: [1-9]\d* samples, source maps applied\n/' }
 - assertAppMenu: { path: "Developer > Start Profiling", enabled: true }
 - assertAppMenu: { path: "Developer > Stop Profiling…", enabled: false }

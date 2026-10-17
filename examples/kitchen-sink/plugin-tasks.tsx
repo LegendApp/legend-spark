@@ -3,9 +3,8 @@ import { Pressable, Text, View, useColorScheme } from "react-native";
 import { getCurrentRuntime, runtimeFunction, threadedComponent } from "@react-native-runtimes/core";
 import { definePlugin, type PluginManifest } from "@legendapp/spark/plugins";
 
-// The Kitchen Sink's bundled sample plugins (Future-facing capabilities > Plugins). Development runtime discovery scans
-// top-level files, so their entries and the hello panel live here. Everything below the manifests runs only in each
-// plugin's own isolated runtime; module state such as `greetings` lives in that runtime's heap.
+// The Kitchen Sink's bundled sample plugins (Future-facing capabilities > Plugins). Everything below the manifests runs
+// only in each plugin's own isolated runtime; module state such as `greetings` lives in that runtime's heap.
 
 /** The screen sets this global on the main runtime; a plugin runtime must not see it. */
 export const HOST_GLOBAL = "__ksPluginHostProbe";

@@ -4,7 +4,7 @@
 // with its JavaScript from that server, then checks the debug targets at /json/list and drives them over CDP.
 // The DevTools frontend is never opened: CHROME_PATH points React Native's browser launcher at a recorder.
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { KITCHEN_SINK } from "./e2e/kitchen-sink.ts";
@@ -21,6 +21,13 @@ const probeSource = readFileSync(path.join(KITCHEN_SINK, "screens/devtools/probe
 // Fast Refresh edits a module that is its own refresh boundary, so the screen keeps its worker runtime.
 const markerFile = path.join(KITCHEN_SINK, "screens/devtools/FastRefreshMarker.tsx");
 const markerSource = readFileSync(markerFile, "utf8");
+// A module in a subdirectory, added and imported under Fast Refresh, that registers a runtime function and a threaded component.
+const addedFile = path.join(KITCHEN_SINK, "screens/devtools/fast-refresh/added-task.ts");
+const addedSource = `import { ThreadedRuntime, getCurrentRuntime, runtimeFunction, threadedComponent } from "@react-native-runtimes/core";
+export const addedTask = runtimeFunction(() => \`added task ran in \${getCurrentRuntime().name}\`);
+export const AddedPanel = threadedComponent("ks-fast-refresh-panel", () => null);
+(globalThis as any).ksAddedTask = (runtime: string) => ThreadedRuntime.run(runtime, addedTask);
+`;
 let debuggerEvents: Message[] = [];
 let SHARED = "", WORKER = "";
 const pass = (message: string) => console.log(`PASS ${message}`);
@@ -127,6 +134,26 @@ try {
   const reloads = main.events.filter(message => message.method === "Runtime.executionContextCreated").length - contexts;
   pass(`source edits: both edits reached the running app and the same debugger session stayed attached (${reloads ? `delivered by ${reloads} full reload(s), not a hot update` : "hot updates"})`);
 
+  // 7a. Runtime discovery follows the app's imports under Fast Refresh: a new subdirectory module that the app now
+  // imports is registered, without restarting spark dev, and a new worker runtime runs its task.
+  const generatedEntry = path.join(KITCHEN_SINK, ".threaded-runtime/entry.js");
+  mkdirSync(path.dirname(addedFile), { recursive: true });
+  writeFileSync(addedFile, addedSource);
+  writeFileSync(markerFile, markerSource.replace('const REVISION = "1";', 'import "./fast-refresh/added-task";\nconst REVISION = "added";'));
+  try {
+    await until(async () => (await main.evaluate("globalThis.ksDevToolsRevision")) === "added", "Fast Refresh delivers the import");
+    await until(async () => readFileSync(generatedEntry, "utf8").includes('"ks-fast-refresh-panel"'), "the generated entry registers the added threaded component");
+    assert.match(readFileSync(generatedEntry, "utf8"), /registerRuntimeFunction\("screens\/devtools\/fast-refresh\/added-task\.addedTask"/);
+    assert.deepEqual(await main.settle(`globalThis.ksAddedTask("ks-fast-refresh")`), { value: "added task ran in ks-fast-refresh" });
+    // A worker that started before the edit receives the new entry only through its own Fast Refresh. Reported, not asserted.
+    const running = await main.settle(`globalThis.ksAddedTask(${JSON.stringify("ks-devtools")})`);
+    console.log(`INFO the worker started before the edit ${running.value ? `ran the added task (${running.value})` : `did not have it (${running.error})`}`);
+  } finally { writeFileSync(markerFile, markerSource); }
+  await until(async () => (await main.evaluate("globalThis.ksDevToolsRevision")) === "1", "Fast Refresh removes the import");
+  rmSync(path.dirname(addedFile), { recursive: true, force: true });
+  await until(async () => !readFileSync(generatedEntry, "utf8").includes("ks-fast-refresh-panel"), "the generated entry drops the removed module");
+  pass("runtime discovery: a module added under screens/devtools/fast-refresh and imported under Fast Refresh registered its threaded component and runtime function; a new worker ran the task; removing the import unregistered them");
+
   // 7b. Pause on uncaught exceptions.
   await main.send("Debugger.setPauseOnExceptions", { state: "uncaught" });
   await main.evaluate("ksDevTools.throwUncaught()");
@@ -158,5 +185,6 @@ try {
 } finally {
   await dev.close();
   if (readFileSync(markerFile, "utf8") !== markerSource) writeFileSync(markerFile, markerSource);
+  rmSync(path.dirname(addedFile), { recursive: true, force: true });
   rmSync(recorder, { recursive: true, force: true });
 }

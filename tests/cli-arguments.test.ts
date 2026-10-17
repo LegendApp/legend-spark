@@ -13,3 +13,9 @@ test("accepts documented command shapes and rejects incompatible build modes", (
   expect(cliArguments(["create", "--help"]).values.help).toBe(true);
   expect(cliArguments(["sdk", "--help"]).values.help).toBe(true);
 });
+test("a command group without its subcommand names the subcommands; --version stands alone", () => {
+  expect(() => cliArguments(["sdk"])).toThrow("Choose a subcommand: spark sdk export, spark sdk import");
+  expect(() => cliArguments(["add"])).toThrow("Choose a subcommand: spark add desktop.");
+  expect(cliArguments(["--version"]).values.version).toBe(true);
+  expect(() => cliArguments(["build", "--version"])).toThrow("--version is not an option for spark build");
+});

@@ -6,7 +6,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { SdkSurface } from "../scripts/api-surface.ts";
 import type { AuditOptions, AuditResult } from "../scripts/e2e/audit/bundle.ts";
 import { checkBudgets, checkFlow, checkGate, checkSignoffs, formatDiagnostic } from "../scripts/e2e/format/parser.ts";
-import { gateCommand, parseGateArgs, runGate, type GateEnv, type GateReport } from "../scripts/e2e/gate/gate.ts";
+import { auditCommand, gateCommand, parseGateArgs, runGate, type GateEnv, type GateReport } from "../scripts/e2e/gate/gate.ts";
 import { flowHash } from "../scripts/e2e/gate/manual.ts";
 import { plan, type Host } from "../scripts/e2e/gate/plan.ts";
 import { mergeDecisions, signoffCommand, type SignoffEnv } from "../scripts/e2e/gate/signoff.ts";
@@ -215,6 +215,26 @@ describe("release gate", () => {
     const { env: scopedEnv } = env({ audit: results() });
     const scoped = await runGate(plan(path.join(dir, "e2e"), AIR, { only: [path.join(dir, "e2e/flows/app/theme.yaml")] }), scopedEnv);
     expect([scoped.audits, calls]).toEqual([[], []]);
+  });
+
+  test("audit steps run one at a time; e2e:audit --audit runs only the named steps", async () => {
+    const registry = "area: dx\nprefix: DX\nchecks:\n  DX-CLI-01:\n    title: Help\n    audit: cli\n  DX-DOCS-01:\n    title: Docs\n    audit: api-docs\n";
+    const dir = repo({ "e2e/checks/dx.yaml": registry });
+    const events: string[] = [];
+    const audit = async (name: string) => {
+      events.push(`start ${name}`);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      events.push(`end ${name}`);
+      return [{ check: name === "cli" ? "DX-CLI-01" : "DX-DOCS-01", status: "passed" as const, details: [] }];
+    };
+    await gate(dir, { audit });
+    expect(events).toEqual(["start cli", "end cli", "start api-docs", "end api-docs"]);
+    events.length = 0;
+    const { env: auditEnv, out } = env({ audit });
+    expect(await auditCommand(["--audit", "api-docs"], path.join(dir, "e2e"), auditEnv)).toBe(0);
+    expect(events).toEqual(["start api-docs", "end api-docs"]);
+    expect(out.filter(line => line.startsWith("PASSED"))).toEqual(["PASSED      DX-DOCS-01  Docs"]);
+    expect(await auditCommand(["--audit", "nope"], path.join(dir, "e2e"), env().env)).toBe(2);
   });
 
   test("uncommitted changes fail: the gate certifies a commit", async () => {

@@ -4,7 +4,7 @@
 
 ## Usage
 
-Put exported tasks in `tasks.ts` or under `src/`. Use the literal `runtimeFunction` export name so the upstream compiler can discover them. Pass data as arguments; closures and module globals are not shared between runtimes.
+Export tasks from any module the app imports; Spark registers the ones the app's bundle reaches ([Development and production](#development-and-production)). Use the literal `runtimeFunction` export name so the upstream compiler can discover them. Pass data as arguments; closures and module globals are not shared between runtimes.
 
 ```ts
 // src/tasks.ts
@@ -39,6 +39,7 @@ Arguments/results use JSON serialization in this pinned version. Use plain seria
 New projects have the required Metro wrapper and worker-aware entry. No app config flag, config plugin or manual native-module manifest entry is needed.
 
 - prebuilt and custom dev builds include the SDK's patched Runtimes and Nitro native code. Workers start lazily.
+- `spark dev` registers the threaded components and runtime functions that Metro's graphs of the app's bundles reach: app files, and dependency files that import `@react-native-runtimes/core`. Registrations follow the graph as it changes, so a threaded component or task added under Fast Refresh is registered once the app imports it, without restarting `spark dev`. A new worker loads it, and a running worker receives it through Fast Refresh (`scripts/test-devtools.ts`). Leftover files the app does not import are not registered.
 - `spark build` / `spark package` first bundle the actual application with worker registrations suppressed. They then generate registrations from reachable source files, rebundle, and select native modules from that graph.
 - If the app does not import Runtimes, production excludes its JS, native pod and native startup hook. Nitro is also excluded unless another retained native package requires it.
 - Files left in `src/` or `tasks.ts`, installed SDK packages and development-generated registrations do not by themselves retain Runtimes in production. Imports used only inside reachable worker functions retain their native dependencies.
