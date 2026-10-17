@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createMenu, type Menu, type MenuOptions, type MenuAction, type MenuLifecycleEvent } from "./api";
+/** Options for `useMenu`: `createMenu` options plus `onError` for creation and update failures and `onCleanupError` for a failed removal (default: `onError`, else the console). */
 export interface UseMenuOptions extends MenuOptions { onError?: (error: unknown) => void; onCleanupError?: (error: unknown, menu: Menu) => void }
+/** State returned by `useMenu`: loading, ready with the `menu` handle, or the error that stopped it. */
 export type MenuState = { status: "loading" } | { status: "ready"; menu: Menu } | { status: "error"; error: unknown };
 interface Lifetime { menu?: Menu; removing?: Promise<void>; blocker?: Lifetime; items: MenuOptions["items"]; disposed: boolean; completion: Promise<void> }
 const lifetimes = new Map<string, Lifetime>();

@@ -1,10 +1,15 @@
 import { SparkError } from "./index";
 import { nativePath } from "./path";
 import { parseAccelerator, type Accelerator } from "./accelerator";
+/** A menu item image: a system symbol by name, or an image at an absolute local path or file URL. Support depends on the menu surface. */
 export type MenuIcon = { type: "symbol"; name: string } | { type: "image"; path: string };
+/** Native commands that `type: 'role'` items and `target: { role }` refer to. Application menus support roles on macOS only. */
 export type MenuRole = "new" | "open" | "save" | "saveAs" | "clearRecentDocuments" | "about" | "settings" | "services" | "hide" | "hideOthers" | "showAll" | "quit" | "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll" | "minimize" | "zoom" | "close" | "toggleFullscreen" | "newTab" | "toggleTabBar" | "showAllTabs" | "selectPreviousTab" | "selectNextTab" | "moveTabToNewWindow" | "mergeAllWindows";
+/** Native root menus that `target: { menu }` selects. */
 export type MenuLocation = "app" | "file" | "edit" | "view" | "window" | "help";
+/** An existing menu item to bind to or position against: by item ID, by native role, or a native root menu. */
 export type MenuTarget = { id: string } | { role: MenuRole } | { menu: MenuLocation };
+/** Positions an item before or after a sibling target; exactly one of the two. */
 export type MenuPlacement = { before: MenuTarget; after?: never } | { after: MenuTarget; before?: never };
 interface MenuEntry { target?: MenuTarget; placement?: MenuPlacement; id: string; label: string; disabled?: boolean; hidden?: boolean; icon?: MenuIcon }
 export type MenuItem =
@@ -15,6 +20,7 @@ export type MenuItem =
   | (MenuEntry & { type: "submenu"; items: readonly MenuItem[] })
   | (Omit<MenuEntry, "label"> & { type: "role"; role: MenuRole; label?: string; shortcut?: string })
   | (MenuEntry & { type: "slider"; min: number; max: number; value: number; suffix?: string });
+/** A menu event: `action` when an item is chosen, `valueChanged` with the new value of a slider item. */
 export type MenuAction = { type: "action"; itemId: string } | { type: "valueChanged"; itemId: string; value: number };
 /** Validator input: the shared model plus application-menu fields that MenuSupport gates (`alternate`, checkbox `"mixed"`). */
 export type MenuInputItem =

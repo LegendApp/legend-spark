@@ -25,31 +25,14 @@
       "CodexRunResult",
       "runCodexPrompt"
     ],
-    "./app": [
-      "activate",
-      "AppEvent",
-      "AppEventMap",
-      "AppRuntime",
-      "AsyncRegistration",
-      "BeforeQuitOptions",
-      "getAppContext",
-      "getAppLanguages",
-      "hide",
-      "QuitResult",
-      "RelaunchOptions",
-      "Subscription"
-    ],
     "./app-intents": [
       "AppIntentHandlerOptions",
       "AppIntentInvocation",
       "AppIntentParameter",
       "AppIntentParameterType",
-      "AppIntentValue",
-      "AsyncRegistration",
-      "Availability"
+      "AppIntentValue"
     ],
     "./app/documents": [
-      "AsyncRegistration",
       "clearRecentDocuments",
       "createDocumentSession",
       "DocumentAppController",
@@ -64,11 +47,9 @@
       "GetLaunchDocumentPathOptions",
       "getRecentDocuments",
       "noteRecentDocument",
-      "OpenRequest",
       "openSelectedDocumentPath",
       "OpenSelectedDocumentPathOptions",
       "RecentDocument",
-      "Subscription",
       "UseDocumentAppControllerOptions",
       "useWatchedDocumentReload",
       "UseWatchedDocumentReloadOptions"
@@ -79,8 +60,7 @@
       "AppleIDCredentialState",
       "AppleIDFullName",
       "AppleSignInOptions",
-      "AppleSignInResult",
-      "Availability"
+      "AppleSignInResult"
     ],
     "./audio": [
       "AudioMetadata",
@@ -97,7 +77,6 @@
       "MediaSessionUpdate",
       "sessionOptions",
       "sessionSnapshot",
-      "Subscription",
       "validateMetadata",
       "validateSession",
       "validateVolume",
@@ -119,7 +98,6 @@
       "validateRedirect"
     ],
     "./biometrics": [
-      "Availability",
       "BiometricAuthOptions",
       "BiometricAuthResult",
       "BiometricErrorReason",
@@ -129,7 +107,6 @@
     ],
     "./capture": [
       "AudioRecordingOptions",
-      "Availability",
       "CameraContentFit",
       "CameraOptions",
       "CameraSession",
@@ -167,22 +144,7 @@
       "ContextMenuResult",
       "getContextMenuAvailability",
       "MenuAction",
-      "MenuIcon",
       "MenuItem"
-    ],
-    "./contracts": [
-      "AsyncRegistration",
-      "Availability",
-      "SparkError",
-      "Subscription"
-    ],
-    "./devtools": [
-      "NetworkFrame",
-      "NetworkInspectorOptions",
-      "OpenDevToolsOptions",
-      "ProfilingResult",
-      "StartProfilingOptions",
-      "StopProfilingOptions"
     ],
     "./diagnostics": [
       "CrashReport",
@@ -206,9 +168,6 @@
       "SaveFileDialogResult",
       "showMessage"
     ],
-    "./displays": [
-      "AsyncRegistration"
-    ],
     "./drag-drop": [
       "DragDropView",
       "DragDropViewProps",
@@ -220,7 +179,6 @@
       "SpringLoadHighlightEvent"
     ],
     "./files": [
-      "AsyncRegistration",
       "CopyMoveOptions",
       "CreateBookmarkOptions",
       "CreateDirectoryOptions",
@@ -259,14 +217,11 @@
       "WriteChunksOptions"
     ],
     "./global-shortcuts": [
-      "AsyncRegistration",
       "getGlobalShortcutAvailability",
       "GlobalShortcutOptions"
     ],
     "./links": [
-      "Availability",
       "canOpenURL",
-      "Subscription",
       "URLListener"
     ],
     "./logging": [
@@ -276,28 +231,6 @@
       "LogFileOptions",
       "LoggerOptions",
       "LoggingOptions"
-    ],
-    "./menus": [
-      "addDeveloperMenuListener",
-      "AsyncRegistration",
-      "createMenu",
-      "DeveloperMenuState",
-      "getMenuAvailability",
-      "Menu",
-      "MenuAction",
-      "MenuFeature",
-      "MenuIcon",
-      "MenuItem",
-      "MenuLifecycleEvent",
-      "MenuLocation",
-      "MenuOptions",
-      "MenuPlacement",
-      "MenuRole",
-      "MenuRootItem",
-      "MenuState",
-      "MenuTarget",
-      "MenuUpdate",
-      "UseMenuOptions"
     ],
     "./notifications": [
       "cancelAllNotifications",
@@ -312,11 +245,9 @@
       "NotificationTrigger",
       "scheduleNotification",
       "ScheduleNotificationOptions",
-      "ShowNotificationOptions",
-      "Subscription"
+      "ShowNotificationOptions"
     ],
     "./passkeys": [
-      "Availability",
       "PasskeyAssertion",
       "PasskeyAssertionOptions",
       "PasskeyAssertionResult",
@@ -326,15 +257,12 @@
       "PasskeyUserVerification"
     ],
     "./permissions": [
-      "AsyncRegistration",
-      "Availability",
       "PermissionChangeEvent",
       "PermissionListenerOptions",
       "PermissionOptions",
       "PermissionResponse"
     ],
     "./plugins": [
-      "Availability",
       "PLUGIN_CAPABILITIES",
       "PluginCommand",
       "PluginFileHandler",
@@ -356,7 +284,6 @@
     "./privileged-helper": [
       "AdminAuthorizationOptions",
       "AdminAuthorizationResult",
-      "Availability",
       "PrivilegedHelperMessageOptions"
     ],
     "./processes": [
@@ -378,67 +305,19 @@
       "isAvailableAsync",
       "setItemAsync"
     ],
-    "./settings": [
-      "Json",
-      "settings",
-      "SettingsReadOptions",
-      "SettingsStorage",
-      "SettingsStore",
-      "SettingsStoreOptions"
-    ],
-    "./settings/observable": [
-      "ObservableFile",
-      "ObservableFileOptions",
-      "ObservableSettingsField",
-      "ObservableSettingsFields",
-      "ObservableSettingsOptions",
-      "ObservableSettingsValues"
-    ],
-    "./settings/window": [
-      "CreateSettingsWindowOptionsInput",
-      "SettingsCard",
-      "SettingsCardProps",
-      "SettingsPage",
-      "SettingsPageProps",
-      "SettingsRow",
-      "SettingsRowGroup",
-      "SettingsRowGroupProps",
-      "SettingsRowProps",
-      "SettingsSection",
-      "SettingsSectionProps",
-      "SettingsSidebar",
-      "SettingsSidebarProps",
-      "SettingsWindow",
-      "SettingsWindowBaseProps",
-      "SettingsWindowPage",
-      "SettingsWindowProps",
-      "SettingsWindowSelectionProps",
-      "VirtualizedSettingsWindow",
-      "VirtualizedSettingsWindowProps"
-    ],
     "./sharing": [
-      "AsyncRegistration",
-      "Availability",
       "ListenerOptions",
       "ShareOptions",
       "SharingFeature",
       "SpotlightDeletion",
       "SpotlightItem",
-      "SpotlightOpenEvent",
-      "Subscription"
+      "SpotlightOpenEvent"
     ],
     "./shortcuts": [
-      "Accelerator",
-      "AsyncRegistration",
       "getShortcutAvailability",
-      "parseAccelerator",
       "ShortcutOptions"
     ],
-    "./shortcuts/commands": [
-      "ShortcutPlatform"
-    ],
     "./shortcuts/keyboard": [
-      "AsyncRegistration",
       "createModifierMask",
       "getKeyboardAvailability",
       "hasModifier",
@@ -449,7 +328,6 @@
       "KeyText"
     ],
     "./speech": [
-      "Availability",
       "getSpeakingStatus",
       "pauseSpeaking",
       "PauseSpeakingOptions",
@@ -474,7 +352,6 @@
       "SqlValue"
     ],
     "./system": [
-      "AsyncRegistration",
       "AttentionOptions",
       "createDockMenu",
       "createTaskbarMenu",
@@ -498,11 +375,9 @@
       "ThermalState"
     ],
     "./tray": [
-      "AsyncRegistration",
       "createTray",
       "getTrayAvailability",
       "MenuAction",
-      "MenuIcon",
       "MenuItem",
       "Tray",
       "TrayAction",
@@ -512,15 +387,12 @@
     "./updates": [
       "CheckForUpdatesOptions",
       "onUpdateEvent",
-      "Subscription",
       "UpdateAvailability",
       "UpdateConfiguration",
       "UpdateEvent",
       "UpdateStatus"
     ],
     "./video": [
-      "Availability",
-      "Subscription",
       "VideoContentFit",
       "VideoPlayer",
       "VideoPlayerOptions",
@@ -533,14 +405,6 @@
       "WebViewNavigationRequest",
       "WebViewRef",
       "WebViewSource"
-    ],
-    "./windows": [
-      "AsyncRegistration",
-      "MenuAction"
-    ],
-    "./windows/macos": [
-      "AsyncRegistration",
-      "MenuAction"
     ]
   }
 }

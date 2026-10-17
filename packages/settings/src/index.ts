@@ -10,6 +10,7 @@ async function file(key: string) {
   }).catch(error => { directory = undefined; throw error; });
   return `${await directory}/${settingsFilename(key)}`;
 }
+/** The default project-scoped settings store. Each key is a JSON file in the `settings` folder of the app's `data` directory, created on first use. */
 export const settings = createSettingsStore({ storage: {
   async read(key) { return fileStorage.read(await file(key)); },
   async write(key, value) { await fileStorage.write(await file(key), value); },

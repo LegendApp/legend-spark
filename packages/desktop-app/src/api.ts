@@ -3,6 +3,7 @@ import { onDesktopEvent, type DesktopEvent } from "./events";
 import { callAppNative } from "./transport";
 import { SparkError, asyncRegistration, nativeError, type Availability, type AsyncRegistration, type Subscription } from "./contracts";
 export type { AsyncRegistration, Subscription } from "./contracts";
+/** The runtime this process runs in: `mode` is the build flavor and `modules` holds native module versions by name. */
 export interface AppRuntime { mode: "go" | "dev" | "preview" | "release"; modules: Readonly<Record<string, string>> }
 /** What started this process. Safe mode is latched at launch and skips Spark's native restoration. */
 export interface AppLaunch {
@@ -13,13 +14,19 @@ export interface AppLaunch {
   /** `primary`: this process owns the project's single-instance lock. `test-driver`: a test-driver session, which never takes it. */
   instance: "primary" | "test-driver";
 }
-/** `sandboxed`: this process runs in the macOS App Sandbox (docs/app-sandbox.md); always false on Windows. */
+/**
+ * Identity and launch state of this process, from `getAppContext()`. `launchArguments` are the initial process arguments.
+ * `sandboxed`: this process runs in the macOS App Sandbox (docs/app-sandbox.md); always false on Windows.
+ */
 export interface AppContext { projectId: string; name: string; version: string; runtime: AppRuntime; launchArguments: readonly string[]; launch: AppLaunch; sandboxed: boolean }
+/** Options for `relaunch()`. */
 export interface RelaunchOptions {
   /** Arguments after the executable for the new instance. Default: this launch's arguments. */
   arguments?: readonly string[];
 }
+/** Outcome of `quit()` and `relaunch()`: shutdown was approved, or a quit guard vetoed it. */
 export type QuitResult = { quitRequested: true } | { quitRequested: false; reason: "vetoed" };
+/** Events for `addAppListener`, keyed by type. `windowOpened` and `windowClosed` are application-wide window registry changes, including reused IDs. */
 export type AppEventMap = {
   windowOpened: { type: "windowOpened"; windowId: string };
   windowClosed: { type: "windowClosed"; windowId: string };
@@ -30,7 +37,9 @@ export type AppEventMap = {
   secondInstance: { type: "secondInstance"; arguments: readonly string[]; workingDirectory: string; files: readonly string[]; urls: readonly string[] };
   willQuit: { type: "willQuit" };
 };
+/** Any event `addAppListener` delivers. */
 export type AppEvent = AppEventMap[keyof AppEventMap];
+/** Options for `beforeQuit`. `onError` receives handler and native failures; default `console.error`. */
 export interface BeforeQuitOptions { onError?: (error: Error) => void }
 /** App features that differ by platform, for `getAppAvailability(feature)`. `languages`: getAppLanguages and setAppLanguage, macOS only. */
 export type AppFeature = "languages";
@@ -51,6 +60,7 @@ function context(value: unknown): value is AppContext {
   if (!record(value) || ![value.projectId, value.name, value.version].every(item => typeof item === "string" && item.length > 0) || !strings(value.launchArguments) || !record(value.runtime) || !launch(value.launch) || typeof value.sandboxed !== "boolean") return false;
   return ["go", "dev", "preview", "release"].includes(value.runtime.mode as string) && record(value.runtime.modules) && Object.values(value.runtime.modules).every(item => typeof item === "string");
 }
+/** Returns project identity (`projectId`, `name`, `version`), the runtime mode and module versions, the initial process arguments, `launch` and `sandboxed`. */
 export async function getAppContext(): Promise<AppContext> {
   const value = await callAppNative("context", context);
   const { safeMode, relaunched, instance } = value.launch;
@@ -79,7 +89,9 @@ export async function relaunch(options: RelaunchOptions = {}): Promise<QuitResul
   await cleanOrphanGuards();
   return callAppNative("relaunch", quitResult, args === undefined ? {} : { arguments: [...args] });
 }
+/** Hides the application's windows. */
 export const hide = (): Promise<void> => command("hide");
+/** Brings the application forward. */
 export const activate = (): Promise<void> => command("activate");
 function appEvent(value: DesktopEvent): AppEvent | undefined {
   switch (value.type) {

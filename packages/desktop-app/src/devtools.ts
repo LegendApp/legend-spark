@@ -4,6 +4,7 @@ import { callAppNative } from "./transport";
 
 /** A JavaScript runtime's debug target: the app's shared runtime, or an isolated runtime by name. */
 export type DevToolsRuntime = "shared" | { isolated: string };
+/** Options for `openDevTools`. */
 export interface OpenDevToolsOptions {
   /** Default: the runtime that calls `openDevTools`. */
   runtime?: DevToolsRuntime;

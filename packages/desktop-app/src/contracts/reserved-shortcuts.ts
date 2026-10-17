@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { SparkError } from "./index";
 
+/** Desktop platforms that have a reserved-shortcut table. */
 export type ShortcutPlatform = "macos" | "windows";
 /** `reserved` bindings are rejected with E_BUSY; `warning` bindings are accepted and reported as conflicts. */
 export interface ReservedShortcut { accelerator: string; platform: ShortcutPlatform; severity: "reserved" | "warning"; description: string }

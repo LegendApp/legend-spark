@@ -1,4 +1,5 @@
 import { SparkError } from "./index";
+/** A parsed shortcut: `key` is one character (AppKit's private-use code points for arrows, Delete, F1-F20, Home, End and Page keys) or a media key name, and `modifiers` is an NSEventModifierFlags bit mask. */
 export type Accelerator = { key: string; modifiers: number };
 // AppKit uses these bit positions in NSEventModifierFlags.
 const modifiers: Record<string, number> = {
@@ -8,6 +9,11 @@ const modifiers: Record<string, number> = {
 const named: Record<string, string> = { enter: "\r", return: "\r", escape: "\u001b", esc: "\u001b", tab: "\t", space: " ", backspace: "\u007f", delete: "\uf728", up: "\uf700", down: "\uf701", left: "\uf702", right: "\uf703", plus: "+" };
 const extended: Record<string, string> = { home: "\uf729", end: "\uf72b", pageup: "\uf72c", pagedown: "\uf72d", mediaplaypause: "MediaPlayPause", medianext: "MediaNext", mediaprevious: "MediaPrevious" };
 export interface AcceleratorParseOptions { allowUnmodifiedCharacter?: boolean; allowExtendedKeys?: boolean }
+/**
+ * Parses an accelerator string such as `CmdOrCtrl+Shift+N` (case-insensitive, `+`-separated, key last). On Windows `CmdOrCtrl` means Ctrl.
+ * Character keys need a modifier unless `allowUnmodifiedCharacter`; Fn, CapsLock, Home, End, PageUp, PageDown and media keys need `allowExtendedKeys`.
+ * Throws `E_INVALID_ARGUMENT` for an unknown key or an unknown or duplicate modifier, and `E_UNSUPPORTED_OPTION` for an unknown option or a key the options do not allow.
+ */
 export function parseAccelerator(value: string, platform: "macos" | "windows" = "macos", options: AcceleratorParseOptions = {}): Accelerator {
   if (typeof value !== "string" || !["macos", "windows"].includes(platform)) throw new SparkError("E_INVALID_ARGUMENT", "Expected accelerator and desktop platform");
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected accelerator parsing options");

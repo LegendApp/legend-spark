@@ -5,6 +5,7 @@ import { SparkError, type Subscription } from "@legendapp/spark-desktop-app/src/
 
 /** A binding that kept the Developer menu from claiming its shortcut. */
 export interface DeveloperMenuShortcutConflict { shortcut: string; with: "system" | "menu" | "shortcut" | "global-shortcut"; description: string }
+/** State of the development-only Developer menu, from `getDeveloperMenuState` and `addDeveloperMenuListener`. */
 export type DeveloperMenuState =
   /**
    * `release-build`: the JavaScript bundle was built without `__DEV__`. `not-installed`: the app entry does not require
@@ -25,6 +26,7 @@ const listeners = new Set<(state: DeveloperMenuState) => void>();
 export function getDeveloperMenuState(): DeveloperMenuState {
   return state ??= { status: "unavailable", reason: __DEV__ ? "not-installed" : "release-build" };
 }
+/** Calls `listener` with each new Developer menu state. Throws `E_INVALID_ARGUMENT` when `listener` is not a function. */
 export function addDeveloperMenuListener(listener: (state: DeveloperMenuState) => void): Subscription {
   if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a Developer menu listener");
   listeners.add(listener);
