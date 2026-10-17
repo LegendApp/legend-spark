@@ -4,7 +4,7 @@
 // runners are untouched. The built apps are unregistered from LaunchServices and the scratch directory is removed.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, closeSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, closeSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readJson, stateFile } from "../../../packages/cli/src/project.ts";
@@ -19,10 +19,11 @@ export const TEMPLATE_CHECKS = ["DX-TPL-01", "DX-TPL-02", "DX-REPRO-01", "DX-REP
 
 class StepError extends Error {}
 
-/** Every file and link in an app bundle, by its path inside the bundle: a SHA-256 of a file's bytes, a link's target. */
-function digests(app: string, rel = ""): Map<string, string> {
+/** Every file and link in a directory (an app bundle), by its path inside it: a SHA-256 of a file's bytes, a link's target. */
+function digests(app: string, rel = "", skip: string[] = []): Map<string, string> {
   const files = new Map<string, string>();
   for (const entry of readdirSync(path.join(app, rel), { withFileTypes: true })) {
+    if (!rel && skip.includes(entry.name)) continue;
     const name = path.join(rel, entry.name), abs = path.join(app, name);
     if (entry.isSymbolicLink()) files.set(name, `-> ${readlinkSync(abs)}`);
     else if (entry.isDirectory()) for (const [key, value] of digests(app, name)) files.set(key, value);
@@ -33,8 +34,16 @@ function digests(app: string, rel = ""): Map<string, string> {
 
 const isScript = (name: string) => /\.(jsbundle|hbc|js)$/.test(name);
 const output = (argv: string[]) => spawnSync(argv[0]!, argv.slice(1), { encoding: "utf8", maxBuffer: 1 << 28 }).stdout;
-/** A Mach-O file's load commands apart from LC_UUID, and its symbols. */
-const machOShape = (file: string) => [output(["otool", "-l", file]).split("\n").slice(1).filter(line => !/^\s*uuid /.test(line)).join("\n"), output(["nm", "-m", file])].join("\n");
+/** A Mach-O file's bytes without its embedded code signature (`codesign --remove-signature` on a copy), as a SHA-256. */
+function unsignedDigest(file: string): string {
+  const copy = path.join(mkdtempSync(path.join(os.tmpdir(), "spark-unsigned-")), path.basename(file));
+  try {
+    cpSync(file, copy);
+    const removed = spawnSync("codesign", ["--remove-signature", copy], { encoding: "utf8" });
+    if (removed.status !== 0) return `codesign --remove-signature failed: ${removed.stderr.trim()}`;
+    return createHash("sha256").update(readFileSync(copy)).digest("hex");
+  } finally { rmSync(path.dirname(copy), { recursive: true, force: true }); }
+}
 /** An asset catalog's renditions without what actool makes unique per build: its timestamp, rendition names' unique suffixes and digests. */
 const catalogShape = (file: string) => output(["xcrun", "assetutil", "--info", file]).replace(/"Timestamp" : \d+/g, "").replace(/_[0-9A-F]{8}-[0-9A-F-]{27}-\d+-[0-9A-F]+\.png/g, ".png").replace(/"SHA1Digest" : "\w+"/g, "");
 /**
@@ -65,7 +74,7 @@ function nibShape(file: string): string {
  * a difference anywhere else, or in what these compare, fails.
  */
 const KNOWN: Array<{ match: (name: string, abs: string) => boolean; why: string; shape: (file: string) => string }> = [
-  { match: (name, abs) => !name.includes("/_CodeSignature/") && isMachO({ rel: name, abs, size: statSync(abs).size, kind: "file" }), why: "the linker orders some symbol pointers differently, so LC_UUID and the code signature differ; load commands and symbols match", shape: machOShape },
+  { match: (name, abs) => !name.includes("/_CodeSignature/") && isMachO({ rel: name, abs, size: statSync(abs).size, kind: "file" }), why: "its embedded code signature seals the files below (Assets.car, nibs); without the signature its bytes, LC_UUID included, match", shape: unsignedDigest },
   { match: name => name.endsWith(".car"), why: "actool stamps the build time and unique rendition names; the renditions match", shape: catalogShape },
   { match: name => name.endsWith(".nib"), why: "ibtool archives the same objects in another order; the objects and their values match", shape: nibShape },
   { match: name => name.endsWith("_CodeSignature/CodeResources"), why: "it seals the files above", shape: () => "" },
@@ -123,17 +132,15 @@ export async function auditTemplates(): Promise<AuditResult[]> {
     }
     set("DX-TPL-01", "passed", [`spark create made ${TEMPLATES.map(([name, flags]) => `${name} (${flags.join(" ")})`).join(", ")} from the packed SDK (${path.relative(repo, manifest)}), installed and type-checked, headless`, timings.join(", ")]);
 
-    // DX-TPL-02 and the reproducibility checks: two clean release builds of the macOS template.
-    // `spark build` prepares the project in place (it patches node_modules and writes the native project and
-    // configuration), so each build starts from a clone of the project as `spark create` left it, at the same path.
-    const app = path.join(scratch, "DxMac"), pristine = path.join(scratch, "DxMac.pristine");
-    step("clone the project", ["cp", "-c", "-R", app, pristine], scratch);
+    // DX-TPL-02 and the reproducibility checks: two clean release builds of the macOS template from one checkout. The
+    // second starts after deleting .spark/ and the generated macos/ project, from what the first build left: the build
+    // must not change its own inputs (the app's files, the installed packages' sources once Spark has patched them).
+    const app = path.join(scratch, "DxMac");
+    const projectFiles = () => digests(app, "", [".spark", "macos", "node_modules"]);
+    const created = projectFiles();
     const builds: string[] = [];
     for (const run of [1, 2]) {
-      if (run === 2) {
-        rmSync(app, { recursive: true, force: true });
-        renameSync(pristine, app);
-      }
+      if (run === 2) for (const generated of [".spark", "macos"]) rmSync(path.join(app, generated), { recursive: true, force: true });
       const seconds = spark(app, `spark build ${run}`, ["build"]);
       const product = readJson(stateFile(app, "release-build.json")).app as string;
       if (!existsSync(path.join(product, "Contents/Info.plist"))) throw new StepError(`spark build ${run} finished without ${product}`);
@@ -150,6 +157,11 @@ export async function auditTemplates(): Promise<AuditResult[]> {
       }
     }
     for (const result of compareBuilds(builds[0]!, builds[1]!)) results.set(result.check, result);
+    const built = projectFiles();
+    const changed = [...new Set([...created.keys(), ...built.keys()])].filter(name => created.get(name) !== built.get(name)).sort();
+    const repro = results.get("DX-REPRO-02")!;
+    results.set("DX-REPRO-02", { ...repro, status: changed.length ? "failed" : repro.status, details: [...repro.details,
+      ...(changed.length ? changed.map(name => `spark build changed the project's ${name}`) : ["spark build changed none of the project's files (outside .spark/, macos/ and node_modules)"])] });
   } catch (error) {
     const message = error instanceof StepError ? error.message : String(error instanceof Error ? error.stack : error);
     for (const check of TEMPLATE_CHECKS) if (!results.has(check)) set(check, "failed", [message]);

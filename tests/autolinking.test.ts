@@ -52,12 +52,16 @@ test("autolinking resolves symlinked podspec files without modifying the package
     expect(() => installAutolinkingPatch(root)).toThrow("requires expo-modules-autolinking@3.0.27");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
-test("the macOS Podfile passes the native selection's exclusions to Expo's React Native autolinker", async () => {
+test("the macOS Podfile passes the native selection's exclusions to both Expo autolinkers and keeps React Native's output in .spark/", async () => {
   const template = readFileSync(require.resolve("expo-desktop-template-bare-minimum/macos/Podfile"), "utf8");
   const podfile = excludeNativeModules(template, ["@legendapp/spark-codex", "react-native-nitro-modules"]);
-  expect(podfile).toContain('use_native_modules!(config_command + ["--exclude","@legendapp/spark-codex","--exclude","react-native-nitro-modules"])');
-  expect(excludeNativeModules(podfile, [])).toContain("use_native_modules!(config_command + [])");
+  expect(podfile).toContain('use_native_modules!(config_command + ["--source-dir", File.expand_path("../.spark", __dir__)] + ["--exclude","@legendapp/spark-codex","--exclude","react-native-nitro-modules"])');
+  expect(podfile).toContain('use_expo_modules!(exclude: ["@legendapp/spark-codex","react-native-nitro-modules"])');
+  const again = excludeNativeModules(podfile, []);
+  expect(again).toContain('use_native_modules!(config_command + ["--source-dir", File.expand_path("../.spark", __dir__)] + [])');
+  expect(again).toContain("use_expo_modules!(exclude: [])");
   expect(() => excludeNativeModules("target 'App' do\nend\n", [])).toThrow("use_native_modules!(config_command)");
+  expect(() => excludeNativeModules("config = use_native_modules!(config_command)\n", [])).toThrow("use_expo_modules!");
   // An app-level `ios: null` cannot unlink Codex, whose own config declares iOS for the desktop autolinker.
   const { resolveReactNativeModule } = require("expo-modules-autolinking/build/reactNativeConfig/reactNativeConfig.js");
   const codex = path.dirname(require.resolve("../packages/codex/package.json"));
