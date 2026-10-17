@@ -610,7 +610,8 @@ The native window still belongs to the main runtime; its root renders the upstre
 `Runtimes.Threaded` surface. Entries naming the same runtime share its heap. A window holds its
 runtime from the moment opening starts, so the runtime is destroyed only after the last window
 using it, in any navigator, has closed; a destroy still in flight completes before the next window
-uses the name. Do not use a window runtime name for workers. The application passes the Runtimes
+uses the name. The threaded component can live in any file the app imports: development and release
+builds register the threaded components the app's bundle reaches ([Runtimes](runtimes.md#development-and-production)). Do not use a window runtime name for workers. The application passes the Runtimes
 module, so apps without isolated windows keep Runtimes [pruned from production](runtimes.md#development-and-production).
 `getIsolatedRuntimeAvailability()` reports whether the Runtimes native module and its surface view
 are present; opening an isolated entry without them rejects `E_MODULE_UNAVAILABLE` (or

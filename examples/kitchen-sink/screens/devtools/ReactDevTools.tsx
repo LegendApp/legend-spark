@@ -15,11 +15,11 @@ function Section({ title, children }: PropsWithChildren<{ title: string }>) {
 }
 
 /** The component the Components panel reads and edits (scripts/test-react-devtools.ts finds it by name). */
-// Its state hook comes first: React DevTools numbers a useSyncExternalStore (useI18n) as one hook, React as two, so
-// editing a later hook's state would change the wrong one (docs/devtools.md#react-devtools).
+// Its state hook follows a useSyncExternalStore (useI18n), which React keeps as two hook objects: the edit checks
+// Spark's hook id patch (docs/devtools.md#react-devtools).
 function ReactDevToolsSample({ label }: { label: string }) {
-  const { count, increment } = useSampleCount();
   const t = useReactDevToolsMessages();
+  const { count, increment } = useSampleCount();
   return <View className="flex-row flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3" testID={`${ID}-sample`}>
     <Text className="min-w-40 flex-1 text-sm font-semibold text-foreground" testID={`${ID}-label`}>{label}</Text>
     <Text className="font-mono text-sm text-foreground" testID={`${ID}-count`}>{t.count(count)}</Text>

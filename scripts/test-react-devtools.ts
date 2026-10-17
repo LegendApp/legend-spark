@@ -78,15 +78,22 @@ try {
   assert.ok(state, "the useSampleCount hook's useState is listed and editable");
   assert.equal(state.value, 0);
   assert.ok(hooks(inspected.hooks.data).some(hook => hook.name === "SampleCount"), "custom hooks are listed by name (SampleCount)");
-  pass(`props/state/hooks: label "${inspected.props.data.label}", hook SampleCount > State (id ${state.id}) = ${state.value}`);
+  // useI18n's useSyncExternalStore comes first; React keeps it as two hook objects, so the state is the third (#417).
+  const store = hooks(inspected.hooks.data).find(hook => hook.name === "SyncExternalStore");
+  assert.ok(store, "the useI18n hook's useSyncExternalStore is listed");
+  assert.equal(state.id, store.id + 2, "hook ids count React's hook objects (useSyncExternalStore has two)");
+  pass(`props/state/hooks: label "${inspected.props.data.label}", hooks ReactDevToolsMessages > I18n > AppState > SyncExternalStore (id ${store.id}), SampleCount > State (id ${state.id}) = ${state.value}`);
 
   // 3. Editing a prop and a hook's state re-renders the app.
   await shared.send("overrideValueAtPath", { type: "props", id: sample.id, rendererID: sample.rendererID, path: ["label"], value: "Edited label" });
   await dev.until(async () => (await text(driver, `${ID}-label`)) === "Edited label", "the edited label prop renders");
   await shared.send("overrideValueAtPath", { type: "hooks", id: sample.id, rendererID: sample.rendererID, hookID: state.id, path: [], value: 41 });
   await dev.until(async () => (await text(driver, `${ID}-count`)) === "Count: 41", "the edited count state renders");
-  assert.equal((await shared.inspect(sample)).props.data.label, "Edited label");
-  pass("editing: overrideValueAtPath set the label prop and the count state, and the app rendered both");
+  const edited = await shared.inspect(sample);
+  assert.equal(edited.props.data.label, "Edited label");
+  assert.equal(hooks(edited.hooks.data).find(hook => hook.id === state.id)?.value, 41, "the edited hook holds the new state");
+  assert.ok(await text(driver, `${ID}-increment`), "the window still renders the sample after the edit");
+  pass("editing: overrideValueAtPath set the label prop and the count state after a useSyncExternalStore, and the app rendered both");
 
   // 4. Highlight updates: the backend reports the updated host views and the window's DebuggingOverlay draws them.
   await cdp.evaluate("globalThis.__ksTraceUpdates = []; __REACT_DEVTOOLS_GLOBAL_HOOK__.reactDevtoolsAgent.addListener('drawTraceUpdates', nodes => globalThis.__ksTraceUpdates.push(nodes.length)), 0");
