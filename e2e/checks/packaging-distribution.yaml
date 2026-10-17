@@ -120,3 +120,34 @@ checks:
     blocking: true
     spec: "#362; needs Developer ID and notarization credentials (spark package); an ad-hoc package's DMG (spark package --ad-hoc) is unsigned and fails it"
     audit: package
+  # The App Sandbox (Mac App Store style) variant (#154): `spark build --sandbox` (gate.yaml build.macos.sandbox), built and
+  # signed ad hoc locally; `variant: sandbox` flows run against it (docs/app-sandbox.md). App Store submission needs
+  # Apple credentials and a person (DIST-MAS-06).
+  DIST-MAS-01:
+    title: The App Sandbox variant sandboxes every process; its entitlements differ from the direct build's (none, SEC-ENT-01) by exactly app-sandbox and the macos.sandbox entitlements on the main executable, and every other process carries only app-sandbox and inherit
+    platforms: [macos]
+    blocking: true
+    spec: "#154 DIST.mas"
+  DIST-MAS-02:
+    title: The App Sandbox variant leaves out Sparkle (no Sparkle code or SU* Info.plist keys; the App Store updates it) and launch daemons (privileged helpers)
+    platforms: [macos]
+    blocking: true
+    spec: "#154 DIST.mas"
+  DIST-MAS-03:
+    title: In the App Sandbox variant, privileged helpers and app updates report sandboxed instead of failing obscurely; registering, messaging and the admin prompt reject PrivilegedHelperError E_UNAVAILABLE sandboxed before ServiceManagement is reached, and update commands reject E_UNAVAILABLE
+    platforms: [macos]
+    blocking: true
+    spec: "#154 DIST.mas"
+    covers:
+      - ./privileged-helper#getPrivilegedHelperAvailability().available
+      - ./updates#getUpdateAvailability
+  DIST-MAS-04:
+    title: A driver session runs the App Sandbox variant as an isolated clone whose state is its own container (~/Library/Containers/<id>.driver, never the app's), and clearState deletes that state
+    platforms: [macos]
+    blocking: true
+    spec: "#154 DIST.mas; docs/e2e-flows.md#app-state"
+  DIST-MAS-05:
+    title: A Mac App Store build of the App Sandbox variant, signed with an Apple Distribution identity and provisioning profile and packaged as a signed installer, passes Apple's validation, installs from TestFlight and launches sandboxed
+    platforms: [macos]
+    blocking: true
+    spec: "#154 DIST.mas; needs Apple credentials and a person (manual sign-off); Spark does not sign or package for the App Store yet"

@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: In the App Sandbox variant, privileged helpers and app updates report sandboxed
+intent: >
+  Processes and IPC > Privileged helper in the App Sandbox variant reports {"available":false,"reason":"sandboxed"},
+  ahead of unsigned (the variant is ad hoc signed too): a sandboxed app cannot install a launch daemon or gain admin
+  rights. Register, Send and Request admin rights reject PrivilegedHelperError E_UNAVAILABLE sandboxed, and nothing
+  reaches the (simulated) SMAppService or admin prompt, even with a team signature simulated. Desktop checks shows
+  app updates Unavailable (sandboxed): the variant ships without Sparkle, and the App Store updates the app.
+checks: [DIST-MAS-03]
+tags: [packaging-distribution]
+platforms: [macos]
+variant: sandbox
+---
+- launchApp: { openUrl: "spark-ks://processes-ipc/privileged-helper" }
+- assertText: { id: processes-ipc-privileged-helper-availability, equals: '{"available":false,"reason":"sandboxed"}' }
+- tapOn: { id: processes-ipc-privileged-helper-register }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: "PrivilegedHelperError:E_UNAVAILABLE:sandboxed" }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: "PrivilegedHelperError:E_UNAVAILABLE:sandboxed" }
+- simulatePrivilegedHelper: { signed: true, promptAnswer: authorized }
+- tapOn: { id: processes-ipc-privileged-helper-refresh }
+- assertText: { id: processes-ipc-privileged-helper-availability, equals: '{"available":false,"reason":"sandboxed"}' }
+- tapOn: { id: processes-ipc-privileged-helper-register }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: "PrivilegedHelperError:E_UNAVAILABLE:sandboxed" }
+- tapOn: { id: processes-ipc-privileged-helper-authorize }
+- assertText: { id: processes-ipc-privileged-helper-authorization-result, equals: "PrivilegedHelperError:E_UNAVAILABLE:sandboxed" }
+- assertSimulatedPrivilegedHelper: { registrations: 0, messages: 0, prompts: 0 }
+- launchApp: { openUrl: "spark-ks://infra/desktop-checks" }
+- assertText: { id: updates-api-availability, equals: "Unavailable (sandboxed)" }

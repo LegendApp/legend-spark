@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import "SparkLifecycle.h"
+#import "SparkSandbox.h"
 #import <React/RCTBridgeModule.h>
 
 FOUNDATION_EXPORT NSString * const SparkDesktopEvent;

@@ -283,15 +283,31 @@ export async function runGate(plan: GatePlan, env: GateEnv, { agent = false } = 
   const automated = plan.flows.filter(flow => flow.manual !== true);
   if (target && !plan.flows.length) reasons.push({ check: "flows", message: `no gate flows apply to ${target.id} (${plan.scope ? `--flow: ${plan.scope.join(", ")}` : `include: ${manifest.include.join(", ")}`})` });
 
+  // `variant: sandbox` flows test the App Sandbox variant, in an isolated session: the clone of a sandboxed app is signed
+  // with its run directories, and its state is its own container, never the variant's (docs/app-sandbox.md).
+  const sandboxFlows = automated.filter(flow => flow.variant === "sandbox");
+  const sandboxExists = !!plan.sandbox && existsSync(plan.sandbox);
+  if (sandboxFlows.length && plan.sandbox && !sandboxExists) reasons.push({ check: "build", message: `the App Sandbox variant ${relative(plan.sandbox)} does not exist; build it with spark build --sandbox` });
   let results: FlowResult[] | undefined, runDir: string | undefined;
   // A --target this machine cannot be (other OS, arch or hardware) is planned, never run.
   if (target && !plan.problems.some(problem => problem.check === "target") && backends.length && exists && automated.length) {
     runDir = reportFiles(plan).run;
     rmSync(runDir, { recursive: true, force: true });
-    say(`running ${plural(automated.length, "flow")} on ${target.id} with ${backends.map(backend => backend.name).join(", ")}…`);
-    ({ report: { flows: results } } = await runSuite(automated.map(flow => flow.file), {
-      backends, runDir, app: plan.artifact, clock, signal: env.signal, deadline: began + timeBudgetMs, host: plan.host, onEvent: printer(env, agent),
-    }));
+    const suites = [
+      { flows: automated.filter(flow => flow.variant !== "sandbox"), app: plan.artifact!, backends, dir: runDir, prefix: "" },
+      ...sandboxExists ? [{
+        flows: sandboxFlows, app: plan.sandbox!, dir: path.join(runDir, "sandbox"), prefix: "sandbox",
+        backends: names.map(name => env.backends[name]!({ app: plan.sandbox, state: "isolated" })).filter(backend => backend.platform === target.platform),
+      }] : [],
+    ].filter(suite => suite.flows.length);
+    results = [];
+    for (const suite of suites) {
+      say(`running ${plural(suite.flows.length, "flow")} on ${target.id} with ${suite.backends.map(backend => backend.name).join(", ")}${suite.prefix ? ` against the App Sandbox variant ${relative(suite.app)}` : ""}…`);
+      const { report: { flows: run } } = await runSuite(suite.flows.map(flow => flow.file), {
+        backends: suite.backends, runDir: suite.dir, app: suite.app, clock, signal: env.signal, deadline: began + timeBudgetMs, host: plan.host, onEvent: printer(env, agent),
+      });
+      results.push(...run.map(result => suite.prefix && result.bundle ? { ...result, bundle: path.join(suite.prefix, result.bundle) } : result));
+    }
   } else if (automated.length) say("flows not run: see the reasons below");
   const flows = judgeFlows(plan, results, runDir, reasons, warnings);
   judgeSignoffs(plan, commit, flows, reasons);

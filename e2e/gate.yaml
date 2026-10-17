@@ -11,6 +11,8 @@ build:
     symbols: "examples/kitchen-sink/.spark/platforms/macos/products/macos-${ARCH}/release/dSYMs"
     # The package audit (#151) checks `cd examples/kitchen-sink && bun run package` (Developer ID signed and notarized).
     package: "examples/kitchen-sink/dist"
+    # The App Sandbox variant (#154): `cd examples/kitchen-sink && bun run build:sandbox`. `variant: sandbox` flows test it.
+    sandbox: "examples/kitchen-sink/.spark/platforms/macos/products/macos-${ARCH}/release-sandbox/KitchenSink.app"
 targets:
   - { os: macos-14, arch: arm64, machine: macbook-air-m1-8gb }   # oldest supported macOS on the slowest reference Mac: startup, memory, 60 fps
   - { os: macos-15, arch: arm64 }

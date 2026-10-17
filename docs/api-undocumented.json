@@ -37,7 +37,6 @@
     ],
     "./app": [
       "activate",
-      "AppContext",
       "AppEvent",
       "AppEventMap",
       "AppRuntime",
@@ -774,8 +773,7 @@
       "UpdateAvailability",
       "UpdateConfiguration",
       "UpdateEvent",
-      "UpdateStatus",
-      "UpdateUnavailableReason"
+      "UpdateStatus"
     ],
     "./video": [
       "Availability",

@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: The App Sandbox variant sandboxes every process with only the entitlements it declares
+intent: >
+  Reads the signed entitlements of every process of the App Sandbox variant on disk (spark build --sandbox; gate.yaml
+  build.macos.sandbox). Every process is sandboxed. Besides com.apple.security.app-sandbox the main executable carries
+  only the Kitchen Sink's macos.sandbox entitlements, listed here with the reason each is needed, and every other
+  process only app-sandbox and inherit. The direct build carries none (security/entitlements.yaml), so these are the
+  whole difference between the two.
+checks: [DIST-MAS-01, SEC-SANDBOX-01]
+tags: [packaging-distribution]
+platforms: [macos]
+variant: sandbox
+---
+- assertEntitlements:
+    app: "${APP_PATH}"
+    sandbox: true
+    allow:
+      com.apple.security.files.user-selected.read-write: Open and save panels grant read and write access to the files the person picks (Files, Documents, Dialogs).
+      com.apple.security.files.bookmarks.app-scope: Security-scoped bookmarks keep that access across launches (@legendapp/spark/file-system bookmarks).
+      com.apple.security.network.client: Outgoing connections (WebView, fetch, the network inspector's requests).
+      com.apple.security.print: The print panel and printing (@legendapp/spark/printing).
+- assertSandboxVariant: "${APP_PATH}"

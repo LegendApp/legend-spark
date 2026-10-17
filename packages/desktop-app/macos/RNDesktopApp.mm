@@ -37,7 +37,7 @@ static SparkProfilerCompletion SparkProfilerSettle(RCTPromiseResolveBlock resolv
 #endif
   dispatch_async(dispatch_get_main_queue(), ^{
     NSDictionary *args = SparkArgs(json);
-    if ([method isEqual:@"context"]) { NSMutableDictionary *context = [SparkContext() mutableCopy]; context[@"launch"] = SparkLaunchState(); resolve(SparkJSON(context)); }
+    if ([method isEqual:@"context"]) { NSMutableDictionary *context = [SparkContext() mutableCopy]; context[@"launch"] = SparkLaunchState(); context[@"sandboxed"] = @(SparkSandboxed()); resolve(SparkJSON(context)); }
     else if ([method isEqual:@"initialURL"]) resolve(SparkJSON(SparkInitialURL()));
     else if ([method isEqual:@"pendingURLs"]) resolve(SparkJSON(SparkPendingURLs()));
     else if ([method isEqual:@"quit"]) {

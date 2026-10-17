@@ -262,8 +262,8 @@ export class FakeApp implements DriverApp {
 
   readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
 
-  /** The bundle `open` reports, and whether it is a release build. */
-  bundle = { app: "/Apps/KitchenSink.app", release: false };
+  /** The bundle `open` reports, whether it is a release build, and whether it is the App Sandbox variant. */
+  bundle = { app: "/Apps/KitchenSink.app", release: false, sandboxed: false };
   async open(options: { dev: boolean; prebundle: boolean }) {
     // Every driver run prebundles the worker entry isolated runtimes load (scripts/e2e/bundle-server.ts).
     if (!options.prebundle) throw new Error("the driver backend opened the app without prebundling");

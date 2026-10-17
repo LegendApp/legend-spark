@@ -13,7 +13,8 @@ export interface AppLaunch {
   /** `primary`: this process owns the project's single-instance lock. `test-driver`: a test-driver session, which never takes it. */
   instance: "primary" | "test-driver";
 }
-export interface AppContext { projectId: string; name: string; version: string; runtime: AppRuntime; launchArguments: readonly string[]; launch: AppLaunch }
+/** `sandboxed`: this process runs in the macOS App Sandbox (docs/app-sandbox.md); always false on Windows. */
+export interface AppContext { projectId: string; name: string; version: string; runtime: AppRuntime; launchArguments: readonly string[]; launch: AppLaunch; sandboxed: boolean }
 export interface RelaunchOptions {
   /** Arguments after the executable for the new instance. Default: this launch's arguments. */
   arguments?: readonly string[];
@@ -47,13 +48,13 @@ function launch(value: unknown): value is AppLaunch {
   return record(value) && [null, "flag", "modifier"].includes(value.safeMode as string) && typeof value.relaunched === "boolean" && (value.instance === "primary" || value.instance === "test-driver");
 }
 function context(value: unknown): value is AppContext {
-  if (!record(value) || ![value.projectId, value.name, value.version].every(item => typeof item === "string" && item.length > 0) || !strings(value.launchArguments) || !record(value.runtime) || !launch(value.launch)) return false;
+  if (!record(value) || ![value.projectId, value.name, value.version].every(item => typeof item === "string" && item.length > 0) || !strings(value.launchArguments) || !record(value.runtime) || !launch(value.launch) || typeof value.sandboxed !== "boolean") return false;
   return ["go", "dev", "preview", "release"].includes(value.runtime.mode as string) && record(value.runtime.modules) && Object.values(value.runtime.modules).every(item => typeof item === "string");
 }
 export async function getAppContext(): Promise<AppContext> {
   const value = await callAppNative("context", context);
   const { safeMode, relaunched, instance } = value.launch;
-  return { projectId: value.projectId, name: value.name, version: value.version, launchArguments: [...value.launchArguments], runtime: { mode: value.runtime.mode, modules: { ...value.runtime.modules } }, launch: { safeMode, relaunched, instance } };
+  return { projectId: value.projectId, name: value.name, version: value.version, launchArguments: [...value.launchArguments], runtime: { mode: value.runtime.mode, modules: { ...value.runtime.modules } }, launch: { safeMode, relaunched, instance }, sandboxed: value.sandboxed };
 }
 const command = (method: string, args: object = {}) => callAppNative(method, (value): value is null => value === null, args).then(() => {});
 const orphanGuards = new Set<AsyncRegistration>();

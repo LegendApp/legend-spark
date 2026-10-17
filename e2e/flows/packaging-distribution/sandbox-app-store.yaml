@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: The App Sandbox variant through App Store signing, validation and TestFlight
+intent: >
+  What only a person with Apple credentials can check: the Kitchen Sink's App Sandbox variant signed for the Mac App
+  Store, validated by Apple and installed through TestFlight. Spark does not sign or package for the App Store yet, so
+  the person signs and packages it with Apple's tools from the variant (bun run build:sandbox in
+  examples/kitchen-sink), as docs/app-sandbox.md#what-is-left lists. manual: true keeps the gate from running it.
+checks: [DIST-MAS-05]
+tags: [packaging-distribution]
+platforms: [macos]
+manual: true
+variant: sandbox
+---
+- manualStep:
+    instruction: >-
+      Sign the variant with your Apple Distribution identity, embedding a Mac App Store provisioning profile for the
+      app's bundle identifier, with com.apple.application-identifier and com.apple.developer.team-identifier added to
+      the main executable's entitlements. Package it with productbuild, signed with your Mac Installer Distribution
+      identity, and run xcrun altool --validate-app (or Transporter) on the package.
+    expect: >-
+      Validation succeeds, with no complaint about entitlements, sandboxing, helper processes, private APIs or embedded
+      frameworks.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Upload the package to App Store Connect, add it to a TestFlight group you belong to, install it with the TestFlight
+      app, and open it. In Activity Monitor, add the Sandbox column.
+    expect: >-
+      The Kitchen Sink opens and Activity Monitor shows it sandboxed. Processes and IPC > Privileged helper reports
+      sandboxed, and Desktop checks shows app updates Unavailable (sandboxed).
+    evidence: none
+    signoff: required

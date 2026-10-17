@@ -95,6 +95,24 @@ describe("release gate", () => {
     expect(factories).toEqual([{ app: path.join(dir, "build/macos-arm64/KitchenSink.app"), state: "exact" }]);
   });
 
+  test("variant: sandbox flows run against the App Sandbox variant in an isolated session; a missing variant fails", async () => {
+    const sandboxFlow = 'appId: so.legend.kitchensink\nname: Sandboxed launch\nintent: The App Sandbox variant shows the catalog.\nchecks: [APP-LAUNCH-01]\nvariant: sandbox\n---\n- launchApp\n- assertVisible: { id: catalog }\n';
+    const dir = repo({ "e2e/flows/app/sandboxed.yaml": sandboxFlow }), factories: unknown[] = [];
+    edit(dir, "e2e/gate.yaml", 'verifySignature: true }', 'verifySignature: true, sandbox: "build/macos-${ARCH}/KitchenSink-sandbox.app" }');
+    const { env: gateEnv } = env();
+    const driver = gateEnv.backends.driver!, run = () => runGate(plan(path.join(dir, "e2e"), gateEnv.host()), { ...gateEnv, backends: { ...gateEnv.backends, driver: options => { factories.push(options); return driver(options); } } });
+    expect(reasons(await run())).toContain("build: the App Sandbox variant build/macos-arm64/KitchenSink-sandbox.app does not exist; build it with spark build --sandbox");
+    mkdirSync(path.join(dir, "build/macos-arm64/KitchenSink-sandbox.app"), { recursive: true });
+    factories.length = 0;
+    const report = await run();
+    expect(report.reasons).toEqual([]);
+    expect(factories).toEqual([{ app: path.join(dir, "build/macos-arm64/KitchenSink.app"), state: "exact" }, { app: path.join(dir, "build/macos-arm64/KitchenSink-sandbox.app"), state: "isolated" }]);
+    expect(report.flows.find(flow => flow.id === "flows/app/sandboxed")).toMatchObject({ status: "passed" });
+    expect(existsSync(path.join(dir, "reports/gate/run/sandbox/report.json"))).toBe(true);
+    edit(dir, "e2e/gate.yaml", ', sandbox: "build/macos-${ARCH}/KitchenSink-sandbox.app"', "");
+    expect(reasons(await run())).toContain("build: flows/app/sandboxed.yaml tests the App Sandbox variant, but gate.yaml has no build.macos.sandbox");
+  });
+
   test("a fully green tree passes and writes one JSON + HTML report", async () => {
     const dir = repo();
     const { env: gateEnv, out } = env();

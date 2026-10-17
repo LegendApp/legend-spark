@@ -113,7 +113,9 @@ tags: [smoke]
 ```
 
 Header keys: `appId` and `name` are required. The others are `intent`, `checks`,
-`tags`, `platforms` (`macos`, `windows`), `build` (`release` or `dev`), `manual`
+`tags`, `platforms` (`macos`, `windows`), `build` (`release` or `dev`), `variant`
+(`direct`, the default, or `sandbox`: the flow tests the [App Sandbox variant](app-sandbox.md), and the driver
+backend fails it as `invalid` against an app that is not sandboxed), `manual`
 (`false`, `partial`, `true`), `timeout`, `matrix` (`appearance`, `locale`,
 `reduceMotion`; the flow runs once per combination), `env`, `onFlowStart` and
 `onFlowComplete` (command lists). Write `intent` in plain English: agents use it to
@@ -225,6 +227,11 @@ app or its state. Pass the artifact the gate tests as `app: "${APP_PATH}"`. The 
   show up. `sandbox: false` is the direct-distribution build, where no process is
   sandboxed. `sandbox: true` is the Mac App Store variant
   ([#154](https://github.com/LegendApp/legend-spark/issues/154)), where every process is.
+- `assertSandboxVariant: <app>` checks the [App Sandbox variant](app-sandbox.md): the main executable is sandboxed
+  without `com.apple.security.inherit`, every other process carries exactly `app-sandbox` and `inherit`, and the
+  bundle has no Sparkle code (its framework, or a library linking it), no `SU*` Info.plist keys and no
+  `Contents/Library/LaunchDaemons` (privileged helpers). The `e2e/flows/packaging-distribution/sandbox-*` flows use it
+  with `variant: sandbox`.
 - `assertCodeSigning: <app>` checks that every Mach-O file is signed by the main
   executable's team, that every process has the hardened runtime, and that no process
   turns off library validation. Ad-hoc signing fails. With the hardened runtime, library
@@ -688,8 +695,7 @@ An isolated session runs a clone of the app:
   runtime), with its quarantine attribute removed. Its defaults domain, Keychain service and `<namespace>`
   (`SparkNamespace()`, `spark.desktop.` plus the SHA-256 of the project identifier) are therefore never the app's. An
   app with entitlements an ad hoc signature cannot carry (`keychain-access-groups`, `com.apple.application-identifier`,
-  `com.apple.developer.*`, team-prefixed application groups) is refused, as is a sandboxed app (its state is in its
-  container, outside the root).
+  `com.apple.developer.*`, team-prefixed application groups) is refused.
 - **Its own home.** `CFFIXED_USER_HOME=<session root>/home` moves `NSHomeDirectory()` and every `~/Library` path
   Foundation and WebKit derive from it (Application Support, Caches, HTTPStorages, WebKit).
 - **Its own temporary and cache directories.** `DIRHELPER_USER_DIR_SUFFIX=<bundle id>.driver` makes
@@ -704,6 +710,17 @@ An isolated session runs a clone of the app:
   defaults domain, and what the temporary and cache directories hold. Its end waits up to 10 s for the clone to exit,
   then deletes the defaults domain, what those directories hold, the clone's LaunchServices registration and the root,
   and releases the lock. A clone still running keeps its state, and the next session refuses until it exits.
+- **A sandboxed app** (the [App Sandbox variant](app-sandbox.md)) keeps its state in its container, whose path macOS
+  derives from the bundle identifier and which the sandbox forces as its home and temporary directory (the state
+  environment has no effect on it). The clone's container is `~/Library/Containers/<bundle id>.driver/Data`, never the
+  app's, and its state there (the `statePaths` under it, its preferences file
+  `Library/Preferences/<bundle id>.driver.plist` through `cfprefsd`, and what `Data/tmp` holds) is deleted at the start
+  and end of each session and by `clearState`. The container itself stays: containermanagerd owns it. The clone is
+  signed with the app's entitlements plus one App Sandbox file-access exception
+  (`com.apple.security.temporary-exception.files.absolute-path.read-write`) for `$TMPDIR/sdr-<hash>/`, where its
+  launches make their run directories ([sandboxed apps](test-driver.md#sandboxed-apps)). `preserveAppDefaults` refuses
+  a sandboxed app: its defaults are in the container. The gate runs `variant: sandbox` flows in an isolated session too,
+  so it never touches the variant's own container.
 
 Measured on macOS 27 (26A428) with a small AppKit app launched like this:
 
@@ -1051,7 +1068,7 @@ release target.
 | Key | Meaning |
 |---|---|
 | `suite`, `appId` | Names for the report. |
-| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `--artifact <path>` replaces it for one run. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. `sizeBudgetMB` and `symbols` (the build's dSYM folder, relative to the repository root, with `${ARCH}`) are for the [bundle audit](#audits). |
+| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `--artifact <path>` replaces it for one run. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. `sizeBudgetMB` and `symbols` (the build's dSYM folder, relative to the repository root, with `${ARCH}`) are for the [bundle audit](#audits). `sandbox` is the [App Sandbox variant](app-sandbox.md) of the release build (`spark build --sandbox`), with `${ARCH}`: `variant: sandbox` flows run against it (and get it as `${APP_PATH}`), in an isolated session. A `variant: sandbox` flow without it, or a missing variant, fails the gate. |
 | `targets` | `{ os, arch, machine? }`. `os` is `macos-<major>` or `windows-<10\|11>`; `arch` is `arm64` or `x64`, as Spark names them. `machine` names a reference machine from the budgets file: that target runs on that hardware and checks its budgets. |
 | `include` | Globs of gate flows, relative to `e2e/`. |
 | `blocking` | `{ tags, default }`. A flow blocks the release when it fails if it has one of `tags`, lists a check registered `blocking: true`, or `default` is true. A non-blocking failure is a warning. |
@@ -1081,7 +1098,8 @@ the run fails without running flows; use `--dry-run` to plan other targets.
 6. **Flows:** the gate flows whose `platforms` include the target's platform, every
    matrix combination, run through the runner with every registered backend for that
    platform. Flows with `manual: true` are not run; `manual: partial` flows are run, and
-   their manual steps are recorded for sign-off. Any failed or skipped blocking run fails the gate.
+   their manual steps are recorded for sign-off. `variant: sandbox` flows run afterwards against `build.<platform>.sandbox`
+   (their runner report is in `run/sandbox/`). Any failed or skipped blocking run fails the gate.
 7. **Budgets** on a machine-bound target (see [Budgets](#budgets)).
 8. **Sign-offs** for every manual run (see [Manual sign-offs](#manual-sign-offs)).
 9. **Time budget** for the whole run.

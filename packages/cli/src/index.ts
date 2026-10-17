@@ -44,6 +44,7 @@ async function main() {
     if (!["ios", "android", "web"].includes(selected) && (values.device || values.port)) throw new Error("--device and --port are mobile build options; use spark dev for desktop launch options.");
     if (["ios", "android", "web"].includes(selected)) {
       if (values.force) throw new Error("--force is a desktop build option.");
+      if (values.sandbox) throw new Error("--sandbox makes the macOS App Sandbox variant.");
       if (command === "build" && selected === "web") throw new Error("Use expo export --platform web for web production output.");
       if (command === "prebuild" && selected === "web") throw new Error("Web has no native project to prebuild.");
       if (values.runner || values.release || values.preview || (command === "build" && !values.dev)) throw new Error("Mobile builds use --dev in this slice; Expo owns mobile distribution workflows.");
@@ -76,7 +77,7 @@ async function main() {
 
 Inside an app: npm run dev, npm run build, npm run package (or pnpm, yarn, bun)
 
-Advanced: updates init <feedURL>, credentials, doctor, analyze, open [app], build --dev, build --preview, package --ad-hoc (test package, not notarized)
+Advanced: updates init <feedURL>, credentials, doctor, analyze, open [app], build --dev, build --preview, build --sandbox (App Sandbox variant), package --ad-hoc (test package, not notarized)
 Version: spark --version
 Crash reports: symbolicate <report.json> --dsym <MyApp.app.dSYM or folder> (prints the report with symbols and source lines)
 Windows: dev and build --dev; production builds are not yet supported.
@@ -176,7 +177,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
     case "build": {
       const mode = buildMode(values);
       const root = project();
-      await build(root, mode, !!values.force);
+      await build(root, mode, !!values.force, { sandbox: !!values.sandbox });
       if (mode === "dev") {
         const settings = stateFile(root, "settings.json");
         writeJson(settings, { ...(existsSync(settings) ? readJson(settings) : {}), target: "dev" });

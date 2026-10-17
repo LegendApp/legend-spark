@@ -1,11 +1,13 @@
 import { restoreNativeMetadata } from "./native-metadata.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import { missingNativeFrameworks, preparationChanges, preserveMacOSPods, type NativePreparation } from "./native-preparation.ts";
-import { collectDsyms, macOSReleasePathSettings, macOSReleaseSettings, relativeHermesCompiler, removeLocalNetworking } from "./macos-release.ts";
+import { collectDsyms, macOSReleasePathSettings, macOSReleaseSettings, relativeHermesCompiler, removeLocalNetworking, removeUpdaterKeys } from "./macos-release.ts";
+import { signSandboxed } from "./signing.ts";
 import { checkReleaseTestDriver } from "./release-driver.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { checkAppIntentsMetadata } from "@legendapp/spark-desktop-config/app-intents.cjs";
+import { resolveEntitlements, sandboxEntitlements, SANDBOX_EXCLUDED } from "@legendapp/spark-desktop-config/entitlements.cjs";
 import { privilegedHelperIdentifiers, writePrivilegedHelpers } from "@legendapp/spark-desktop-config/privileged-helpers.cjs";
 import { buildWindows } from "./windows.ts";
 import { copyHelpers } from "./helpers.ts";
@@ -142,11 +144,19 @@ export async function analyze(root: string, packages = nativePackages(root)) {
   return result;
 }
 
+/**
+ * `sandbox`: the App Sandbox variant (`spark build --sandbox`, docs/app-sandbox.md), a release build of its own: without
+ * Sparkle, privileged helpers and Sparkle's Info.plist keys, every process signed ad hoc with sandbox entitlements.
+ */
+export type BuildOptions = { sandbox?: boolean };
+
 export async function build(
   root: string,
   mode: "go" | "dev" | "preview" | "release",
   force = false,
+  options: BuildOptions = {},
 ): Promise<{ app: string; runtime: Runtime }> {
+  if (options.sandbox && mode !== "release") throw new Error("--sandbox makes the App Sandbox variant of a release build; drop --dev, --preview and --runner.");
   assertNativePatchPreflight(root);
   const lock = stateFile(root, "build.lock");
   mkdirSync(path.dirname(lock), { recursive: true });
@@ -166,7 +176,7 @@ export async function build(
     } catch (signalError: any) {
       if (signalError.code === "ESRCH") {
         rmSync(lock);
-        return build(root, mode, force);
+        return build(root, mode, force, options);
       }
     }
     throw new Error(
@@ -174,7 +184,7 @@ export async function build(
     );
   }
   try {
-    const result = await buildUnlocked(root, mode, force);
+    const result = await buildUnlocked(root, mode, force, options.sandbox === true);
     if (mode === "go") {
       registerRuntime(result.app);
       console.log("Spark Runner registered. Apps will discover it automatically.");
@@ -208,8 +218,12 @@ async function buildUnlocked(
   root: string,
   mode: "go" | "dev" | "preview" | "release",
   force: boolean,
+  sandbox: boolean,
 ): Promise<{ app: string; runtime: Runtime }> {
-  if (projectPlatform(root) === "windows") return buildWindows(root, mode, force);
+  if (projectPlatform(root) === "windows") {
+    if (sandbox) throw new Error("--sandbox makes the macOS App Sandbox variant; Windows has none.");
+    return buildWindows(root, mode, force);
+  }
   // Checked before the build writes generated files into the project.
   const sourceRevision = releaseRevision(mode, mode === "go" ? findFramework() : root);
   prepareConfig(root);
@@ -220,9 +234,13 @@ async function buildUnlocked(
   await doctor(root);
   const all = nativePackages(root);
   const productionGraph = mode === "release" || mode === "preview";
-  const chosen = productionGraph
+  const analyzed = productionGraph
     ? await analyze(root, all)
     : { included: all, excluded: [] as NativePackage[] };
+  // The App Sandbox variant leaves out Sparkle: the App Store updates the app (docs/app-sandbox.md).
+  const sandboxed = sandbox ? analyzed.included.filter(pkg => SANDBOX_EXCLUDED.includes(pkg.name)) : [];
+  const chosen = { included: analyzed.included.filter(pkg => !sandboxed.includes(pkg)), excluded: [...analyzed.excluded, ...sandboxed] };
+  if (sandbox) sandboxEntitlements(readAppConfig(root), {});
   validateBuildModules(mode, chosen.included);
   const runtime = runtimeFor(root, chosen.included, mode);
   const productionHash = productionGraph
@@ -230,7 +248,8 @@ async function buildUnlocked(
     : undefined;
   if (productionHash)
     runtime.fingerprint = digest(runtime.fingerprint + productionHash);
-  const resultFile = stateFile(root, `${mode}-build.json`);
+  const variant = sandbox ? `${mode}-sandbox` : mode;
+  const resultFile = stateFile(root, `${variant}-build.json`);
   const excludedNames = [...new Set<string>([
     ...(readAppConfig(root).expo.autolinking?.exclude ?? []),
     ...chosen.excluded.map((p) => p.name),
@@ -392,7 +411,7 @@ async function buildUnlocked(
   // The scheme's product, not the first .app: a renamed app leaves its old bundle in DerivedData.
   const product = `${name}.app`;
   if (!existsSync(path.join(products, product))) throw new Error(`Build completed without ${product}.`);
-  const output = stateFile(root, `products/macos-${runtime.arch}/${mode}`);
+  const output = stateFile(root, `products/macos-${runtime.arch}/${variant}`);
   const destination = path.join(output, product);
   // The app and its dSYMs are finished in a sibling and swapped in together, so a reader (a driver session cloning
   // the app, a launch) sees the previous or the new product, never a partial one. This also clears a crashed build's.
@@ -427,10 +446,12 @@ async function buildUnlocked(
   );
   const helpers = readAppConfig(root).expo?.extra?.spark?.helpers;
   copyHelpers(root, app, helpers, "macos", runtime.arch);
-  // Launch daemon plists only for helpers the app lists in macos.privilegedHelpers (docs/privileged-helper.md).
-  writePrivilegedHelpers(app, nativeConfig.macos, helpers, runtime.arch);
+  // Launch daemon plists only for helpers the app lists in macos.privilegedHelpers (docs/privileged-helper.md); the App
+  // Sandbox variant has none, since a sandboxed app cannot install a launch daemon.
+  if (!sandbox) writePrivilegedHelpers(app, nativeConfig.macos, helpers, runtime.arch);
   if (mode === "release") {
     await removeLocalNetworking(app, args => run(root, ["plutil", ...args], { capture: true }));
+    if (sandbox) await removeUpdaterKeys(app, args => run(root, ["plutil", ...args], { capture: true }));
     const sources = metroSourceFiles(path.resolve(root, entryFile(root)), readJson(stateFile(root, "analysis/app.map")).sources);
     const linked = (readJson(stateFile(root, "native-selection.json")).included as Array<{ root: string }>).map(pkg => pkg.root);
     const pods = podNotices(JSON.parse(await run(root, ["plutil", "-convert", "json", "-o", "-", acknowledgementsFile(nativeRoot)], { capture: true })));
@@ -464,6 +485,7 @@ async function buildUnlocked(
   for (const [program, identifier] of Object.entries(identifiers))
     await run(root, ["codesign", "--force", "--sign", localSigningIdentity(root, mode), "--identifier", identifier, path.join(app, program)], { capture: true });
   if (Object.keys(identifiers).length) await run(root, ["codesign", "--force", "--sign", localSigningIdentity(root, mode), "--preserve-metadata=entitlements", app], { capture: true });
+  if (sandbox) await signSandboxed(root, app, sandboxEntitlements(readAppConfig(root), resolveEntitlements(readAppConfig(root), chosen.included.map(pkg => pkg.json))));
   publishDirectory(staging, output, stateFile(root, "tools"));
   writeJson(resultFile, result);
   console.log(`Built ${destination}`);

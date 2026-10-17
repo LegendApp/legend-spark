@@ -12,7 +12,7 @@ static SparkPrivilegedHelpers *Shared(void) {
   dispatch_once(&once, ^{
     NSString *team = SparkPrivilegedHelperSigningTeam(), *bundle = NSBundle.mainBundle.bundleIdentifier;
     // The helper must be signed by this app's team with its launchd label as signing identifier (spark package signs it so).
-    helpers = [[SparkPrivilegedHelpers alloc] initWithSimulated:SparkTestDriverActive() signed:team != nil
+    helpers = [[SparkPrivilegedHelpers alloc] initWithSimulated:SparkTestDriverActive() signed:team != nil sandboxed:SparkSandboxed()
       helperRequirement:^NSString *(NSString *name) { return SparkPrivilegedHelperRequirement(team, SparkPrivilegedHelperLabel(bundle, name)); } connector:nil];
   });
   return helpers;

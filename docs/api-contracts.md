@@ -377,7 +377,7 @@ Use a discriminated executable target: absolute executable/helper reference vs P
 
 ```ts
 // /privileged-helper
-getPrivilegedHelperAvailability(): PrivilegedHelperAvailability; // Availability | { available: false, reason: "unsigned" }
+getPrivilegedHelperAvailability(): PrivilegedHelperAvailability; // Availability | { available: false, reason: "sandboxed" | "unsigned" }
 getPrivilegedHelperStatus(name: string): Promise<"notRegistered" | "enabled" | "requiresApproval" | "notFound">;
 registerPrivilegedHelper(name: string): Promise<PrivilegedHelperStatus>; // enabled, or requiresApproval until allowed in Login Items
 unregisterPrivilegedHelper(name: string): Promise<void>;

@@ -4,27 +4,30 @@ import Native, { type Spec } from "./NativeDesktopPrivilegedHelper";
 export type { Availability } from "@legendapp/spark-desktop-app/src/contracts";
 
 /**
- * Availability of privileged helpers. `unsigned`: this build is unsigned or ad-hoc signed, so it has no team for the
- * helper to check it against and SMAppService cannot register a daemon for it (docs/privileged-helper.md#signing).
+ * Availability of privileged helpers. `sandboxed`: the app runs in the App Sandbox (the Mac App Store variant,
+ * docs/app-sandbox.md), which cannot install a launch daemon or gain admin rights. `unsigned`: this build is unsigned or
+ * ad-hoc signed, so it has no team for the helper to check it against and SMAppService cannot register a daemon for it
+ * (docs/privileged-helper.md#signing).
  */
-export type PrivilegedHelperAvailability = Availability | { available: false; reason: "unsigned" };
+export type PrivilegedHelperAvailability = Availability | { available: false; reason: "sandboxed" | "unsigned" };
 /**
  * A helper's launchd registration. `notFound`: the app embeds no plist for it (it is not in `macos.privilegedHelpers`).
  * `requiresApproval`: registered, waiting for the person to allow it in System Settings > General > Login Items.
  */
 export type PrivilegedHelperStatus = "notRegistered" | "enabled" | "requiresApproval" | "notFound";
 /**
- * Why a privileged helper operation failed. `unsigned`, `notRegistered`, `invalidSignature` (SMAppService rejected the
- * helper's signature, or the helper is not signed by the app's team), `serviceUnavailable` and `notInteractive` (the
- * admin prompt cannot be shown): E_UNAVAILABLE. `notFound`: E_NOT_FOUND. `requiresApproval`, `denied` (the prompt was
- * not answered by an administrator) and `authorizationExpired` (the admin rights lapsed: prompt again):
- * E_PERMISSION_DENIED. `invalidPlist`: E_INVALID_DATA. `connectionInvalid` (the helper
- * is not running or refused the connection, as it does for a client that is not this app) and `connectionInterrupted`
- * (it exited, or refused the app, with the request in flight): E_CLOSED. `helperFailed`: the helper's handler replied
- * with an error, with the code it chose. `unknown`: E_NATIVE.
+ * Why a privileged helper operation failed. `sandboxed` (registering, the admin prompt and messaging in the App
+ * Sandbox), `unsigned`, `notRegistered`, `invalidSignature` (SMAppService rejected the helper's signature, or the
+ * helper is not signed by the app's team), `serviceUnavailable` and `notInteractive` (the admin prompt cannot be
+ * shown): E_UNAVAILABLE. `notFound`: E_NOT_FOUND. `requiresApproval`, `denied` (the prompt was not answered by an
+ * administrator) and `authorizationExpired` (the admin rights lapsed: prompt again): E_PERMISSION_DENIED.
+ * `invalidPlist`: E_INVALID_DATA. `connectionInvalid` (the helper is not running or refused the connection, as it does
+ * for a client that is not this app) and `connectionInterrupted` (it exited, or refused the app, with the request in
+ * flight): E_CLOSED. `helperFailed`: the helper's handler replied with an error, with the code it chose. `unknown`:
+ * E_NATIVE.
  */
 export type PrivilegedHelperErrorReason =
-  | "unsigned" | "notFound" | "notRegistered" | "requiresApproval" | "invalidSignature" | "invalidPlist" | "serviceUnavailable"
+  | "sandboxed" | "unsigned" | "notFound" | "notRegistered" | "requiresApproval" | "invalidSignature" | "invalidPlist" | "serviceUnavailable"
   | "denied" | "notInteractive" | "authorizationExpired" | "connectionInvalid" | "connectionInterrupted" | "helperFailed" | "unknown";
 /** A privileged helper operation that ServiceManagement, Authorization Services, XPC or the helper failed. */
 export class PrivilegedHelperError extends SparkError {
@@ -65,7 +68,7 @@ export interface PrivilegedHelperMessageOptions {
 }
 
 const REASON_CODES: Record<Exclude<PrivilegedHelperErrorReason, "helperFailed">, SparkErrorCode> = {
-  unsigned: "E_UNAVAILABLE", notFound: "E_NOT_FOUND", notRegistered: "E_UNAVAILABLE", requiresApproval: "E_PERMISSION_DENIED",
+  sandboxed: "E_UNAVAILABLE", unsigned: "E_UNAVAILABLE", notFound: "E_NOT_FOUND", notRegistered: "E_UNAVAILABLE", requiresApproval: "E_PERMISSION_DENIED",
   invalidSignature: "E_UNAVAILABLE", invalidPlist: "E_INVALID_DATA", serviceUnavailable: "E_UNAVAILABLE", denied: "E_PERMISSION_DENIED",
   notInteractive: "E_UNAVAILABLE", authorizationExpired: "E_PERMISSION_DENIED", connectionInvalid: "E_CLOSED", connectionInterrupted: "E_CLOSED", unknown: "E_NATIVE",
 };
@@ -92,7 +95,7 @@ export function getPrivilegedHelperAvailability(): PrivilegedHelperAvailability 
   if (!Native) return { available: false, reason: "missing-module" };
   const answer = Native.availability();
   if (answer === "available") return { available: true };
-  if (answer === "unsigned") return { available: false, reason: "unsigned" };
+  if (answer === "sandboxed" || answer === "unsigned") return { available: false, reason: answer };
   throw new SparkError("E_INVALID_DATA", `Unknown privileged helper availability: ${answer}`);
 }
 function requireNative(): Spec {
@@ -146,9 +149,9 @@ export async function openPrivilegedHelperSettings(): Promise<void> {
 /**
  * Shows the system admin prompt, asking for an administrator's name and password with `prompt` as the reason. Resolves
  * the granted AdminAuthorization, or `{ type: "cancel" }` when the person cancels; rejects a PrivilegedHelperError
- * (`denied`, `notInteractive`) and E_BUSY while another prompt is up. The prompt is the system's: it cannot be cancelled
- * by the app. Nothing runs with these rights in the app: send them to the helper, which checks them. Call it from a
- * person's action.
+ * (`denied`, `notInteractive`, `sandboxed`) and E_BUSY while another prompt is up. The prompt is the system's: it
+ * cannot be cancelled by the app. Nothing runs with these rights in the app: send them to the helper, which checks
+ * them. Call it from a person's action.
  */
 export async function requestAdminAuthorization(options: AdminAuthorizationOptions): Promise<AdminAuthorizationResult> {
   if (!isRecord(options as unknown)) throw new SparkError("E_INVALID_ARGUMENT", "Expected admin authorization options");

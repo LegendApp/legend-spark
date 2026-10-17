@@ -61,6 +61,13 @@
             "dev"
           ]
         },
+        "variant": {
+          "enum": [
+            "direct",
+            "sandbox"
+          ],
+          "description": "The build the flow tests: direct (default), or sandbox, the App Sandbox variant (gate.yaml build.macos.sandbox; docs/app-sandbox.md)."
+        },
         "manual": {
           "enum": [
             false,
@@ -8718,6 +8725,35 @@
             },
             "else": {
               "type": "object"
+            }
+          },
+          "assertSandboxVariant": {
+            "description": "Assert the App Sandbox (Mac App Store) variant leaves out what a sandboxed app cannot use: no Sparkle code or SU* Info.plist keys, and no launch daemons (privileged helpers) in Contents/Library/LaunchDaemons.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "app": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "app"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "string",
+              "minLength": 1
             }
           },
           "assertEntitlements": {

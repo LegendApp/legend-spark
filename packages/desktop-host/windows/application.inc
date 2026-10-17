@@ -672,6 +672,7 @@ struct SparkDesktopApp {
         else if (method == "context") {
           Json::JsonObject result; result.SetNamedValue(L"projectId", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_ID"))); result.SetNamedValue(L"name", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_NAME"))); result.SetNamedValue(L"version", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_VERSION"))); result.SetNamedValue(L"runtime", Json::JsonObject::Parse(to_hstring(NativeSparkRuntime{}.describe()))); result.SetNamedValue(L"launchArguments", launchArguments);
           Json::JsonObject launch; launch.SetNamedValue(L"safeMode", safeModeTrigger.empty() ? Json::JsonValue::CreateNullValue() : Json::JsonValue::CreateStringValue(safeModeTrigger)); launch.SetNamedValue(L"relaunched", Json::JsonValue::CreateBooleanValue(relaunched)); launch.SetNamedValue(L"instance", Json::JsonValue::CreateStringValue(L"primary")); result.SetNamedValue(L"launch", launch);
+          result.SetNamedValue(L"sandboxed", Json::JsonValue::CreateBooleanValue(false)); // No App Sandbox on Windows.
           promise.Resolve(to_string(result.Stringify())); return;
         } else if (method == "pendingURLs") { promise.Resolve(to_string(pendingURLs.Stringify())); return; }
         else if (method == "initialURL") { promise.Resolve(initialURL.empty() ? "null" : to_string(Json::JsonValue::CreateStringValue(to_hstring(initialURL)).Stringify())); return; }

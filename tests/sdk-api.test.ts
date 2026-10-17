@@ -52,6 +52,8 @@ beforeEach(() => {
   platform.OS = "macos"; calls.length = 0; handlers.clear(); subscriptions.clear();
   // Spark's own labels for omitted dialog titles and buttons (desktop-app framework strings).
   handlers.set("NativeDesktopApp.strings", ({ keys }) => Object.fromEntries(keys.map((key: string) => [key, key])));
+  // Not sandboxed: the updater asks once per process.
+  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "release", modules: {} }, launch: { safeMode: null, relaunched: false, instance: "primary" }, sandboxed: false }));
   // Clearing native subscriptions models a new event host, including its identity.
   moduleObjects.delete("NativeDesktopApp");
 });
@@ -59,7 +61,7 @@ const tick = () => sleep(1);
 function nativeError(code: string) { return Object.assign(new Error(code), { code }); }
 
 test("app context, activation, hide and quit call the native host", async () => {
-  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} }, launch: { safeMode: null, relaunched: false, instance: "primary" } }));
+  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} }, launch: { safeMode: null, relaunched: false, instance: "primary" }, sandboxed: false }));
   handlers.set("NativeDesktopApp.quit", () => ({ quitRequested: true }));
   expect((await app.getAppContext()).projectId).toBe("a");
   await app.activate(); await app.hide(); await app.quit();
@@ -250,7 +252,7 @@ test("updates expose availability without starting and preserve native errors", 
   handlers.set("NativeDesktopUpdates.status", () => ({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null, skippedBuild: null, skippedMajorBuild: null, lastCheckedAt: null }));
   expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null });
   expect(await updates.getUpdateAvailability()).toEqual({ available: false, reason: "go" });
-  expect(calls.map(call => call.method)).toEqual(["status", "status"]);
+  expect(calls.filter(call => call.native === "NativeDesktopUpdates").map(call => call.method)).toEqual(["status", "status"]);
   handlers.set("NativeDesktopUpdates.check", () => { throw nativeError("E_UNAVAILABLE"); });
   await expect(updates.checkForUpdates()).rejects.toThrow("E_UNAVAILABLE");
   await updates.startUpdates(); await updates.configureUpdates({ automaticallyChecks: true });

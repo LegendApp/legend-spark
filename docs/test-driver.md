@@ -147,7 +147,8 @@ one `ks:capture`) launches a clone with its own bundle and project identifiers (
 the app id the clone reports to React Native DevTools), home, and temporary directories, deleted when the session
 ends. These runs, `clearState` included, work while a developer runs the same app and never touch that instance's
 data. The release gate drives the release artifact itself with its real state, and refuses while another instance
-of the app runs ([docs/e2e-flows.md](e2e-flows.md#app-state)).
+of the app runs ([docs/e2e-flows.md](e2e-flows.md#app-state)). A sandboxed app's clone keeps its state in its own
+container, `~/Library/Containers/<bundle id>.driver`; the gate runs the App Sandbox variant that way too.
 
 ## Launch contract and security
 
@@ -166,6 +167,18 @@ of the app runs ([docs/e2e-flows.md](e2e-flows.md#app-state)).
   authenticates within 30 seconds, the app quits.
 - Accepted sockets are made blocking explicitly and set `SO_NOSIGPIPE`, so partial
   messages are read whole and a client that disconnects cannot kill the app.
+
+### Sandboxed apps
+
+An app in the App Sandbox ([the App Sandbox variant](app-sandbox.md)) can bind a Unix socket only inside its
+container, and reach files outside it only through an exception. So a sandboxed app listens on `driver.sock` in a
+private 0700 directory of its own temporary directory (`<container>/Data/tmp/spark-driver-XXXXXX/`, bound relative to
+it on the starting thread, since a container's path can exceed a socket path's 104 bytes), and creates
+`<run directory>/driver.sock` as a symbolic link to it; the runner connects through the link. It removes both when the
+session ends. The runner signs its clone of a sandboxed app ([App state](e2e-flows.md#app-state)) with one file-access
+exception (`com.apple.security.temporary-exception.files.absolute-path.read-write`) for the directory its run
+directories are made in, `$TMPDIR/sdr-<hash>/`, so the app can read the token and write captures there. The same checks
+(mode, owner, token, peer) apply.
 
 ## Focus and window state
 

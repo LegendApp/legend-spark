@@ -27,6 +27,8 @@ export type PlannedFlow = {
   blocking: boolean;
   /** `true`: signed off by a person, not run. `partial`: run, and signed off. */
   manual: boolean | "partial";
+  /** `sandbox`: runs against the App Sandbox variant (`build.<platform>.sandbox`), not the artifact. */
+  variant?: "sandbox";
   name?: string;
   intent?: string;
   /** Manual flows: SHA-256 of the flow file and the runFlow files it reaches (their sign-offs name it); unset when one cannot be read. */
@@ -46,6 +48,8 @@ export type GatePlan = {
   target?: GateTarget & { id: string; platform: Platform };
   machine?: Machine & { id: string };
   artifact?: string;
+  /** The App Sandbox variant `variant: sandbox` flows test (`build.<platform>.sandbox`), absolute. */
+  sandbox?: string;
   flows: PlannedFlow[];
   excluded: Array<{ path: string; reason: string }>;
   /** Budgets with a baseline for this target's machine. */
@@ -175,6 +179,7 @@ export function plan(root: string, host: Host, { target: override, only, artifac
   const tested = build && path.resolve(repo, artifact ?? build.artifact.replaceAll("${ARCH}", target!.arch));
   const symbols = build?.symbols && path.resolve(repo, build.symbols.replaceAll("${ARCH}", target!.arch));
   const distribution = (packaged ?? build?.package) && path.resolve(repo, (packaged ?? build!.package!).replaceAll("${ARCH}", target!.arch));
+  const sandbox = build?.sandbox && path.resolve(repo, build.sandbox.replaceAll("${ARCH}", target!.arch));
 
   const all = gateFlows(root, manifest), scope = only && select(root, manifest, all, only);
   const registered = registeredChecks(root, manifest);
@@ -186,6 +191,7 @@ export function plan(root: string, host: Host, { target: override, only, artifac
     // An invalid flow still runs, so the runner reports it as a `format` failure; lint reports it too.
     if (!header) { flows.push({ path: relative, file, ids: [id], blocking: true, manual: false }); continue; }
     if (header.platforms && !header.platforms.includes(target!.platform)) { excluded.push({ path: relative, reason: `platforms: ${header.platforms.join(", ")}` }); continue; }
+    if (header.variant === "sandbox" && !sandbox) problems.push({ check: "build", message: `${relative} tests the App Sandbox variant, but gate.yaml has no build.${target!.platform}.sandbox` });
     const matrices = expandMatrix(header.matrix), suffixes = matrices.map(matrix => Object.entries(matrix).map(([dimension, value]) => `${dimension}=${value}`).join(","));
     let manualSteps: ManualStep[][] | undefined, hash: string | undefined;
     try {
@@ -197,13 +203,13 @@ export function plan(root: string, host: Host, { target: override, only, artifac
     flows.push({
       path: relative, file, ids: suffixes.map(suffix => suffix ? `${id}[${suffix}]` : id),
       blocking: manifest.blocking.default || (header.tags ?? []).some(tag => manifest.blocking.tags.includes(tag)) || (header.checks ?? []).some(check => blocking.has(check)),
-      manual: header.manual ?? false, ...(hash ? { hash } : {}), name: header.name, intent: header.intent, ...(manualSteps ? { manualSteps } : {}),
+      manual: header.manual ?? false, ...(header.variant === "sandbox" ? { variant: "sandbox" as const } : {}), ...(hash ? { hash } : {}), name: header.name, intent: header.intent, ...(manualSteps ? { manualSteps } : {}),
     });
   }
   const planned = machine ? (budgets?.budgets ?? []).flatMap(budget => machine.id in budget.baselines ? [{ ...budget, baseline: budget.baselines[machine.id]! }] : []) : [];
   const audits = target && !scope ? registered.flatMap(([id, check]) => check.audit && (!check.platforms || check.platforms.includes(target.platform))
     ? [{ check: id, audit: check.audit, title: check.title, blocking: !!check.blocking || manifest.blocking.default }] : []) : [];
-  return { manifest, root, repo, host, target, machine, artifact: tested, ...(symbols ? { symbols } : {}), ...(distribution ? { package: distribution } : {}), flows, excluded, budgets: planned, audits, problems, ...(scope ? { scope } : {}) };
+  return { manifest, root, repo, host, target, machine, artifact: tested, ...(sandbox ? { sandbox } : {}), ...(symbols ? { symbols } : {}), ...(distribution ? { package: distribution } : {}), flows, excluded, budgets: planned, audits, problems, ...(scope ? { scope } : {}) };
 }
 
 /** Where a run writes its reports: the manifest's paths, or `scoped/` next to them for a `--flow` run, so it never replaces a full gate report. */

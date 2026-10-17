@@ -49,6 +49,13 @@ export interface MacOSConfiguration {
    * need a team-signed build (docs/privileged-helper.md#configuration).
    */
   privilegedHelpers?: string[];
+  /**
+   * The App Sandbox (Mac App Store style) variant that `spark build --sandbox` makes. Every process is sandboxed: the
+   * main executable carries the app's entitlements plus `entitlements` (com.apple.security.* keys; app-sandbox is
+   * implied), every other process only app-sandbox and inherit. The variant ships without Sparkle updates and
+   * privileged helpers (docs/app-sandbox.md).
+   */
+  sandbox?: { entitlements?: Record<string, JsonValue> };
   /** App Intents for Shortcuts, Spotlight and Siri, compiled into the app by spark build (docs/app-intents.md). */
   appIntents?: AppIntentConfiguration[];
 }

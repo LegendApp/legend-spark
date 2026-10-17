@@ -223,6 +223,20 @@
             "pattern": "^[A-Za-z0-9_-]{1,64}$"
           }
         },
+        "sandbox": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The App Sandbox (Mac App Store style) variant that spark build --sandbox makes: every process sandboxed, the main executable with the app's entitlements plus these, every other process with app-sandbox and inherit only; it ships without Sparkle updates and privileged helpers (docs/app-sandbox.md).",
+          "properties": {
+            "entitlements": {
+              "type": "object",
+              "description": "The App Sandbox entitlements the variant's main executable carries besides the app's own (com.apple.security.* keys such as files.user-selected.read-write, files.bookmarks.app-scope, network.client, print); app-sandbox and inherit are implied.",
+              "propertyNames": {
+                "pattern": "^com\\.apple\\.security\\.[A-Za-z0-9.-]+$"
+              }
+            }
+          }
+        },
         "testDriverInRelease": {
           "type": "boolean",
           "description": "Compile the in-app test driver into release builds too; Debug builds always have it. For apps the release gate drives: keep it off for apps you distribute (docs/test-driver.md#builds)."

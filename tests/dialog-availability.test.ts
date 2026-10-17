@@ -1,5 +1,10 @@
 import { expect, test, vi } from "vitest";
-vi.mock("react-native", () => ({ Platform: { OS: "macos" }, TurboModuleRegistry: { get: () => null } }));
+// No native module is installed, except the core app module when a test installs it (`appModule.installed`).
+const appModule = vi.hoisted(() => {
+  const context = { projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "release", modules: {} }, launch: { safeMode: null, relaunched: false, instance: "primary" }, sandboxed: true };
+  return { installed: false, module: { call: async () => JSON.stringify(context) } };
+});
+vi.mock("react-native", () => ({ Platform: { OS: "macos" }, TurboModuleRegistry: { get: (name: string) => name === "NativeDesktopApp" && appModule.installed ? appModule.module : null } }));
 import { getFileDialogAvailability, openFileDialog } from "../packages/file-dialog/src/index";
 import { getMessageDialogAvailability, showMessage } from "../packages/message-dialog/src/index";
 import { getFileSystemAvailability, readText } from "../packages/file-system/src/index";
@@ -28,6 +33,15 @@ test("updater imports without native modules and reports availability", async ()
   await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   await expect(updates.clearSkippedUpdate()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   expect(() => updates.onUpdateEvent(() => {})).toThrow();
+});
+test("a sandboxed app (the Mac App Store variant, without the updater module) reports updates sandboxed, and commands reject E_UNAVAILABLE", async () => {
+  appModule.installed = true;
+  try {
+    expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "sandboxed", started: false, canCheck: false });
+    expect(await updates.getUpdateAvailability()).toEqual({ available: false, reason: "sandboxed" });
+    await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_UNAVAILABLE" });
+    await expect(updates.checkForUpdates()).rejects.toMatchObject({ code: "E_UNAVAILABLE" });
+  } finally { appModule.installed = false; }
 });
 
 import * as notifications from "../packages/notifications/src/index";

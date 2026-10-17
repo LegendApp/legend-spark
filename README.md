@@ -123,6 +123,8 @@ npm run package
 
 Packaging requires signing credentials and a notarization profile. It signs a staging copy, supports resuming a pending submission, and validates the final archive. It does not publish the app. Read the [packaging guide](docs/packaging.md), especially its validation status, before relying on this as a production release pipeline.
 
+`spark build --sandbox` makes the App Sandbox (Mac App Store style) variant of an app that declares `macos.sandbox`: every process sandboxed, without Sparkle or privileged helpers, signed ad hoc for local testing. App Store signing and submission are not implemented ([App Sandbox variant](docs/app-sandbox.md)).
+
 ## Windows development
 
 Windows uses the same CLI, starter, prebuilt registry, native compatibility checks, and managed Metro session. The Windows starter includes the native host; the SDK prebuilt profile includes the desktop modules and external integrations. Their Windows source implementations are ready for native acceptance. There is no separate source kit to install.

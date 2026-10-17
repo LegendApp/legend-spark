@@ -120,8 +120,9 @@ export class KitchenSinkApp {
    * Resolves the app, bundles (first call per mode only) and serves the JavaScript a dev build loads (a release build
    * needs neither), then starts a driver session. `bundleId` is the app's; `launchedBundleId` is what the launched
    * process registers as (the clone's identity in an isolated session). `release`: the app embeds its JavaScript.
+   * `sandboxed`: it is signed with the App Sandbox (the variant `spark build --sandbox` makes).
    */
-  async open(options: { dev?: boolean; label?: string; prebundle?: boolean } = {}): Promise<{ app: string; release: boolean; bundleId: string; launchedBundleId: string }> {
+  async open(options: { dev?: boolean; label?: string; prebundle?: boolean } = {}): Promise<{ app: string; release: boolean; bundleId: string; launchedBundleId: string; sandboxed: boolean }> {
     const resolved = this.resolved ??= this.resolve();
     await this.serve(resolved, options);
     try {
@@ -133,7 +134,7 @@ export class KitchenSinkApp {
       await this.close();
       throw error;
     }
-    return { app: resolved.app, release: resolved.embedded, bundleId: resolved.bundleId, launchedBundleId: this.state.identity.bundleId };
+    return { app: resolved.app, release: resolved.embedded, bundleId: resolved.bundleId, launchedBundleId: this.state.identity.bundleId, sandboxed: resolved.sandboxed };
   }
 
   private async serve(resolved: Resolved, { dev = false, label, prebundle = false }: { dev?: boolean; label?: string; prebundle?: boolean }) {
@@ -159,6 +160,8 @@ export class KitchenSinkApp {
    */
   async preserveDefaults(keys: readonly string[]): Promise<() => void> {
     if (!this.state) throw new Error("KitchenSinkApp.open() must run before preserveDefaults()");
+    // A sandboxed app's defaults are its container's preferences file, which `defaults <domain>` does not reach.
+    if (this.state.identity.sandboxed) throw new Error(`preserveAppDefaults does not support sandboxed apps: ${this.state.identity.bundleId} keeps its defaults in its container`);
     return preserveDefaults(this.state.identity.bundleId, keys, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId);
   }
 
@@ -177,13 +180,13 @@ export class KitchenSinkApp {
     if (!resolved || !state || (!resolved.embedded && !this.served && !this.devServer)) throw new Error("KitchenSinkApp.open() must run before launch()");
     const extra = options.arguments ?? [];
     const executable = path.join(state.app, path.relative(resolved.app, resolved.executable)), env = { ...PINNED_ENV, ...options.env, ...state.env };
-    if (resolved.embedded) return launchDriver({ executable, args: [...PINNED, ...locale, ...extra], env, log: options.log });
+    if (resolved.embedded) return launchDriver({ executable, args: [...PINNED, ...locale, ...extra], env, log: options.log, runs: state.runs });
     if (this.devServer) return launchDriver({
       executable,
       // React Native's packager and inspector connections use RCT_jsLocation; the bundle comes from the server.
       args: [JS_LOCATION, this.devServer.host, ...PINNED, ...locale, ...extra],
       env: { ...env, [BUNDLE_URL]: new URL("/index.bundle?platform=macos&dev=true&minify=false", this.devServer).href },
-      log: options.log,
+      log: options.log, runs: state.runs,
     });
     const { port, dev } = this.served!;
     return launchDriver({
@@ -191,7 +194,7 @@ export class KitchenSinkApp {
       // RCT_jsLocation points React Native's packager connection at the same server as the bundle URL.
       args: [JS_LOCATION, `127.0.0.1:${port}`, ...PINNED, ...locale, ...extra],
       env: { ...env, [BUNDLE_URL]: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=${dev}&minify=false` },
-      log: options.log,
+      log: options.log, runs: state.runs,
     });
   }
 

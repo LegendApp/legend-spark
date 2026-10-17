@@ -40,6 +40,11 @@
               "type": "string",
               "minLength": 1,
               "description": "The spark package output the package audit checks: the distribution ZIP, or the folder holding the one <name>-<version>-<arch>.zip (with its dSYMs archive and updates/ feed), relative to the repository root. ${ARCH} becomes the target's arch."
+            },
+            "sandbox": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The App Sandbox variant of the release build (spark build --sandbox), which `variant: sandbox` flows test, relative to the repository root. ${ARCH} becomes the target's arch (docs/app-sandbox.md)."
             }
           },
           "required": [
@@ -72,6 +77,11 @@
               "type": "string",
               "minLength": 1,
               "description": "The spark package output the package audit checks: the distribution ZIP, or the folder holding the one <name>-<version>-<arch>.zip (with its dSYMs archive and updates/ feed), relative to the repository root. ${ARCH} becomes the target's arch."
+            },
+            "sandbox": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The App Sandbox variant of the release build (spark build --sandbox), which `variant: sandbox` flows test, relative to the repository root. ${ARCH} becomes the target's arch (docs/app-sandbox.md)."
             }
           },
           "required": [

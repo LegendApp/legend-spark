@@ -14,7 +14,7 @@ NSString *SparkPrivilegedHelperErrorCode(NSError *error) {
 
 // The Spark error code of each failure reason (src/index.ts keeps the same table).
 static NSString *ReasonCode(NSString *reason) {
-  NSDictionary *codes = @{ @"unsigned": @"E_UNAVAILABLE", @"notFound": @"E_NOT_FOUND", @"notRegistered": @"E_UNAVAILABLE", @"requiresApproval": @"E_PERMISSION_DENIED",
+  NSDictionary *codes = @{ @"unsigned": @"E_UNAVAILABLE", @"sandboxed": @"E_UNAVAILABLE", @"notFound": @"E_NOT_FOUND", @"notRegistered": @"E_UNAVAILABLE", @"requiresApproval": @"E_PERMISSION_DENIED",
     @"invalidSignature": @"E_UNAVAILABLE", @"invalidPlist": @"E_INVALID_DATA", @"serviceUnavailable": @"E_UNAVAILABLE", @"denied": @"E_PERMISSION_DENIED",
     @"notInteractive": @"E_UNAVAILABLE", @"authorizationExpired": @"E_PERMISSION_DENIED", @"connectionInvalid": @"E_CLOSED", @"connectionInterrupted": @"E_CLOSED", @"unknown": @"E_NATIVE" };
   return codes[reason] ?: @"E_NATIVE";
@@ -138,7 +138,7 @@ static NSNumber *_Nullable ExpiresAt(void) {
 }
 
 @implementation SparkPrivilegedHelpers {
-  BOOL _realSigned;
+  BOOL _realSigned, _sandboxed;
   SparkPrivilegedHelperRequirementProvider _requirement;
   SparkPrivilegedHelperConnector _connector;
   NSMutableDictionary<NSString *, SparkPrivilegedHelperLink *> *_links;
@@ -154,10 +154,11 @@ static NSNumber *_Nullable ExpiresAt(void) {
 #endif
 }
 
-- (instancetype)initWithSimulated:(BOOL)simulated signed:(BOOL)isSigned helperRequirement:(SparkPrivilegedHelperRequirementProvider)requirement connector:(SparkPrivilegedHelperConnector)connector
+- (instancetype)initWithSimulated:(BOOL)simulated signed:(BOOL)isSigned sandboxed:(BOOL)sandboxed helperRequirement:(SparkPrivilegedHelperRequirementProvider)requirement connector:(SparkPrivilegedHelperConnector)connector
 {
   if (self = [super init]) {
     _simulated = simulated;
+    _sandboxed = sandboxed;
     _realSigned = isSigned;
     _requirement = [requirement copy];
     _connector = [connector copy];
@@ -187,9 +188,10 @@ static NSNumber *_Nullable ExpiresAt(void) {
 #endif
   return _realSigned;
 }
-- (NSString *)availability { return self.isSigned ? @"available" : @"unsigned"; }
+- (NSString *)availability { return _sandboxed ? @"sandboxed" : self.isSigned ? @"available" : @"unsigned"; }
 static NSError *Expired(void) { return Named(@"authorizationExpired", @"The admin authorization's rights lapsed; ask for them again"); }
 static NSError *Unsigned(void) { return Named(@"unsigned", @"This app is unsigned or ad-hoc signed; a privileged helper needs a build signed by your team"); }
+static NSError *Sandboxed(void) { return Named(@"sandboxed", @"This app runs in the App Sandbox, which cannot install a privileged helper or gain admin rights"); }
 
 - (nullable SMAppService *)service:(NSString *)name
 {
@@ -220,6 +222,7 @@ static NSError *ServiceError(NSError *error, NSString *action) {
 
 - (void)registerHelper:(NSString *)name completion:(SparkPrivilegedHelperCompletion)completion
 {
+  if (_sandboxed) { completion(nil, Sandboxed()); return; }
   if (!self.isSigned) { completion(nil, Unsigned()); return; }
 #if SPARK_TEST_DRIVER
   if (_simulated) {
@@ -243,6 +246,7 @@ static NSError *ServiceError(NSError *error, NSString *action) {
 
 - (void)unregisterHelper:(NSString *)name completion:(SparkPrivilegedHelperCompletion)completion
 {
+  if (_sandboxed) { completion(nil, Sandboxed()); return; }
   if (!self.isSigned) { completion(nil, Unsigned()); return; }
 #if SPARK_TEST_DRIVER
   if (_simulated) {
@@ -277,6 +281,7 @@ static NSError *ServiceError(NSError *error, NSString *action) {
 
 - (void)authorize:(NSString *)prompt completion:(SparkPrivilegedHelperCompletion)completion
 {
+  if (_sandboxed) { completion(nil, Sandboxed()); return; }
   if (_prompting) { completion(nil, Failure(@"E_BUSY", nil, @"An admin prompt is already showing")); return; }
 #if SPARK_TEST_DRIVER
   if (_simulated) {
@@ -402,6 +407,7 @@ static NSError *ConnectionError(NSError *error) {
   SparkHeldAuthorization *held = authorization ? _authorizations[authorization] : nil;
   if (authorization && !held) { completion(nil, Failure(@"E_CLOSED", nil, @"The admin authorization was released")); return; }
   if (held.expiresAt && Now().longLongValue >= held.expiresAt.longLongValue) { completion(nil, Expired()); return; }
+  if (_sandboxed) { completion(nil, Sandboxed()); return; }
   if (!self.isSigned) { completion(nil, Unsigned()); return; }
   if (_simulated || !_connector) {
     NSString *status = [self statusOf:name];

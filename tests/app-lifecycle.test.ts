@@ -10,11 +10,11 @@ const launch = { safeMode: null, relaunched: false, instance: "primary" };
 test("app context validates the complete contract and exposes only owned metadata", async () => {
   const base = { projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} } };
   for (const value of [null, {}, { ...base, runtime: { mode: "dev", modules: [] }, launch }, base, { ...base, launch: { ...launch, safeMode: "always" } },
-    { ...base, launch: { ...launch, relaunched: "yes" } }, { ...base, launch: { ...launch, instance: "secondary" } }]) {
+    { ...base, launch: { ...launch, relaunched: "yes" } }, { ...base, launch: { ...launch, instance: "secondary" } }, { ...base, launch }, { ...base, launch, sandboxed: "yes" }]) {
     mocks.call.mockResolvedValue(JSON.stringify(value)); await expect(getAppContext()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   }
-  mocks.call.mockResolvedValue(JSON.stringify({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" }, internal: "secret" }, launch: { safeMode: "modifier", relaunched: true, instance: "test-driver", internal: 1 }, extra: true }));
-  expect(await getAppContext()).toEqual({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" } }, launch: { safeMode: "modifier", relaunched: true, instance: "test-driver" } });
+  mocks.call.mockResolvedValue(JSON.stringify({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" }, internal: "secret" }, launch: { safeMode: "modifier", relaunched: true, instance: "test-driver", internal: 1 }, sandboxed: true, extra: true }));
+  expect(await getAppContext()).toEqual({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" } }, launch: { safeMode: "modifier", relaunched: true, instance: "test-driver" }, sandboxed: true });
 });
 test("relaunch validates options before native work and reports the shared quit decision", async () => {
   await expect(relaunch({ arguments: "x" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
