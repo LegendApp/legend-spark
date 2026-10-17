@@ -73,15 +73,27 @@ checks:
     covers:
       - ./app/documents#createDocumentSession
   DOC-VERSIONS-01:
-    title: "NSFileVersion versions: addDocumentVersion records the contents, listDocumentVersions lists newest first with a readable path, and restoring replaces the file and keeps the replaced contents as a version"
+    title: "NSFileVersion versions: addDocumentVersion records the contents, listDocumentVersions lists newest first, readDocumentVersionText reads one, and restoring replaces the file and keeps the replaced contents as a version"
     platforms: [macos]
     blocking: true
     spec: "#112 DOC.api-versions"
     covers:
       - ./app/documents#addDocumentVersion
       - ./app/documents#listDocumentVersions
+      - ./app/documents#readDocumentVersionText
       - ./app/documents#restoreDocumentVersion
       - ./app/documents#createDocumentSession
+  DOC-VERSIONS-02:
+    title: "In the App Sandbox variant, versions of a document in the container are added, listed, read and restored as in the direct build"
+    platforms: [macos]
+    blocking: true
+    spec: "#462; docs/app-sandbox.md"
+    covers:
+      - ./app/documents#addDocumentVersion
+      - ./app/documents#listDocumentVersions
+      - ./app/documents#readDocumentVersionText
+      - ./app/documents#restoreDocumentVersion
+      - ./app/documents#getDocumentVersionsAvailability
   DOC-LOCK-01:
     title: "A locked document reports locked and read-only and refuses saves with E_READ_ONLY; unlocking allows saving"
     platforms: [macos]

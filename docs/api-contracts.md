@@ -125,6 +125,7 @@ findDocumentSession(path: string): DocumentSession | undefined;
 getDocumentSessionAvailability(): Availability;
 listDocumentVersions(path: string): Promise<DocumentVersion[]>; // NSFileVersion
 addDocumentVersion(path: string): Promise<DocumentVersion>;
+readDocumentVersionText(path: string, versionId: string): Promise<string>;
 restoreDocumentVersion(path: string, versionId: string): Promise<void>;
 getDocumentVersionsAvailability(): Availability;
 ```

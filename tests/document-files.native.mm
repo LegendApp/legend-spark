@@ -10,11 +10,16 @@ static int failures = 0;
 static NSString *Code(NSError *error) { return [error.domain isEqual:SparkFileIntegrationErrorDomain] ? error.userInfo[@"code"] : SparkDesktopErrorCode(error); }
 static NSString *Read(NSURL *url) { return [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:nil]; }
 static void Write(NSURL *url, NSString *text) { [text writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:nil]; }
+// Each call drains its own pool, as the module's calls on its queue do, so no NSFileVersion outlives the call that made it.
+#define CALL(expression) ({ __typeof__(expression) _value; @autoreleasepool { _value = (expression); } _value; })
 
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
-    NSString *root = @(argv[1]);
+    // "-": a fresh folder in the temporary directory, which in the App Sandbox is the container's.
+    BOOL scratch = !strcmp(argv[1], "-");
+    NSString *root = scratch ? [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString] : @(argv[1]);
     NSFileManager *fm = NSFileManager.defaultManager;
+    if (scratch) [fm createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:nil];
     NSURL *doc = [NSURL fileURLWithPath:[root stringByAppendingPathComponent:@"doc.txt"]];
     NSURL *missing = [NSURL fileURLWithPath:[root stringByAppendingPathComponent:@"missing.txt"]];
     NSError *error = nil;
@@ -23,27 +28,33 @@ int main(int argc, const char *argv[]) {
     CHECK(!SparkListFileVersions(missing, &error) && [Code(error) isEqual:@"E_NOT_FOUND"], "listing a missing file is E_NOT_FOUND");
     error = nil; CHECK(!SparkAddFileVersion(missing, &error) && [Code(error) isEqual:@"E_NOT_FOUND"], "adding a version of a missing file is E_NOT_FOUND");
 
-    // Versions record contents, list newest first and are readable at their path.
+    // Versions record contents, list newest first and are readable by id.
     Write(doc, @"first");
-    error = nil; NSArray *initial = SparkListFileVersions(doc, &error);
+    error = nil; NSArray *initial = CALL(SparkListFileVersions(doc, &error));
     CHECK(initial && initial.count == 0, "a new file has no other versions");
-    NSDictionary *first = SparkAddFileVersion(doc, &error);
+    NSDictionary *first = CALL(SparkAddFileVersion(doc, &error));
     CHECK(first && [first[@"id"] length] > 0 && [first[@"modifiedAt"] doubleValue] > 0, error ? error.localizedDescription.UTF8String : "version added");
-    CHECK([Read([NSURL fileURLWithPath:first[@"path"]]) isEqual:@"first"], "a version's path holds its contents");
+    error = nil; NSString *contents = CALL(SparkReadFileVersion(doc, first[@"id"], &error));
+    CHECK([contents isEqual:@"first"], error ? error.localizedDescription.UTF8String : "a version reads its contents");
+    error = nil; CHECK(!CALL(SparkReadFileVersion(doc, @"0000.txt", &error)) && [Code(error) isEqual:@"E_NOT_FOUND"], "reading an id of no version is E_NOT_FOUND");
+    // Why versions are read by id (#462): in the App Sandbox a version's stored file is readable only while its NSFileVersion lives.
+    NSString *stored = CALL([NSFileVersion otherVersionsOfItemAtURL:doc].firstObject.URL.path);
+    BOOL sandboxed = NSProcessInfo.processInfo.environment[@"APP_SANDBOX_CONTAINER_ID"] != nil;
+    CHECK(sandboxed ? !Read([NSURL fileURLWithPath:stored]) : [Read([NSURL fileURLWithPath:stored]) isEqual:@"first"], "a released version's stored file is readable only outside the sandbox");
     [NSThread sleepForTimeInterval:1.1]; // modification dates have one-second resolution on some volumes
     Write(doc, @"second");
-    NSDictionary *second = SparkAddFileVersion(doc, &error);
+    NSDictionary *second = CALL(SparkAddFileVersion(doc, &error));
     Write(doc, @"third");
-    NSArray *versions = SparkListFileVersions(doc, &error);
+    NSArray *versions = CALL(SparkListFileVersions(doc, &error));
     CHECK(versions.count == 2, "two recorded versions are listed");
     CHECK([versions.firstObject[@"id"] isEqual:second[@"id"]] && [versions.lastObject[@"id"] isEqual:first[@"id"]], "versions are newest first");
 
     // Restoring replaces the file and keeps the replaced contents as a version.
-    error = nil; CHECK(SparkRestoreFileVersion(doc, first[@"id"], &error), error ? error.localizedDescription.UTF8String : "version restored");
+    error = nil; CHECK(CALL(SparkRestoreFileVersion(doc, first[@"id"], &error)), error ? error.localizedDescription.UTF8String : "version restored");
     CHECK([Read(doc) isEqual:@"first"], "restore replaces the contents");
-    versions = SparkListFileVersions(doc, &error);
+    versions = CALL(SparkListFileVersions(doc, &error));
     BOOL keptThird = NO;
-    for (NSDictionary *version in versions) if ([Read([NSURL fileURLWithPath:version[@"path"]]) isEqual:@"third"]) keptThird = YES;
+    for (NSDictionary *version in versions) if ([CALL(SparkReadFileVersion(doc, version[@"id"], nil)) isEqual:@"third"]) keptThird = YES;
     CHECK(versions.count == 3 && keptThird, "the replaced contents become a version");
     error = nil; CHECK(!SparkRestoreFileVersion(doc, @"../doc.txt", &error) && [Code(error) isEqual:@"E_INVALID_ARGUMENT"], "a malformed id is E_INVALID_ARGUMENT");
     error = nil; CHECK(!SparkRestoreFileVersion(doc, @"0000.txt", &error) && [Code(error) isEqual:@"E_NOT_FOUND"], "an id of no version of this file is E_NOT_FOUND");
@@ -100,6 +111,7 @@ int main(int argc, const char *argv[]) {
     }
 
     [NSFileVersion removeOtherVersionsOfItemAtURL:renamed error:nil];
+    if (scratch) [fm removeItemAtPath:root error:nil];
     if (failures) return 1;
     printf("Document file tests passed\n");
     return 0;

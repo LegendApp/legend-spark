@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Document versions in the App Sandbox variant
+intent: >
+  Against the App Sandbox variant, Document model > Documents reports getDocumentVersionsAvailability() available and,
+  launched with --ks-documents-run, runs its operations on a fresh document in the temporary folder, which is the
+  driver clone's container. The versions check adds a version, lists the saved versions, reads the oldest with
+  readDocumentVersionText and restores it; it shows document-model-documents-check-versions-passed when that held,
+  -failed with the error otherwise (before #462 reading a version rejected E_PERMISSION_DENIED in the sandbox).
+checks: [DOC-VERSIONS-02]
+tags: [document-model]
+platforms: [macos]
+variant: sandbox
+---
+- launchApp: { clearState: true, arguments: ["--ks-documents-run"], openUrl: "spark-ks://document-model/documents" }
+- extendedWaitUntil: { visible: { id: document-model-documents-checks-done }, timeout: 60s }
+- assertVisible: { id: document-model-documents-availability-versions-available }
+- assertVisible: { id: document-model-documents-check-save-as-passed }
+- assertVisible: { id: document-model-documents-check-save-passed }
+- assertVisible: { id: document-model-documents-check-versions-passed }
+- assertNotVisible: { id: document-model-documents-check-versions-failed }
