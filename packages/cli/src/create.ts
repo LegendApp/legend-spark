@@ -32,6 +32,7 @@ export async function refreshLocalPackages(root: string, manifest: string, selec
     const archive = localArchive(path.resolve(path.dirname(manifest), file as string));
     overrides[name] = archive;
     if (pkg.dependencies?.[name]) pkg.dependencies[name] = archive;
+    if (pkg.allowScripts?.[name]) pkg.allowScripts[archive] = true;
   }
   applyOverrides(pkg, overrides, manager);
   writeJson(path.join(root, "package.json"), pkg);
@@ -62,6 +63,7 @@ export async function create(root: string, archiveManifest: string | undefined, 
     for (const [name, file] of Object.entries(archives)) {
       overrides[name] = file;
       if (pkg.dependencies[name]) pkg.dependencies[name] = file;
+      if (pkg.allowScripts?.[name]) pkg.allowScripts[file] = true;
     }
     applyOverrides(pkg, overrides, manager);
     writeJson(path.join(temporary, "package.json"), pkg);

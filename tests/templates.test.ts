@@ -59,5 +59,10 @@ test("all templates retain the tested desktop matrix", () => {
     expect(pkg.overrides["react-native-macos"]).toBe("0.81.7");
     expect(pkg.overrides["react-native-windows"]).toBe("0.81.35");
     expect(pkg.scripts.postinstall).toBe("node node_modules/@legendapp/spark/init-template.cjs");
+    for (const name of ["@legendapp/spark", "react-native-enriched-markdown", "fsevents"]) {
+      expect(pkg.allowScripts[name]).toBe(true);
+      expect(pkg.trustedDependencies).toContain(name);
+      expect(pkg.pnpm.onlyBuiltDependencies).toContain(name);
+    }
   }
 });
