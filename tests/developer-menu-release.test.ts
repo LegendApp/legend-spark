@@ -84,3 +84,10 @@ test("the native profiler compiles only when RCT_DEV", () => {
     expect(outsideDev(file, profiler, header), file).toEqual([]);
   expect(readFileSync("packages/desktop-app/macos/SparkFrameTimeline.mm", "utf8")).not.toMatch(/SparkProfiler|spark-profiler/);
 });
+
+test("native modules' network reporting compiles only when RCT_DEV", () => {
+  // SparkLoadURL loads in every build; reporting to the network inspector, and its marker, sit inside `#if RCT_DEV`.
+  const reporting = /SparkNetworkRequestWillStart|SparkNetworkRequestDidEnd|SparkSetNetworkReporting|reportNativeNetwork|nativeNetwork|spark-network-inspector|SparkNetworkInspectorMarker/, header = /^#import "SparkNetworkRequests\.h"$/;
+  for (const file of ["packages/desktop-app/macos/SparkNetworkRequests.h", "packages/desktop-app/macos/SparkNetworkRequests.mm", "packages/desktop-app/macos/RNDesktopApp.mm", "packages/audio/macos/RNSparkAudio.mm"])
+    expect(outsideDev(file, reporting, header), file).toEqual([]);
+});

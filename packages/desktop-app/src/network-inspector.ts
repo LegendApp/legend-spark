@@ -6,8 +6,11 @@ import type { DevToolsAvailability } from "./devtools";
 // channel) lives in ./network-inspector/, which @legendapp/spark/runtime-entry requires only in development bundles
 // and which registers itself here (docs/devtools.md#network-inspector).
 
-/** Who made a request: React Native's fetch, an XMLHttpRequest, or a WebSocket. */
-export type NetworkSource = "fetch" | "xhr" | "websocket";
+/**
+ * Who made a request: React Native's fetch, an XMLHttpRequest, a WebSocket, or one of Spark's native modules itself
+ * (`native`, with the entry's `module`).
+ */
+export type NetworkSource = "fetch" | "xhr" | "websocket" | "native";
 /**
  * A captured body or WebSocket frame payload. `data` is text, or base64 when `base64` (binary data and blob bodies);
  * `size` is the whole body's length (bytes, or characters of a text body) and `truncated` says `data` holds only its
@@ -27,10 +30,13 @@ export interface NetworkCallFrame { functionName: string; url: string; line: num
 export interface NetworkEntry {
   id: string;
   source: NetworkSource;
+  /** The native module that made a `native` request, by its import path (for example `@legendapp/spark/audio`). */
+  module?: string;
   method: string;
   url: string;
   requestHeaders: Readonly<Record<string, string>>;
   requestBody?: NetworkBody;
+  /** Empty for a `native` request. */
   initiator: readonly NetworkCallFrame[];
   state: "pending" | "open" | "finished" | "failed" | "canceled" | "closed";
   startedAt: number;

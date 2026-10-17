@@ -8976,7 +8976,7 @@
             }
           },
           "assertNoDebugSurface": {
-            "description": "[driver] Relaunch the app pointed at a decoy development server (RCT_jsLocation and SPARK_BUNDLE_URL) and, once its first UI settles and `for` (default 2s) more, assert it never connected to it, holds no network socket and no bound Unix socket but the driver's (lsof), has no Developer menu or debug menu item (DevTools, inspector, debugger, profiler), hidden ones included, and that no JavaScript in the app contains the network inspector or the profiler and no native code contains the profiler. For release builds.",
+            "description": "[driver] Relaunch the app pointed at a decoy development server (RCT_jsLocation and SPARK_BUNDLE_URL) and, once its first UI settles and `for` (default 2s) more, assert it never connected to it, holds no network socket and no bound Unix socket but the driver's (lsof), has no Developer menu or debug menu item (DevTools, inspector, debugger, profiler), hidden ones included, and that no JavaScript in the app contains the network inspector or the profiler and no native code contains the network inspector or the profiler. For release builds.",
             "if": {
               "type": "object"
             },
