@@ -5,6 +5,7 @@ import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { SparkError, invokeNative, parseNativeResult, type Availability, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 export type { Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 
+/** Notification permission state from `getNotificationPermission` and `requestNotificationPermission`. `macos` carries the raw authorization on macOS only. */
 export interface NotificationPermission {
   status: "undetermined" | "denied" | "granted" | "unknown";
   granted: boolean;
@@ -12,9 +13,11 @@ export interface NotificationPermission {
   canAskAgain: boolean | null;
   macos?: { authorization: "notDetermined" | "denied" | "authorized" | "provisional" | "unknown" };
 }
+/** A notification button. `id` is 1–100 letters, numbers, dots, underscores or hyphens, not `open` or `dismiss`, and is reported as the response action. */
 export interface NotificationAction { id: string; label: string }
 /** Portable tone names; each target maps them to its own system sounds (documented in the native bridges). */
 export type NotificationTone = "message" | "mail" | "reminder" | "call" | "error";
+/** What a notification shows. `title` is required; `data` is string pairs returned in its responses. */
 export interface NotificationContent {
   title: string;
   body?: string;
@@ -25,11 +28,15 @@ export interface NotificationContent {
   actions?: readonly NotificationAction[];
   data?: Record<string, string>;
 }
+/** Options for `showNotification`. `id` is 1–100 letters, numbers, dots, underscores or hyphens; pass it to `cancelNotification` and `dismissNotification`. */
 export interface ShowNotificationOptions { id: string; content: NotificationContent }
+/** When a scheduled notification is delivered: after `delaySeconds`, from 1 second to ten years. */
 export type NotificationTrigger = { type: "delay"; delaySeconds: number };
+/** Options for `scheduleNotification`. */
 export interface ScheduleNotificationOptions extends ShowNotificationOptions { trigger: NotificationTrigger }
 /** action is "open", "dismiss", or the id of a tapped notification action. */
 export interface NotificationResponse { type: "notificationResponse"; id: string; notificationId: string; action: "open" | "dismiss" | (string & {}); data: Record<string, string> }
+/** Whether notifications work here: macOS and Windows only, and only with the native module (`missing-module` otherwise). */
 export function getNotificationAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };
@@ -87,11 +94,13 @@ async function permission(method: string): Promise<NotificationPermission> {
     canAskAgain: Platform.OS === "windows" ? false : value === "unknown" ? null : value !== "denied",
     ...(Platform.OS === "macos" ? { macos: { authorization: value } } : {}) };
 }
+/** The current notification permission, without prompting. */
 export async function getNotificationPermission(): Promise<NotificationPermission> { return permission("permission"); }
 /** Call from an explicit user action. Windows reads OS settings without a prompt. */
 export async function requestNotificationPermission(): Promise<NotificationPermission> { return permission("requestPermission"); }
 /** Submission accepted by the OS; it does not guarantee presentation. */
 export async function showNotification(value: ShowNotificationOptions): Promise<void> { await command("show", notification(value, false)); }
+/** Submits a notification for delivery after its trigger delay. Rejects E_INVALID_ARGUMENT for a delay outside 1 second to ten years or invalid content. */
 export async function scheduleNotification(value: ScheduleNotificationOptions): Promise<void> {
   const content = notification(value, true);
   options(value.trigger, ["type", "delaySeconds"]);
@@ -100,12 +109,16 @@ export async function scheduleNotification(value: ScheduleNotificationOptions): 
 }
 /** Cancels pending delivery only. Missing IDs succeed. */
 export async function cancelNotification(value: string): Promise<void> { await command("cancel", { id: id(value) }); }
+/** Cancels every pending notification. Delivered ones stay. */
 export async function cancelAllNotifications(): Promise<void> { await command("cancelAll"); }
 /** Removes delivered notifications only. Missing IDs succeed. */
 export async function dismissNotification(value: string): Promise<void> { await command("dismiss", { id: id(value) }); }
+/** Removes every delivered notification. Pending ones stay. */
 export async function dismissAllNotifications(): Promise<void> { await command("dismissAll"); }
 const ids = (value: unknown): value is string[] => Array.isArray(value) && value.every(validId);
+/** The ids of notifications scheduled but not yet delivered. */
 export async function getPendingNotifications(): Promise<string[]> { return call("pending", {}, ids); }
+/** The ids of delivered notifications the system still lists. */
 export async function getDeliveredNotifications(): Promise<string[]> { return call("delivered", {}, ids); }
 function response(value: unknown): value is NotificationResponse {
   if (!value || typeof value !== "object") return false;

@@ -8,7 +8,9 @@ import type { Spec } from "./NativeDesktopMedia";
 import { call, checkBoolean, checkCallback, checkOptions, checkSignal, isNull, isNumber, isRecord, mediaAvailability, requireMedia, uniqueId } from "./shared";
 export type { Availability } from "@legendapp/spark-desktop-app/src/contracts";
 
+/** The kind of capture device `getCaptureDevices` lists. */
 export type CaptureDeviceKind = "camera" | "microphone";
+/** A connected camera or microphone, from `getCaptureDevices` (macOS). */
 export interface CaptureDevice {
   /** Stable while the device is connected (AVCaptureDevice uniqueID). */
   id: string;
@@ -19,12 +21,14 @@ export interface CaptureDevice {
 }
 /** A written recording: `uri` is its absolute path, `duration` in seconds, `size` in bytes. */
 export interface CaptureRecording { status: "recorded"; uri: string; duration: number; size: number }
+/** How a recording session ended: the written recording, or cancelled (no file kept). */
 export type CaptureRecordingOutcome = CaptureRecording | { status: "cancelled" };
 /** A written image: `uri` is its absolute path; `width` and `height` in pixels. */
 export interface CapturedImage { uri: string; width: number; height: number }
 /** Microphone levels in dBFS (-160 silence, 0 full scale). */
 export interface AudioLevel { average: number; peak: number }
 
+/** Options for `startAudioRecording`. */
 export interface AudioRecordingOptions {
   /** A microphone from getCaptureDevices("microphone"). Default: the default microphone. */
   deviceId?: string;
@@ -35,6 +39,7 @@ export interface AudioRecordingOptions {
   /** Aborting cancels the recording (outcome cancelled, file deleted). */
   signal?: AbortSignal;
 }
+/** A running audio or screen recording, from `startAudioRecording` or `startScreenRecording`. */
 export interface CaptureRecordingSession {
   readonly id: string;
   /** Settles once: recorded, or cancelled; rejects when the device goes away (E_UNAVAILABLE) or capture fails. */
@@ -44,13 +49,16 @@ export interface CaptureRecordingSession {
   /** Stops and deletes the file; `result` resolves cancelled. */
   cancel(): Promise<void>;
 }
+/** Options for `startCamera`. */
 export interface CameraOptions {
   /** A camera from getCaptureDevices("camera"). Default: the default camera. */
   deviceId?: string;
   /** Aborting stops the camera. */
   signal?: AbortSignal;
 }
+/** A running camera's frame size in pixels, from `CameraSession.getStatus`. */
 export interface CameraStatus { width: number; height: number }
+/** A running camera from `startCamera`; show it with `CameraView`. */
 export interface CameraSession {
   /** Identifies the camera to CameraView. */
   readonly id: string;
@@ -63,10 +71,13 @@ export interface CameraSession {
   /** Stops the camera. Idempotent. */
   stop(): Promise<void>;
 }
+/** A capturable display: its display id and size in points. */
 export interface ScreenDisplaySource { id: number; width: number; height: number }
+/** A capturable window: its window id, title and owning app name (null when unknown), and size in points. */
 export interface ScreenWindowSource { id: number; title: string | null; app: string | null; width: number; height: number }
 /** Sizes in points. */
 export interface ScreenCaptureSources { displays: ScreenDisplaySource[]; windows: ScreenWindowSource[] }
+/** The display or window to capture, shared by `captureScreenshot` and `startScreenRecording`. Setting both rejects E_INVALID_ARGUMENT. */
 export interface ScreenCaptureOptions {
   /** A display id from getScreenCaptureSources(). Default: the main display. */
   display?: number;
@@ -75,17 +86,21 @@ export interface ScreenCaptureOptions {
   /** Default true. */
   showsCursor?: boolean;
 }
+/** Options for `captureScreenshot`. */
 export interface ScreenshotOptions extends ScreenCaptureOptions {
   /** An absolute path or file URL ending .png. Default: a new temporary file. */
   uri?: string;
 }
+/** Options for `startScreenRecording`. */
 export interface ScreenRecordingOptions extends ScreenCaptureOptions {
   /** An absolute path or file URL ending .mov. Default: a new temporary file. */
   uri?: string;
   /** Aborting cancels the recording. */
   signal?: AbortSignal;
 }
+/** How `CameraView` scales the camera image into its bounds. */
 export type CameraContentFit = "contain" | "cover" | "fill";
+/** Props for `CameraView`. */
 export interface CameraViewProps extends ViewProps {
   /** The camera to show; null shows nothing. A camera may be shown by several views. */
   session: CameraSession | null;

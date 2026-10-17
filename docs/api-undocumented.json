@@ -40,26 +40,6 @@
       "AppleSignInOptions",
       "AppleSignInResult"
     ],
-    "./audio": [
-      "AudioMetadata",
-      "AudioPlayer",
-      "AudioPlayerHookOptions",
-      "AudioPlayerOptions",
-      "AudioPlayerState",
-      "AudioSource",
-      "createAudioPlayer",
-      "MediaCommand",
-      "MediaCommandName",
-      "MediaSession",
-      "MediaSessionOptions",
-      "MediaSessionUpdate",
-      "sessionOptions",
-      "sessionSnapshot",
-      "validateMetadata",
-      "validateSession",
-      "validateVolume",
-      "validMediaCommand"
-    ],
     "./auth-session": [
       "authorize",
       "AuthSession",
@@ -82,40 +62,6 @@
       "BiometricPromptOptions",
       "BiometricSecretOptions",
       "BiometricStatus"
-    ],
-    "./capture": [
-      "AudioRecordingOptions",
-      "CameraContentFit",
-      "CameraOptions",
-      "CameraSession",
-      "CameraStatus",
-      "CameraViewProps",
-      "CaptureDevice",
-      "CaptureDeviceKind",
-      "CaptureRecordingOutcome",
-      "CaptureRecordingSession",
-      "ScreenCaptureOptions",
-      "ScreenDisplaySource",
-      "ScreenRecordingOptions",
-      "ScreenshotOptions",
-      "ScreenWindowSource"
-    ],
-    "./clipboard": [
-      "clearClipboard",
-      "ClipboardChangeEvent",
-      "ClipboardChangeOptions",
-      "ClipboardData",
-      "ClipboardImage",
-      "getClipboardFormats",
-      "GetStringOptions",
-      "hasStringAsync",
-      "PromisedClipboardContent",
-      "PromisedClipboardOptions",
-      "readClipboard",
-      "setStringAsync",
-      "SetStringOptions",
-      "StringFormat",
-      "writeClipboard"
     ],
     "./context-menu": [
       "ContextMenuOptions",
@@ -145,21 +91,6 @@
       "LogFileOptions",
       "LoggerOptions",
       "LoggingOptions"
-    ],
-    "./notifications": [
-      "cancelAllNotifications",
-      "dismissAllNotifications",
-      "getDeliveredNotifications",
-      "getNotificationAvailability",
-      "getNotificationPermission",
-      "getPendingNotifications",
-      "NotificationAction",
-      "NotificationContent",
-      "NotificationPermission",
-      "NotificationTrigger",
-      "scheduleNotification",
-      "ScheduleNotificationOptions",
-      "ShowNotificationOptions"
     ],
     "./passkeys": [
       "PasskeyAssertion",
@@ -225,21 +156,6 @@
       "KeyCodes",
       "KeyText"
     ],
-    "./speech": [
-      "getSpeakingStatus",
-      "pauseSpeaking",
-      "PauseSpeakingOptions",
-      "resumeSpeaking",
-      "SpeakingStatus",
-      "SpeakOptions",
-      "SpeechRecognitionOptions",
-      "SpeechRecognitionOutcome",
-      "SpeechRecognitionSegment",
-      "SpeechRecognitionSession",
-      "SpeechRecognizerStatus",
-      "SpeechTranscript",
-      "SpeechVoice"
-    ],
     "./sqlite": [
       "Database",
       "DatabaseOptions",
@@ -248,29 +164,6 @@
       "SqlExecutor",
       "SqlRow",
       "SqlValue"
-    ],
-    "./system": [
-      "AttentionOptions",
-      "createDockMenu",
-      "createTaskbarMenu",
-      "DockMenuItem",
-      "DockMenuOptions",
-      "getLoginItemStatus",
-      "getSystemInfo",
-      "LoginItemStatus",
-      "MemoryPressureLevel",
-      "NetworkInterfaceType",
-      "NetworkStatus",
-      "onSystemEvent",
-      "preventSleep",
-      "PreventSleepOptions",
-      "requestAttention",
-      "setLaunchAtLogin",
-      "SystemEventOptions",
-      "SystemInfo",
-      "TaskbarMenuItem",
-      "TaskbarMenuOptions",
-      "ThermalState"
     ],
     "./tray": [
       "createTray",
@@ -289,12 +182,6 @@
       "UpdateConfiguration",
       "UpdateEvent",
       "UpdateStatus"
-    ],
-    "./video": [
-      "VideoContentFit",
-      "VideoPlayer",
-      "VideoPlayerOptions",
-      "VideoViewProps"
     ],
     "./webview": [
       "WebViewErrorEvent",

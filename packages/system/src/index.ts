@@ -7,13 +7,17 @@ export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contrac
 type SupportedDockLeaf = Exclude<MenuItem, { type: "submenu" | "role" | "slider" }> extends infer Item
   ? Item extends unknown ? Omit<Item, "target" | "placement" | "icon" | "shortcut" | "hidden"> : never
   : never;
+/** A Dock menu item (macOS): an action, checkbox, separator or submenu, without icons, shortcuts, targets or placement. */
 export type DockMenuItem = SupportedDockLeaf | (Omit<Extract<MenuItem, { type: "submenu" }>, "items" | "target" | "placement" | "icon" | "shortcut" | "hidden"> & { items: readonly DockMenuItem[] });
 type SupportedTaskbarLeaf = Extract<MenuItem, { type: "action" | "checkbox" }> extends infer Item
   ? Item extends unknown ? Omit<Item, "target" | "placement" | "icon" | "shortcut" | "hidden" | "disabled"> & { disabled?: false } : never
   : never;
+/** A taskbar Jump List task (Windows): an action or checkbox, without icons, shortcuts or disabled state. */
 export type TaskbarMenuItem = SupportedTaskbarLeaf;
 type LauncherMenuOptions = { items: readonly MenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void; recentDocuments?: boolean };
+/** Options for `createDockMenu`: the items, and `onAction` with the id of the chosen item. */
 export interface DockMenuOptions { items: readonly DockMenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
+/** Options for `createTaskbarMenu`. */
 export interface TaskbarMenuOptions {
   items: readonly TaskbarMenuItem[];
   onAction: (event: { type: "action"; itemId: string }) => void;
@@ -22,7 +26,9 @@ export interface TaskbarMenuOptions {
 }
 /** Determinate progress has a completed fraction from 0 to 1; paused and error tint the bar. */
 export type AppProgress = { state: "indeterminate" } | { state: "normal" | "paused" | "error"; value: number };
+/** The system thermal state (macOS), from least to most throttled. */
 export type ThermalState = "nominal" | "fair" | "serious" | "critical";
+/** A snapshot from `getSystemInfo`. `idleSeconds` is the time since the last user input; `batteryLevel` is 0 to 1, or null without a battery. */
 export interface SystemInfo {
   osVersion: string;
   /** The process architecture. */
@@ -41,7 +47,9 @@ export interface SystemInfo {
   /** null where the OS has no thermal state (Windows); see getSystemAvailability("thermalState"). */
   thermalState: ThermalState | null;
 }
+/** A kind of network interface in `NetworkStatus.interfaces`. */
 export type NetworkInterfaceType = "wifi" | "wired" | "cellular" | "loopback" | "other";
+/** The network path and system proxies, from `getNetworkStatus` (macOS). */
 export interface NetworkStatus {
   /** `requiresConnection`: reachable once a connection such as an on-demand VPN is established. */
   status: "online" | "offline" | "requiresConnection";
@@ -54,6 +62,7 @@ export interface NetworkStatus {
   /** System proxies as `host:port`, or the automatic configuration URL; null when off. */
   proxies: { http: string | null; https: string | null; socks: string | null; autoConfigURL: string | null };
 }
+/** The level a `memoryPressure` system event reports (macOS). */
 export type MemoryPressureLevel = "normal" | "warning" | "critical";
 /** The user's appearance and accessibility display settings (macOS). Colors are sRGB `#rrggbb`. */
 export interface AppearancePreferences {
@@ -82,8 +91,11 @@ export type SystemEvent =
 /** Capabilities that not every platform has. */
 export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu" | "thermalState" | "networkStatus" | "memoryPressure" | "lowPowerChanges" | "timeZoneChanges"
   | "appearancePreferences";
+/** Whether the app launches at login, from `getLoginItemStatus`. `requiresApproval`: the user must allow it in System Settings; Windows always reports `unavailable`. */
 export type LoginItemStatus = "enabled" | "disabled" | "requiresApproval" | "notFound" | "unavailable";
+/** Options for `requestAttention`. `informational` (default) asks briefly; `critical` keeps asking until the app is activated. */
 export interface AttentionOptions { kind?: "informational" | "critical" }
+/** Options for `preventSleep`. `reason` is required and passed to the OS power request; `kind` defaults to `display`, which also keeps the system awake. */
 export interface PreventSleepOptions { reason: string; kind?: "display" | "system" }
 let sequence = 0;
 const token = () => `system-${Date.now()}-${++sequence}`;
@@ -131,6 +143,7 @@ function isNetworkStatus(value: unknown): value is NetworkStatus {
     && typeof network.expensive === "boolean" && typeof network.constrained === "boolean"
     && !!proxies && typeof proxies === "object" && [proxies.http, proxies.https, proxies.socks, proxies.autoConfigURL].every(nullableString);
 }
+/** The OS version, architecture, locale, appearance, idle time, power and thermal state now (macOS, Windows). */
 export function getSystemInfo(): Promise<SystemInfo> { return call("info", {}, isInfo); }
 /** The current network path and system proxies (macOS). */
 export async function getNetworkStatus(): Promise<NetworkStatus> {
@@ -154,7 +167,9 @@ export async function getAppearancePreferences(): Promise<AppearancePreferences>
   requireFeature("appearancePreferences", "Appearance preferences");
   return call("preferences", {}, isPreferences);
 }
+/** Whether the app is registered to launch at login (macOS). Windows reports `unavailable`. */
 export function getLoginItemStatus(): Promise<LoginItemStatus> { return call("loginStatus", {}, (value): value is LoginItemStatus => typeof value === "string" && ["enabled", "disabled", "requiresApproval", "notFound", "unavailable"].includes(value)); }
+/** Registers or unregisters the app to launch at login (macOS). Rejects E_INVALID_ARGUMENT for a non-boolean, and E_UNAVAILABLE on Windows. */
 export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
   if (typeof enabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected enabled boolean");
   await command("login", { enabled });
@@ -183,6 +198,10 @@ export async function setAppProgress(progress: AppProgress | null): Promise<void
   if (typeof value !== "number" || !(value >= 0 && value <= 1)) throw new SparkError("E_INVALID_ARGUMENT", "Progress value must be from 0 to 1");
   await command("progress", { state, value });
 }
+/**
+ * Bounces the Dock icon (macOS) or flashes the taskbar button (Windows); removing the registration cancels it.
+ * Rejects E_INVALID_ARGUMENT for an unknown kind.
+ */
 export async function requestAttention(value: AttentionOptions = {}): Promise<AsyncRegistration> {
   options(value, ["kind"]);
   if (value.kind !== undefined && value.kind !== "informational" && value.kind !== "critical") throw new SparkError("E_INVALID_ARGUMENT", "Unknown attention kind");
@@ -190,6 +209,10 @@ export async function requestAttention(value: AttentionOptions = {}): Promise<As
   const id = await call("attention", { critical: value.kind === "critical" }, (value): value is number => typeof value === "number" && Number.isSafeInteger(value));
   return asyncRegistration(() => {}, () => command("cancelAttention", { id }));
 }
+/**
+ * Keeps the display (default) or only the system from idle sleep until the registration is removed (macOS, Windows).
+ * Rejects E_INVALID_ARGUMENT without a reason or for an unknown kind.
+ */
 export async function preventSleep(value: PreventSleepOptions): Promise<AsyncRegistration> {
   options(value, ["reason", "kind"]);
   if (typeof value.reason !== "string" || !value.reason.trim() || value.reason.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "A reason is required");
@@ -212,19 +235,26 @@ async function createLauncherMenu(value: LauncherMenuOptions, platform: "macos" 
   try { await command("dockMenu", { items, owner, ...(value.recentDocuments ? { recent: true } : {}) }); ready = true; } catch (error) { subscription.remove(); throw error; }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, () => command("clearDockMenu", { owner }));
 }
+/** Adds items to the app's Dock menu (macOS) until the registration is removed. Rejects E_UNSUPPORTED_PLATFORM elsewhere. */
 export function createDockMenu(options: DockMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "macos"); }
+/** Sets the app's taskbar Jump List tasks (Windows) until the registration is removed. Rejects E_UNSUPPORTED_PLATFORM elsewhere. */
 export function createTaskbarMenu(options: TaskbarMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "windows"); }
 const SYSTEM_EVENTS: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "sessionActive", "sessionInactive", "powerChanged", "lowPowerChanged", "thermalChanged",
   "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged", "memoryPressure", "appearanceChanged", "displaysChanged", "systemColorsChanged", "accessibilityDisplayChanged"];
 // Events whose platform support is narrower than the module's. Requesting one where it is unsupported rejects; omitted `types` leave it out.
 const EVENT_FEATURES: Partial<Record<SystemEvent["type"], SystemFeature>> = { systemColorsChanged: "appearancePreferences", accessibilityDisplayChanged: "appearancePreferences" };
 const eventAvailable = (type: SystemEvent["type"]) => { const feature = EVENT_FEATURES[type]; return !feature || FEATURES[feature].includes(Platform.OS); };
+/** Options for `onSystemEvent`. */
 export interface SystemEventOptions {
   /** Event types to receive; omitted, every type this platform delivers. Each OS observer is installed only for subscriptions that include its events. */
   types?: readonly SystemEvent["type"][];
   /** Receives E_INVALID_DATA for a malformed native event. Without it, the error is rethrown asynchronously. */
   onError?: (error: SparkError) => void;
 }
+/**
+ * Calls `handler` for system events such as sleep, lock, power, network and appearance changes (macOS, Windows) until the registration is removed.
+ * Rejects E_INVALID_ARGUMENT for an empty or unknown type list and E_UNSUPPORTED_PLATFORM for a type this platform lacks.
+ */
 export async function onSystemEvent(handler: (event: SystemEvent) => void, value: SystemEventOptions = {}): Promise<AsyncRegistration> {
   if (typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected system event handler");
   options(value, ["types", "onError"]);

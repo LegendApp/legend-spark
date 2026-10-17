@@ -41,11 +41,14 @@ const token = (kind: string) => `clipboard-${kind}-${Date.now()}-${++sequence}`;
 export async function getStringAsync(options: GetStringOptions = {}): Promise<string> {
   return call("getString", { format: stringOptions(options, "preferredFormat") }, (value): value is string => typeof value === "string");
 }
+/** Expo-compatible: writes `text` as plain text or HTML (`inputFormat`) and resolves whether it was written. Rejects E_INVALID_ARGUMENT for non-string text. */
 export async function setStringAsync(text: string, options: SetStringOptions = {}): Promise<boolean> {
   if (typeof text !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Clipboard text must be a string");
   return call("setString", { text, format: stringOptions(options, "inputFormat") }, isBoolean);
 }
+/** Expo-compatible: whether the clipboard holds text, HTML or RTF. */
 export async function hasStringAsync(): Promise<boolean> { return call("hasString", {}, (value): value is boolean => typeof value === "boolean"); }
+/** Reads every supported representation on the clipboard (text, HTML, RTF, PNG image, file paths) on macOS and Windows. Rejects with E_INVALID_DATA for malformed native data. */
 export async function readClipboard(): Promise<ClipboardContent> {
   const raw = await invokeNative(() => callBinary(native(), "__sparkClipboardBinary", "read", {})) as Record<string, unknown>;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new SparkError("E_INVALID_DATA", "Invalid clipboard content");
@@ -64,7 +67,9 @@ export async function readClipboard(): Promise<ClipboardContent> {
   }
   return result;
 }
+/** The native format identifiers currently on the clipboard (pasteboard types on macOS, clipboard formats on Windows). */
 export async function getClipboardFormats(): Promise<string[]> { return call("formats", {}, (value): value is string[] => Array.isArray(value) && value.every(format => typeof format === "string")); }
+/** Removes all clipboard contents. */
 export async function clearClipboard(): Promise<void> { await call("clear", {}, isVoid); }
 /** The concealed/transient flags to send, checked against the platform. */
 function markers(options: object, extra: readonly string[] = []): { concealed?: true; transient?: true } {
@@ -77,6 +82,10 @@ function markers(options: object, extra: readonly string[] = []): { concealed?: 
   if (Object.keys(result).length) native("privacyMarkers");
   return result;
 }
+/**
+ * Replaces the clipboard with the given representations, written together. Files must be written alone.
+ * Concealed and transient markers are macOS only (E_UNSUPPORTED_PLATFORM elsewhere). Rejects E_INVALID_ARGUMENT or E_UNSUPPORTED_OPTION for bad content.
+ */
 export async function writeClipboard(content: ClipboardWriteContent, options: ClipboardWriteOptions = {}): Promise<void> {
   if (!content || typeof content !== "object" || Array.isArray(content)) throw new SparkError("E_INVALID_ARGUMENT", "Expected clipboard content");
   for (const key of Object.keys(content)) if (!["text", "html", "rtf", "image", "files"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown clipboard format: ${key}`);
