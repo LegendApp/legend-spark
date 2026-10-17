@@ -1,0 +1,23 @@
+appId: so.legend.spark.examples.kitchensink
+name: Plugins screen with Hello's panel mounted matches its goldens
+intent: >
+  With Hello loaded, its panel (a ThreadedReactSurface rendering in Hello's runtime) is mounted inside the Plugins
+  screen's ScrollView. Scrolled to the end, the scroll content around the panel and the panel itself match the approved
+  golden for the appearance and locale, with the shell sidebar masked. The surface's hosting view once filled white
+  over the clip view's whole visible rect, so everything the ScrollView showed was blank (#396).
+checks: [FUT-PLUGINVISUAL-02]
+tags: [future-facing-capabilities]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://future-facing-capabilities/plugins" }
+- tapOn: { id: future-facing-capabilities-plugins-hello-load }
+# A dev build's first worker in a run can wait for the worker entry the driver bundles in the background from session
+# start (scripts/e2e/bundle-server.ts): about 5 s with a warm Metro cache, so 30 s leaves room for a busy Mac.
+- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: loaded, timeout: 30s }
+- assertText: { id: future-facing-capabilities-plugins-panel-runtime, equals: "spark-plugin.so.legend.ks.hello · main: false" }
+- scroll: { on: { id: future-facing-capabilities-plugins-content }, direction: down, amount: 2000, precise: true }
+- assertVisible: { id: future-facing-capabilities-plugins-panel-hello-panel }
+- assertScreenshot: { golden: future-facing-capabilities-plugins-panel, mask: [{ id: infra-shell-sidebar }] }
