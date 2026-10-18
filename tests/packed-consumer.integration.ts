@@ -59,7 +59,7 @@ function verifyCliToolchain(consumer: string) {
   const sdk = require("@legendapp/spark/package.json");
   const cliManifestPath = path.join(consumer, "node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-cli/package.json");
   const cli = JSON.parse(readFileSync(cliManifestPath, "utf8"));
-  if (cli.dependencies.npm !== "11.21.0" || cli.dependencies.ws !== "8.21.0") throw new Error("Packed CLI dependency pins do not include the verified npm and WebSocket fixes");
+  if (cli.dependencies.npm !== "11.21.1" || cli.dependencies.ws !== "8.21.0") throw new Error("Packed CLI dependency pins do not include the verified npm and WebSocket fixes");
   const cliRequire = createRequire(realpathSync(cliManifestPath));
   const npmPath = cliRequire.resolve("npm/package.json");
   const npm = JSON.parse(readFileSync(npmPath, "utf8"));
@@ -67,9 +67,9 @@ function verifyCliToolchain(consumer: string) {
   const tar = JSON.parse(readFileSync(tarPath, "utf8"));
   const wsPath = cliRequire.resolve("ws/package.json");
   const ws = JSON.parse(readFileSync(wsPath, "utf8"));
-  if (npm.version !== "11.21.0" || npm.dependencies.tar !== "^7.5.22" || tar.version !== "7.5.22") throw new Error(`Packed CLI resolved npm ${npm.version} with bundled tar ${tar.version}; expected npm 11.21.0 with tar 7.5.22`);
+  if (npm.version !== "11.21.1" || npm.dependencies.tar !== "^7.5.22" || tar.version !== "7.5.22") throw new Error(`Packed CLI resolved npm ${npm.version} with bundled tar ${tar.version}; expected npm 11.21.1 with tar 7.5.22`);
   if (ws.version !== "8.21.0") throw new Error(`Packed CLI resolved ws ${ws.version}; expected 8.21.0`);
-  if (sdk.dependencies.npm !== "11.21.0" || sdk.dependencies.ws !== "8.21.0") throw new Error("Packed SDK public dependency manifest does not expose the verified CLI tool versions");
+  if (sdk.dependencies.npm !== "11.21.1" || sdk.dependencies.ws !== "8.21.0") throw new Error("Packed SDK public dependency manifest does not expose the verified CLI tool versions");
   return { npm: npm.version, tar: tar.version, ws: ws.version };
 }
 async function verifyCliRuntimes(consumer: string) {

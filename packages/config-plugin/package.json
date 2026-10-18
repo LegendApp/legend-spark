@@ -15,7 +15,7 @@
     "@legendapp/spark-window-options": "0.0.1-next.5",
     "@expo/config-plugins": "54.0.5",
     "@expo/config-types": "54.0.10",
-    "diff": "8.0.2"
+    "diff": "8.0.4"
   },
   "private": true
 }
