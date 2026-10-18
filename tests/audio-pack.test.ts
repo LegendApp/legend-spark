@@ -27,6 +27,7 @@ test("distributed audio archives apply the exact workspace delta and verify upst
     writeFileSync(path.join(root, "patches/workspace/upstream.json"), JSON.stringify({ "expo-audio": { version: "1.1.1", integrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}` } }));
     writeFileSync(path.join(root, "patches/workspace/expo-audio@1.1.1.patch"), patch);
     const manifest = await packAudio(root, output); const packed = path.join(output, manifest["expo-audio"]);
+    expect(execFileSync("tar", ["-tzf", packed], { encoding: "utf8" })).not.toContain("package/.spark/");
     const metadata = JSON.parse(execFileSync("tar", ["-xOf", packed, "package/package.json"], { encoding: "utf8" }));
     expect(metadata.spark).toMatchObject({ sdk: true, upstreamIntegrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`, patchHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
     for (const [relative, value] of expected) {

@@ -22,7 +22,7 @@ export async function packAudio(root: string, output: string) {
   }
   if (`sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}` !== pin.integrity) throw new Error("Integrity mismatch: expo-audio");
   const stage = path.join(cache, "stage"); rmSync(stage, { recursive: true, force: true }); mkdirSync(stage);
-  await run(stage, ["tar", "-xzf", archive, "--strip-components=1"], { capture: true });
+  await run(root, ["tar", "-xzf", archive, "--strip-components=1", "-C", stage], { capture: true });
   if (readJson(path.join(stage, "package.json")).version !== pin.version) throw new Error("Unexpected expo-audio version");
   const { parsePatch, applyPatch } = createRequire(import.meta.url)("diff");
   for (const patch of parsePatch(readFileSync(path.join(root, `patches/workspace/expo-audio@${pin.version}.patch`), "utf8"))) {
