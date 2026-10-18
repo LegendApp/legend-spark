@@ -9,7 +9,7 @@ Legend Spark adds native desktop APIs and a managed development workflow to Reac
 Requires Node 24.19.0 or newer. The single `@legendapp/spark` npm package contains the CLI and private implementation modules; no separate Spark module installs are needed. Bun is optional.
 
 ```sh
-npx @legendapp/spark@next create MyApp
+npm create @legendapp/spark@next MyApp
 cd MyApp
 npm run macos
 ```

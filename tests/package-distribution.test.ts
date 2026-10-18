@@ -225,6 +225,9 @@ test("Create Spark archive is peer-free and runs without installing the framewor
     const tar = spawnProcess(["tar", "-xzf", path.join(root, file), "--strip-components=1", "-C", destination]);
     expect(await tar.exited).toBe(0);
     const manifest = JSON.parse(readFileSync(path.join(destination, "package.json"), "utf8"));
+    expect(/\/(?:Users|home)\//.test(readFileSync(path.join(destination, manifest.bin["create-spark"]), "utf8"))).toBe(false);
+    expect(existsSync(path.join(destination, "README.md"))).toBe(true);
+    expect(existsSync(path.join(destination, "LICENSE"))).toBe(true);
     expect(manifest.name).toBe("@legendapp/create-spark");
     expect(manifest.version).toBe(VERSION);
     expect(manifest.private).toBeUndefined();
@@ -275,6 +278,7 @@ test("Create Spark archive is peer-free and runs without installing the framewor
     expect(JSON.parse(probeOut.trim().split("\n").at(-1)!)).toEqual({ version, release: { ...release, version } });
 
     for (const variant of ["blank-typescript", "windows", "universal"]) {
+      expect(existsSync(path.join(destination, "templates", variant, "README.md"))).toBe(true);
       const template = JSON.parse(readFileSync(path.join(destination, "templates", variant, "package.json"), "utf8"));
       expect(template.dependencies).toMatchObject({ "@legendapp/spark": VERSION, react: "19.1.4", "react-native": "0.81.6", expo: "54.0.37" });
       expect(template.overrides).toMatchObject({ react: "19.1.4", "react-native": "0.81.6", "react-native-macos": "0.81.7" });

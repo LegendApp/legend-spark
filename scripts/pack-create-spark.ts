@@ -16,9 +16,10 @@ export async function packCreateSpark(root: string, output: string, release?: Re
     // Bundle the shared create implementation, with only installer tooling external.
     // This avoids installing the SDK's React/Expo peers just to create an app.
     await run(root, ["bun", "build", path.join(source, "src/index.ts"), "--outdir", path.join(temporary, "dist"),
-      "--target=node", ...Object.keys(manifest.dependencies).flatMap(name => ["--external", name])], { capture: true });
+      "--target=node", "--define", "__dirname=import.meta.dirname", "--define", "__filename=import.meta.filename", ...Object.keys(manifest.dependencies).flatMap(name => ["--external", name])], { capture: true });
     cpSync(path.join(root, "packages/cli/src/npm-bin"), path.join(temporary, "dist/npm-bin"), { recursive: true });
     cpSync(path.join(root, "packages/cli/templates"), path.join(temporary, "templates"), { recursive: true });
+    cpSync(path.join(source, "README.md"), path.join(temporary, "README.md"));
     cpSync(path.join(root, "LICENSE"), path.join(temporary, "LICENSE"));
     writeFileSync(path.join(temporary, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
     if (release) writeFileSync(path.join(temporary, "dist/release.json"), JSON.stringify(validateRelease(release), null, 2) + "\n");
