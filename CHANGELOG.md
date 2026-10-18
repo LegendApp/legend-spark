@@ -9,6 +9,13 @@ macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 - Add native Markdown and HTML readers alongside editable rich text, with reviewed public exports.
 - Verify local SDK and creator tarballs by scaffolding, installing, and typechecking a fresh npm app in CI.
 - Rewrite the quick start and clarify platform support and prerelease installation.
+- Keep fresh apps compatible with Runner when native dependencies carry workspace patch receipts.
+- Preserve SidebarSplitView pane state and divider behavior.
+- Make nonrecursive directory removal preserve children created concurrently.
+- Remove build-machine paths and command logs from distributed archives, and include creator and starter READMEs.
+- Persist pnpm 11 installation settings, dependency overrides, and local archive build approvals during creation and upgrades.
+- Align the Markdown backend peer with the bundled 1.1.1 version.
+- Preserve Metro module data when Fast Refresh removes and reuses imports.
 
 ## 0.0.1-next.4 — preview
 
