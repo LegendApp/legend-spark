@@ -60,6 +60,33 @@ test("desktop keys follow host/target and leave Expo's existing shortcuts availa
   expect(commands("ios", "darwin")).toEqual([]);
 });
 
+test("Metro retains collected modules when an import transition reuses them", async () => {
+  const patches = preparePatch(root) as Map<string, string>;
+  const file = require.resolve("metro/private/DeltaBundler/Graph");
+  const exports: any = {};
+  new Function("require", "exports", patches.get(file) ?? readFileSync(file, "utf8"))(createRequire(file), exports);
+  const dependencies: Record<string, string[]> = {
+    "/entry": ["/left"], "/left": ["/right", "/shared"],
+    "/right": ["/left", "/shared"], "/shared": [], "/replacement": ["/shared"],
+  };
+  const options = {
+    transform: async (file: string) => ({
+      dependencies: dependencies[file]!.map(name => ({ name, data: { key: name, asyncType: null } })),
+      getSource: () => Buffer.from(""), output: [], unstable_transformResultKey: dependencies[file]!.join(","),
+    }),
+    resolve: (_from: string, dependency: { name: string }) => ({ filePath: dependency.name }),
+    lazy: false, shallow: false,
+  };
+  const graph = new exports.Graph({ entryPoints: new Set(["/entry"]), transformOptions: {} });
+  await graph.initialTraverseDependencies(options);
+  dependencies["/entry"] = ["/replacement"];
+  await graph.traverseDependencies(["/entry"], options);
+  expect([...graph.dependencies.keys()].sort()).toEqual(["/entry", "/replacement", "/shared"]);
+  dependencies["/entry"] = ["/left"];
+  await graph.traverseDependencies(["/entry"], options);
+  expect([...graph.dependencies.keys()].sort()).toEqual(["/entry", "/left", "/right", "/shared"]);
+});
+
 test("the patch rejects unsupported versions and modified upstream sources without writing installed files", () => {
   const patches = preparePatch(root) as Map<string, string>;
   const temp = mkdtempSync(path.join(os.tmpdir(), "spark-expo-patch-"));
@@ -72,16 +99,24 @@ test("the patch rejects unsupported versions and modified upstream sources witho
     writeFileSync(path.join(cli, "package.json"), JSON.stringify({ version: "unsupported" }));
     expect(() => preparePatch(temp)).toThrow(`require @expo/cli ${VERSION}`);
     writeFileSync(path.join(cli, "package.json"), JSON.stringify({ version: VERSION }));
+    const metro = path.join(temp, "node_modules/metro");
+    mkdirSync(metro);
+    writeFileSync(path.join(metro, "package.json"), JSON.stringify({ exports: { "./private/*": "./src/*.js" } }));
     for (const [file, patched] of patches) {
       const source = readFileSync(file, "utf8");
       expect(source).not.toContain("expo-dev-extension.cjs");
-      expect(patched).toContain("expo-dev-extension.cjs");
+      expect(patched).toContain(file.includes("/DeltaBundler/") ? "delta.baseModuleData.set" : "expo-dev-extension.cjs");
       expect(() => new Function("require", "module", "exports", patched)).not.toThrow();
-      const dest = path.join(cli, "build/src/start", file.split("/build/src/start/")[1]!);
+      const dest = file.includes("/DeltaBundler/") ? path.join(metro, "src/DeltaBundler/Graph.js") : path.join(cli, "build/src/start", file.split("/build/src/start/")[1]!);
       mkdirSync(path.dirname(dest), { recursive: true });
       writeFileSync(dest, source);
     }
-    expect(preparePatch(temp).size).toBe(3);
+    expect(preparePatch(temp).size).toBe(4);
+    const graph = path.join(metro, "src/DeltaBundler/Graph.js");
+    const original = readFileSync(graph, "utf8");
+    writeFileSync(graph, "changed upstream source");
+    expect(() => preparePatch(temp)).toThrow("Unsupported Metro graph source");
+    writeFileSync(graph, original);
     writeFileSync(path.join(cli, "build/src/start/interface/commandsTable.js"), "changed upstream source");
     expect(() => preparePatch(temp)).toThrow("Unsupported Expo CLI source");
   } finally { rmSync(temp, { recursive: true, force: true }); }
