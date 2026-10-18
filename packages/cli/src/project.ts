@@ -125,7 +125,7 @@ export function installedPackages(root: string): Package[] {
   }
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
-export function hashFiles(root: string, entries: string[], windows = false, excluded: string[] = []): string {
+export function hashFiles(root: string, entries: string[], windows = false, excluded: string[] = [], nativeSignature = false): string {
   const hash = createHash("sha256");
   function visit(relative: string) {
     if (excluded.includes(relative.split(path.sep).join("/"))) return;
@@ -145,7 +145,20 @@ export function hashFiles(root: string, entries: string[], windows = false, excl
       }
     } catch (error: any) {
       if (error.code !== "ENOTDIR") throw error;
-      hash.update(relative.split(path.sep).join("/")).update(readFileSync(file));
+      let content: string | Buffer = readFileSync(file);
+      if (nativeSignature && relative === "package.json") {
+        // Installation receipts and lifecycle scripts differ between workspace and packed copies.
+        const manifest = JSON.parse(content.toString());
+        delete manifest.scripts;
+        if (manifest.spark) {
+          delete manifest.spark.workspacePatch;
+          delete manifest.spark.dependencyPatch;
+          delete manifest.spark.patchHash;
+          if (!Object.keys(manifest.spark).length) delete manifest.spark;
+        }
+        content = JSON.stringify(manifest);
+      }
+      hash.update(relative.split(path.sep).join("/")).update(content);
     }
   }
   for (const entry of entries.sort()) visit(entry);
@@ -171,7 +184,7 @@ export function nativePackages(root: string, { applyExcludes = true } = {}): Nat
   // Host/CNG code can change the native ABI without adding a TurboModule.
   // Fold it into the mandatory app module's compatibility signature for Go.
   const adapters = installed.filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
-    .map(pkg => hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "SparkCustomize.mm", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))])).join(":");
+    .map(pkg => hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "SparkCustomize.mm", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))], false, [], true)).join(":");
   return installed.filter(pkg => !applyExcludes || !excluded.includes(pkg.name))
     .filter(
       (pkg) =>
@@ -200,7 +213,7 @@ export function nativePackages(root: string, { applyExcludes = true } = {}): Nat
         ...readdirSync(pkg.root).filter((name) => name.endsWith(".podspec")),
       ], false, pkg.name === "react-native-enriched-markdown"
         // Postinstall restores these assets; their pinned manifests are hashed above.
-        ? ["cpp/highlight/vendor/grammars", "cpp/highlight/vendor/tree-sitter", "ios/vendor"] : [])),
+        ? ["cpp/highlight/vendor/grammars", "cpp/highlight/vendor/tree-sitter", "ios/vendor"] : [], true)),
     }));
 }
 export function dependencyStamp(root: string) {
@@ -451,10 +464,10 @@ function windowsNativePackages(root: string, installed: Package[]): NativePackag
     }
   }
   const adapter = installed.filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
-    .map(pkg => hashFiles(pkg.root, ["package.json", "windows", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))], true)).join(":");
+    .map(pkg => hashFiles(pkg.root, ["package.json", "windows", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))], true, [], true)).join(":");
   const versions = installed.filter(pkg => ["react", "expo", "react-native", "react-native-windows"].includes(pkg.name)).map(pkg => [pkg.name, pkg.json.version]);
   return installed.filter(supported).map(pkg => ({ ...pkg,
     sdk: pkg.json.spark?.sdk === true || pkg.name === "@react-native-async-storage/async-storage", requires: pkg.json.spark?.requires ?? [],
-    signature: digest(hashFiles(pkg.root, ["package.json", "windows", "src", "cpp", "common", "react-native.config.js"], true) + (pkg.name === "@legendapp/spark-desktop-host" ? adapter + JSON.stringify(versions) : "")),
+    signature: digest(hashFiles(pkg.root, ["package.json", "windows", "src", "cpp", "common", "react-native.config.js"], true, [], true) + (pkg.name === "@legendapp/spark-desktop-host" ? adapter + JSON.stringify(versions) : "")),
   }));
 }
