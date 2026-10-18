@@ -17,6 +17,7 @@ macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 - Align the Markdown backend peer with the bundled 1.1.1 version.
 - Preserve Metro module data when Fast Refresh removes and reuses imports. Keep native component specs registered once across remove/re-add transitions, including recovery from failed updates.
 - Keep new and refreshed pnpm 10 apps' native peers on the SDK's patched Nitro archive.
+- Include authoritative Audio and Nitro licenses and provenance in patched archives; record the missing upstream Runtimes license text.
 
 ## 0.0.1-next.4 — preview
 

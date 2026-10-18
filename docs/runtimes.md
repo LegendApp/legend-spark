@@ -34,6 +34,12 @@ Keep a named runtime around for repeated jobs when retaining its heap is useful.
 
 Arguments/results use JSON serialization in this pinned version. Use plain serializable data; functions, cyclic objects, BigInt, native handles and class instances are unsuitable. An `async` task can use timers and return a result or throw an error. A worker's imports execute in its own heap. Native filesystem access is verified; native libraries with UI ownership, singleton state or event emitters need separate multi-runtime verification. Keep window/menu/UI operations on the main runtime.
 
+## Upstream attribution
+
+The pinned core revision [`58710c25c6e505dcc1292ee54d855408a6f7a42d`](https://github.com/margelo/react-native-runtimes/tree/58710c25c6e505dcc1292ee54d855408a6f7a42d) declares `MIT` in [its package metadata](https://github.com/margelo/react-native-runtimes/blob/58710c25c6e505dcc1292ee54d855408a6f7a42d/packages/core/package.json), but its complete Git tree contains no LICENSE or NOTICE file. The [repository named in that metadata](https://github.com/Szymon20000/react-native-runtimes/tree/58710c25c6e505dcc1292ee54d855408a6f7a42d) and the upstream [`@react-native-runtimes/core@0.1.0-alpha.2` npm archive](https://registry.npmjs.org/@react-native-runtimes/core/-/core-0.1.0-alpha.2.tgz) were also checked; no complete license text was found. The npm archive's pinned integrity is `sha512-of6A8BXTnIziF/+CaDQmIY0saC+5TpegJhs4CCkRXIhspWluSt3AcI/hYBwgHimJxH8BIsXpQ6JJT0EFZfq25g==`.
+
+Upstream license text remains outstanding. Spark does not supply invented copyright or license text for this dependency.
+
 ## Development and production
 
 New projects have the required Metro wrapper and worker-aware entry. No app config flag, config plugin or manual native-module manifest entry is needed.
