@@ -4,14 +4,18 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { applyVersionEdits, nextVersion, releaseWorkflow, signingProject, verifyReleaseArchive, versionEdits, type Execute } from "../scripts/release-workflow.ts";
-import { alreadyPublished, releaseNotes } from "../scripts/npm-release.ts";
+import { applyVersionEdits, releaseTarget, releaseWorkflow, signingProject, verifyReleaseArchive, versionEdits, type Execute } from "../scripts/release-workflow.ts";
+import { alreadyPublished, changelogSection, releaseNotes } from "../scripts/npm-release.ts";
 import { credentials } from "../packages/cli/src/credentials.ts";
 import { loadReleaseEnv } from "../scripts/release-env.ts";
 
-test("next preview version exceeds local and registry versions without using another series", () => {
-  expect(nextVersion("0.0.1-next.2", ["0.0.1-next.4", "0.0.2-next.30", "0.0.1-next.bad"])).toBe("0.0.1-next.5");
-  expect(() => nextVersion("0.0.1", [])).toThrow("Expected a next preview");
+test("release targets advance published versions and retain unpublished workspace versions", () => {
+  expect(releaseTarget("0.0.1-next.2", ["0.0.1-next.2", "0.0.1-next.4", "0.0.2-next.30"])).toEqual({ version: "0.0.1-next.5", previous: "v0.0.1-next.2" });
+  expect(releaseTarget("0.0.1-next.5", ["0.0.1-next.4", "0.0.1-next.2", "0.0.2-next.30", "0.0.1-next.bad"])).toEqual({ version: "0.0.1-next.5", previous: "v0.0.1-next.4" });
+  expect(releaseTarget("0.0.1-next.12", ["0.0.1-next.9", "0.0.1-next.10"])).toEqual({ version: "0.0.1-next.12", previous: "v0.0.1-next.10" });
+  expect(() => releaseTarget("0.0.1-next.3", ["0.0.1-next.2", "0.0.1-next.4"])).toThrow("higher 0.0.1-next. version is already published");
+  expect(() => releaseTarget("0.0.1-next.3", ["0.0.2-next.2", "0.0.1-next.bad"])).toThrow("No previous published 0.0.1-next. version below 0.0.1-next.3");
+  expect(() => releaseTarget("0.0.1", [])).toThrow("Expected a next preview");
 });
 
 test("release environment loading works without process.loadEnvFile and preserves shell values", () => {
@@ -107,6 +111,88 @@ function fixture() {
   const finish = (runner: Execute = execute, latest = false) => releaseWorkflow(root, { resume: false, latest, finish: true }, runner, async () => { throw new Error("Signing must not run"); }, () => { throw new Error("Runner must not be consulted"); });
   return { root, git, write, commands, tags, createTags, release, finish, execute, setFailures: (test: boolean, runner: boolean, publish: boolean) => { failTest = test; pendingRunner = runner; failPublish = publish; }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
+
+test.each(["hand-written", "generated"])("pre-bumped releases use the workspace version with %s notes", async notes => {
+  const f = fixture();
+  try {
+    const historical = readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8");
+    const changelog = notes === "hand-written" ? historical.replace("# Changelog\n", "# Changelog\n\n## 0.0.1-next.3 — preview\n\nHand-written release notes.\n") : historical;
+    f.write("CHANGELOG.md", changelog);
+    applyVersionEdits(f.root, versionEdits(f.root, f.git("ls-files").split("\n"), "0.0.1-next.2", "0.0.1-next.3", "unused"));
+    f.write("docs/release-support-matrix.json", '{"version":"0.0.1-next.3","entries":[]}\n');
+    if (notes === "generated") f.write("CHANGELOG.md", changelog);
+    else expect(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8")).toBe(changelog);
+    // With hand-written notes, the only commit since the previous tag can be bookkeeping.
+    if (notes === "hand-written") f.git("tag", "-f", "v0.0.1-next.2");
+    f.git("add", "."); f.git("commit", "-m", "release: prepare 0.0.1-next.3");
+    const revision = f.git("rev-parse", "HEAD");
+    f.setFailures(true, true, false);
+    await expect(f.release()).rejects.toThrow("Test failure");
+    const stateFile = path.join(f.root, ".spark/release-workflow.json");
+    const state = JSON.parse(readFileSync(stateFile, "utf8"));
+    expect(state.revision).toBe(notes === "hand-written" ? revision : undefined);
+    expect(await f.release(true)).toBe(2);
+    if (notes === "generated") {
+      // Recover the CHANGELOG-only commit if its checkpoint was lost.
+      writeFileSync(stateFile, JSON.stringify(state));
+    }
+    expect(await f.release(true)).toBe(0);
+    const result = readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8");
+    expect(result.match(/^## 0\.0\.1-next\.3(?: — preview)?$/gm)).toHaveLength(1);
+    expect(f.git("rev-parse", "v0.0.1-next.3")).toBe(f.git("rev-parse", "HEAD"));
+    const commits = f.commands.filter(args => args[0] === "git" && args[1] === "commit");
+    if (notes === "hand-written") {
+      expect(result).toBe(changelog);
+      expect(releaseNotes(result, "0.0.1-next.3")).toBe("Hand-written release notes.");
+      expect(f.git("rev-parse", "v0.0.1-next.3")).toBe(revision);
+      expect(commits).toHaveLength(0);
+    } else {
+      expect(releaseNotes(result, "0.0.1-next.3")).toContain("- Fix a native lifecycle");
+      expect(f.git("diff", "--name-only", revision, "HEAD")).toBe("CHANGELOG.md");
+      expect(commits).toHaveLength(1);
+      expect(f.git("log", "-1", "--format=%s")).toBe("release: prepare 0.0.1-next.3");
+    }
+  } finally { f.cleanup(); }
+});
+
+test.each([
+  ["packages/cli/src/project.ts", 'export const VERSION = "wrong";\n', "CLI version"],
+  ["docs/release-support-matrix.json", '{"version":"wrong"}', "Release support matrix version"],
+  ["docs/release-support-matrix.md", "wrong", "Release support matrix documentation"],
+] as const)("pre-bumped releases still validate %s", (file, content, error) => {
+  const f = fixture();
+  try {
+    f.write(file, content);
+    expect(() => versionEdits(f.root, [file], "0.0.1-next.2", "0.0.1-next.2", "")).toThrow(error);
+  } finally { f.cleanup(); }
+});
+
+test("generated notes omit merges, reverts and release preparation commits", async () => {
+  const f = fixture();
+  try {
+    f.git("checkout", "-b", "feature", "HEAD^");
+    f.write("runner.ts", "export const runner = true;\n"); f.git("add", "."); f.git("commit", "-m", "Release Runner installation locks correctly");
+    f.git("checkout", "main"); f.git("merge", "--no-ff", "feature", "-m", "Merge feature");
+    for (const subject of ['Revert "x"', "revert: undo y", "release: prepare 0.0.1-next.2", "RELEASE(cli): prepare creator"]) f.git("commit", "--allow-empty", "-m", subject);
+    expect(await f.release()).toBe(0);
+    const notes = releaseNotes(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8"), "0.0.1-next.3");
+    const [support, changes] = notes.split("\n\n");
+    expect(support).toBe("macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified");
+    expect(changes!.split("\n").sort()).toEqual(["- Fix a native lifecycle", "- Release Runner installation locks correctly"]);
+  } finally { f.cleanup(); }
+});
+
+test("generated notes require changes after filtering release bookkeeping", async () => {
+  const f = fixture();
+  try {
+    f.git("reset", "--hard", "v0.0.1-next.2");
+    f.git("commit", "--allow-empty", "-m", 'Revert "x"');
+    f.git("commit", "--allow-empty", "-m", "release: prepare 0.0.1-next.2");
+    f.git("update-ref", "refs/remotes/origin/main", "HEAD");
+    await expect(f.release()).rejects.toThrow("No new committed changes since the previous release");
+    expect(existsSync(path.join(f.root, ".spark/release-workflow.json"))).toBe(false);
+  } finally { f.cleanup(); }
+});
 
 test("failed checks, pending notarization and interrupted promotion resume one version, commit and archive", async () => {
   const f = fixture();
@@ -316,11 +402,13 @@ test("resume refuses new source commits and preserves unrelated drafts", async (
   } finally { f.cleanup(); }
 });
 
-test("GitHub notes include only the selected release", () => {
-  const changelog = "# Changelog\n\n## 0.0.1-next.3 — preview\n\nNew fixes.\n\n## 0.0.1-next.2 — preview\n\nOld fixes.\n";
-  expect(releaseNotes(changelog, "0.0.1-next.3")).toBe("New fixes.");
-  expect(releaseNotes(changelog, "0.0.1-next.2")).toBe("Old fixes.");
-  expect(() => releaseNotes(changelog, "missing")).toThrow("Missing changelog");
+test.each(["", " — preview"])("GitHub notes match the exact selected heading with suffix '%s'", suffix => {
+  const changelog = `# Changelog\n\n## 0.0.1-next.50 — preview\n\nFuture fixes.\n\n## 0.0.1-next.5${suffix}\n\nHand-written fixes.\n\n## 0.0.1-next.4 — preview\n\nOld fixes.\n`;
+  expect(releaseNotes(changelog, "0.0.1-next.5")).toBe("Hand-written fixes.");
+  expect(releaseNotes(changelog, "0.0.1-next.4")).toBe("Old fixes.");
+  expect(changelogSection(changelog.replace(`## 0.0.1-next.5${suffix}\n`, ""), "0.0.1-next.5")).toBeUndefined();
+  expect(changelogSection(changelog.replaceAll("0.0.1-next.5", "0x0x1-nextx5"), "0.0.1-next.5")).toBeUndefined();
+  expect(() => releaseNotes(changelog, "0.0.1-next.6")).toThrow("Missing changelog notes for 0.0.1-next.6");
 });
 
 test("signing preflight supplies the app configuration required by the shared credential helper", async () => {
