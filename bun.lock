@@ -459,7 +459,7 @@
       "peerDependencies": {
         "react": "^19.1.0",
         "react-native": "0.81.6",
-        "react-native-enriched-markdown": "1.0.2",
+        "react-native-enriched-markdown": "1.1.1",
       },
       "optionalPeers": [
         "react-native-enriched-markdown",

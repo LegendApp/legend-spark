@@ -155,6 +155,7 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(normalized.bundledDependencies).toBeUndefined();
     expect(Object.keys(normalized.dependencies).some(name => name.startsWith("@legendapp/spark-"))).toBe(false);
     for (const name of singletonPeers) expect(normalized.dependencies).not.toHaveProperty(name);
+    expect(JSON.parse(readFileSync(path.join(destination, "vendor/node_modules/@legendapp/spark-markdown/package.json"), "utf8")).peerDependencies["react-native-enriched-markdown"]).toBe(manifest.dependencies["react-native-enriched-markdown"]);
     expect(manifest.spark.bundledModuleRoot).toBe("vendor");
     expect(existsSync(path.join(destination, "node_modules"))).toBe(false);
     expect(readFileSync(path.join(destination, "config.d.cts"), "utf8")).toContain("./vendor/node_modules/");
