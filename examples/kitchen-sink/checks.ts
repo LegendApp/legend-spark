@@ -46,7 +46,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
     await check("app: identity and runtime metadata", async () => {
       const context = await app.getAppContext();
       assert(context.projectId.length && context.name.length && context.runtime.mode, "Missing host identity");
-      assert(context.runtime.modules?.["@legendapp/spark/app"], "Host core missing from runtime inventory");
+      assert(context.runtime.modules?.["@legendapp/spark-desktop-app"], "Host core missing from runtime inventory");
     });
     await check("files: scoped directories, text, binary, stat, list, copy, move, deletion", async () => {
       const data = await files.getDirectory("data"); const cache = await files.getDirectory("cache");
@@ -57,7 +57,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       await files.writeBytes(`${root}/binary`, new Uint8Array([0, 1, 2, 255]));
       assert(String(await files.readBytes(`${root}/binary`)) === "0,1,2,255", "Binary roundtrip");
       await files.copy(`${root}/text.txt`, `${root}/copy`);
-      await rejects(() => files.copy(`${root}/text.txt`, `${root}/copy`), "E_EXISTS");
+      await rejects(() => files.copy(`${root}/text.txt`, `${root}/copy`), "E_ALREADY_EXISTS");
       await files.move(`${root}/copy`, `${root}/moved`);
       assert(!await files.exists(`${root}/copy`) && await files.exists(`${root}/moved`), "Move did not move");
       assert((await files.list(root)).some(entry => entry.name === "moved"), "Directory listing");
