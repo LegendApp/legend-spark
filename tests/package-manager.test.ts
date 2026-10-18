@@ -49,6 +49,20 @@ test("override conversion keeps pins and writes each manager's supported field",
     expect(pkg.dependencies["@legendapp/spark"]).toBe("file:/tmp/frame.tgz");
   }
 });
+test("pnpm archive overrides provide the native peer at the installation root", () => {
+  const archive = "file:./spark-packages/nitro.tgz";
+  for (const manager of ["npm", "yarn", "bun", "pnpm"] as const) {
+    const pkg: any = { dependencies: { "@legendapp/spark": "0.0.1-next.5" } };
+    applyOverrides(pkg, { "react-native-nitro-modules": archive }, manager);
+    expect(pkg.dependencies["react-native-nitro-modules"]).toBe(manager === "pnpm" ? archive : undefined);
+    if (manager === "pnpm") {
+      expect(pkg.pnpm.overrides["react-native-nitro-modules"]).toBe(archive);
+      applyOverrides(pkg, { "react-native-nitro-modules": "file:./spark-packages/new-nitro.tgz" }, manager);
+      expect(pkg.dependencies["react-native-nitro-modules"]).toBe("file:./spark-packages/new-nitro.tgz");
+    }
+  }
+});
+
 test("all package manager overrides preserve portable release archive references", () => {
   const source = "file:./spark-packages/react-native-webview-" + "a".repeat(64) + ".tgz";
   for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {

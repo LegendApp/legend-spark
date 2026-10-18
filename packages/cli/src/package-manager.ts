@@ -29,6 +29,10 @@ export function managerCommand(manager: PackageManager, args: string[], env: Rec
     : [manager, ...args];
 }
 export function applyOverrides(pkg: any, overrides: Record<string, string>, manager: PackageManager) {
+  // pnpm 10 can auto-install a registry peer beside an overridden file archive.
+  // Provide Nitro at the installation root so camera/runtimes peers share the patched copy.
+  const nitro = overrides["react-native-nitro-modules"];
+  if (manager === "pnpm" && nitro?.startsWith("file:")) pkg.dependencies = { ...pkg.dependencies, "react-native-nitro-modules": nitro };
   const existing = { ...pkg.overrides, ...pkg.resolutions, ...pkg.pnpm?.overrides };
   delete pkg.overrides;
   delete pkg.resolutions;
