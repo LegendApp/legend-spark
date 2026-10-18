@@ -1,3 +1,4 @@
+import { writePackageConfig } from "./package-manager-config.ts";
 import { initializeTemplate } from "./init-template.cjs";
 import { installedSparkVersion, migrateProject, refreshPointers } from "./migrations.cjs";
 import { creationManifest } from "./local.ts";
@@ -13,7 +14,7 @@ import path from "node:path";
 import os from "node:os";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
-import { readJson, writeJson } from "./json.ts";
+import { readJson } from "./json.ts";
 import { run } from "./commands.ts";
 
 // Resolve relative to the installed CLI so packed consumers use the same starter.
@@ -37,7 +38,7 @@ export async function refreshLocalPackages(root: string, manifest: string, selec
     if (pkg.allowScripts?.[name]) pkg.allowScripts[archive] = true;
   }
   applyOverrides(pkg, overrides, manager);
-  writeJson(path.join(root, "package.json"), pkg);
+  writePackageConfig(root, pkg, manager);
   await run(root, managerCommand(manager, ["install"]));
   upgradeManagedEntry(root);
 }
@@ -68,10 +69,9 @@ export async function create(root: string, archiveManifest: string | undefined, 
       if (pkg.allowScripts?.[name]) pkg.allowScripts[file] = true;
     }
     applyOverrides(pkg, overrides, manager);
-    writeJson(path.join(temporary, "package.json"), pkg);
+    writePackageConfig(temporary, pkg, manager, root);
 
     if (manager === "yarn") writeFileSync(path.join(temporary, ".yarnrc.yml"), "nodeLinker: node-modules\n");
-    if (manager === "pnpm") writeFileSync(path.join(temporary, ".npmrc"), "node-linker=hoisted\n");
     await packArchive(temporary, templateFile);
     if (release) verifyMaterializedReleasePackages(release, temporary);
     // The upstream CLI owns validation, extraction, app IDs, install, and Git setup.

@@ -18,7 +18,8 @@
     "typescript": "5.9.3",
     "cross-spawn": "7.0.6",
     "@legendapp/spark-window-options": "0.0.1-next.5",
-    "diff": "8.0.2"
+    "diff": "8.0.2",
+    "yaml": "2.9.1"
   },
   "private": true
 }

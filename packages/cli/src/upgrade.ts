@@ -1,3 +1,4 @@
+import { writePackageConfig } from "./package-manager-config.ts";
 import { createRequire } from "node:module";
 import { mkdtempSync, rmSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -69,6 +70,7 @@ export async function upgrade(root: string, dryRun = false) {
     // Keep the old receipt until installation and finalization both succeed.
     targetMigrations.applyMigrationPlan(root, plan, false);
     upgradeDependencyPins(root, false, pins, requiredOverrides);
+    writePackageConfig(root, readJson(path.join(root, "package.json")), manager);
     await run(root, managerCommand(manager, ["install"]));
     const req = createRequire(path.join(root, "package.json"));
     // Read fresh bytes: the running process may have cached the old manifest.

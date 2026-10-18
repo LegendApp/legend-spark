@@ -235,7 +235,7 @@ test("Create Spark archive is peer-free and runs without installing the framewor
     expect(manifest.bin).toEqual({ "create-spark": "dist/index.js" });
     expect(manifest.files).toEqual(["dist", "templates"]);
     expect(manifest.peerDependencies).toBeUndefined();
-    expect(Object.keys(manifest.dependencies).sort()).toEqual(["cross-spawn", "expo-desktop", "npm"]);
+    expect(Object.keys(manifest.dependencies).sort()).toEqual(["cross-spawn", "expo-desktop", "npm", "yaml"]);
     for (const name of ["react", "react-dom", "react-native", "react-native-macos", "expo", "@legendapp/spark"]) {
       expect(manifest.dependencies).not.toHaveProperty(name);
       expect(manifest.optionalDependencies ?? {}).not.toHaveProperty(name);
@@ -245,7 +245,7 @@ test("Create Spark archive is peer-free and runs without installing the framewor
     const tooling = createRequire(path.join(framework, "packages/cli/package.json"));
     // Supply just cross-spawn for this isolated launcher check; npm e2e installs the full tooling graph.
     cpSync(path.dirname(tooling.resolve("cross-spawn/package.json")), path.join(destination, "node_modules/cross-spawn"), { recursive: true });
-    for (const name of ["path-key", "shebang-command", "shebang-regex", "which", "isexe"]) {
+    for (const name of ["path-key", "shebang-command", "shebang-regex", "which", "isexe", "yaml"]) {
       cpSync(path.dirname(tooling.resolve(`${name}/package.json`)), path.join(destination, "node_modules", name), { recursive: true });
     }
     const help = spawnProcess(["node", path.join(destination, manifest.bin["create-spark"]), "--help"], { cwd: root });
