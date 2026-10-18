@@ -15,7 +15,7 @@ macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 - Remove build-machine paths and command logs from distributed archives, and include creator and starter READMEs.
 - Persist pnpm 11 installation settings, dependency overrides, and local archive build approvals during creation and upgrades.
 - Align the Markdown backend peer with the bundled 1.1.1 version.
-- Preserve Metro module data when Fast Refresh removes and reuses imports.
+- Preserve Metro module data when Fast Refresh removes and reuses imports. Keep native component specs registered once across remove/re-add transitions, including recovery from failed updates.
 
 ## 0.0.1-next.4 — preview
 

@@ -38,14 +38,31 @@ function preparePatch(root) {
   const graph = fs.realpathSync(createRequire(manifest).resolve('metro/private/DeltaBundler/Graph'));
   const source = fs.readFileSync(graph, 'utf8');
   const before = '  _freeModule(module, delta) {\n    if (delta.added.has(module.path)) {';
-  if (source.split(before).length !== 2) throw new Error('Unsupported Metro graph source. Update the Spark Metro patch before starting desktop development.');
+  const methods = ['traverseDependencies', 'initialTraverseDependencies'];
+  if (source.split(before).length !== 2 || methods.some(name => !source.includes(`  async ${name}(`))) throw new Error('Unsupported Metro graph source. Update the Spark Metro patch before starting desktop development.');
   // Metro snapshots released modules, but its cycle collector also frees modules
   // that the same update may reimport. Retain their data before collecting them.
   result.set(graph, source.replace(before, `  _freeModule(module, delta) {
     if (!delta.updatedModuleData.has(module.path) && !delta.baseModuleData.has(module.path)) {
       delta.baseModuleData.set(module.path, this._moduleSnapshot(module));
     }
-    if (delta.added.has(module.path)) {`));
+    if (delta.added.has(module.path)) {`) + `
+// The HMR client keeps removed modules. Re-adding a collected native spec would
+// hot-evaluate its view registration again. Promote specs only after the entire
+// graph transaction succeeds, so failed updates can roll back their additions.
+for (const name of ${JSON.stringify(methods)}) {
+  const traverse = exports.Graph.prototype[name];
+  exports.Graph.prototype[name] = async function(...args) {
+    const delta = await traverse.apply(this, args);
+    if (this.transformOptions.dev) {
+      for (const path of delta.added.keys()) {
+        if (/NativeComponent\\.[jt]sx?$/.test(path)) this.entryPoints.add(path);
+      }
+    }
+    return delta;
+  };
+}
+`);
   return result;
 }
 

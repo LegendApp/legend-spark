@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import { createRequire } from "node:module";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import { createContext, runInContext } from "node:vm";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
@@ -85,6 +86,91 @@ test("Metro retains collected modules when an import transition reuses them", as
   dependencies["/entry"] = ["/left"];
   await graph.traverseDependencies(["/entry"], options);
   expect([...graph.dependencies.keys()].sort()).toEqual(["/entry", "/left", "/right", "/shared"]);
+});
+
+test("Fast Refresh remove/re-add retains native specs without repeating registration", async () => {
+  const patches = preparePatch(root) as Map<string, string>;
+  const file = require.resolve("metro/private/DeltaBundler/Graph");
+  const exports: any = {};
+  new Function("require", "exports", patches.get(file)!)(createRequire(file), exports);
+  const { default: hmrJSBundle } = require("metro/private/DeltaBundler/Serializers/hmrJSBundle");
+  const native = ["EnrichedMarkdownText", "EnrichedMarkdown", "EnrichedMarkdownTextInput"];
+  const specs = native.map(name => `/${name}NativeComponent.ts`);
+  const dependencies: Record<string, string[]> = { "/entry": ["/screen"], "/screen": specs };
+  const bodies: Record<string, string> = {
+    "/entry": 'module.hot.accept(); global.screen = require(dependencyMap[0]);',
+    "/screen": `module.hot.accept(); ${specs.map((_, i) => `require(dependencyMap[${i}]);`).join(" ")} module.exports = "markdown";`,
+    "/text": 'module.hot.accept(); module.exports = "text";',
+  };
+  for (const [i, spec] of specs.entries()) bodies[spec] = `global.register(${JSON.stringify(native[i])}); module.exports = ${JSON.stringify(native[i])};`;
+  const options = {
+    transform: async (file: string) => {
+      if (file === "/broken") throw new Error("broken dependency");
+      return {
+        dependencies: (dependencies[file] ?? []).map(name => ({ name, data: { key: name, asyncType: null } })),
+        getSource: () => Buffer.from(bodies[file]!),
+        output: [{ type: "js/module", data: { code: `__d(function(global, require, _importDefault, _importAll, module, exports, dependencyMap) { ${bodies[file]} });`, lineCount: 1 } }],
+        unstable_transformResultKey: bodies[file],
+      };
+    },
+    resolve: (_from: string, dependency: { name: string }) => ({ filePath: dependency.name }),
+    lazy: false, shallow: false,
+  };
+  const graph = new exports.Graph({ entryPoints: new Set(["/entry"]), transformOptions: { dev: true } });
+  const registered = new Set<string>(), errors: unknown[] = [];
+  const context = createContext({ __DEV__: true, __METRO_GLOBAL_PREFIX__: "", console, setTimeout,
+    register(name: string) { if (registered.has(name)) throw new Error(`Duplicate native registration: ${name}`); registered.add(name); },
+    ErrorUtils: { reportFatalError: (error: unknown) => errors.push(error) },
+  });
+  runInContext('global = this;', context);
+  runInContext(readFileSync(require.resolve("metro-runtime/src/polyfills/require.js"), "utf8"), context);
+  const ids = new Map<string, number>();
+  const serialize = (delta: any) => hmrJSBundle(delta, graph, {
+    clientUrl: new URL("http://localhost/index.bundle?platform=macos"), projectRoot: "/", serverRoot: "/",
+    createModuleId(file: string) { if (!ids.has(file)) ids.set(file, ids.size); return ids.get(file); },
+  });
+  const inject = (delta: any) => { const update = serialize(delta); for (const item of [...update.added, ...update.modified]) runInContext(item.module[1], context); };
+  inject(await graph.initialTraverseDependencies(options));
+  runInContext(`__r(${ids.get("/entry")});`, context);
+  for (let cycle = 0; cycle < 4; cycle++) {
+    dependencies["/entry"] = ["/text"];
+    inject(await graph.traverseDependencies(["/entry"], options));
+    expect(context.screen).toBe("text");
+    expect(graph.dependencies.has("/screen")).toBe(false);
+    dependencies["/entry"] = ["/screen"];
+    inject(await graph.traverseDependencies(["/entry"], options));
+    expect(context.screen).toBe("markdown");
+    expect(errors).toEqual([]);
+  }
+  expect([...registered]).toEqual(native);
+  // A native spec encountered in an unsuccessful transaction must not become a root.
+  const late = "/LateNativeComponent.ts";
+  bodies[late] = 'global.register("LateNative"); module.exports = "LateNative";';
+  const previousPaths = [...graph.dependencies.keys()].sort();
+  dependencies["/entry"] = ["/screen", late, "/broken"];
+  await expect(graph.traverseDependencies(["/entry"], options)).rejects.toThrow("broken dependency");
+  expect(graph.entryPoints.has(late)).toBe(false);
+  expect([...graph.dependencies.keys()].sort()).toEqual(previousPaths);
+  dependencies["/entry"] = ["/screen"];
+  inject(await graph.traverseDependencies(["/entry"], options));
+  graph.reorderGraph({ shallow: false }); // The same reset used for a full bundle.
+  expect([...graph.dependencies.keys()].sort()).toEqual(previousPaths);
+  dependencies["/entry"] = ["/screen", late];
+  const retry = await graph.traverseDependencies(["/entry"], options);
+  expect(retry.added.has(late)).toBe(true);
+  inject(retry);
+  runInContext(`__r(${ids.get(late)});`, context);
+  dependencies["/entry"] = ["/screen"];
+  inject(await graph.traverseDependencies(["/entry"], options));
+  graph.reorderGraph({ shallow: false });
+  expect(graph.dependencies.has(late)).toBe(true);
+  expect(errors).toEqual([]);
+  // Production dependency discovery must still prune unused native modules.
+  const production = new exports.Graph({ entryPoints: new Set(["/entry"]), transformOptions: { dev: false } });
+  await production.initialTraverseDependencies(options);
+  dependencies["/entry"] = ["/text"];
+  await production.traverseDependencies(["/entry"], options);
+  expect([...production.dependencies.keys()].sort()).toEqual(["/entry", "/text"]);
 });
 
 test("the patch rejects unsupported versions and modified upstream sources without writing installed files", () => {
