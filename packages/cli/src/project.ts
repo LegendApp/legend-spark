@@ -1,3 +1,4 @@
+import { assertEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { nativeWindowOptions } from "@legendapp/spark-window-options";
 import { prepareNativePatches } from "@legendapp/spark-desktop-config/native-patches.cjs";
 import { macOSReleaseSettings } from "./macos-release.ts";
@@ -165,6 +166,7 @@ export function hashFiles(root: string, entries: string[], windows = false, excl
   return hash.digest("hex");
 }
 export function nativePackages(root: string, { applyExcludes = true } = {}): NativePackage[] {
+  assertEnrichedHtmlPins(root);
   prepareNativePatches(root);
   const installed = installedPackages(root);
   if (projectPlatform(root) === "windows") return windowsNativePackages(root, installed);

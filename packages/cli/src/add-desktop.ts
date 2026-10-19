@@ -1,10 +1,10 @@
+import { installWithEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { installedRelease, materializeReleasePackages, packageSources, verifyMaterializedReleasePackages } from "./release.ts";
-import { packageManager, managerCommand, localArchive } from "./package-manager.ts";
+import { packageManager, localArchive } from "./package-manager.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import ts from "typescript";
-import { run } from "./commands.ts";
 import { readJson, writeJson } from "./project.ts";
 
 export const integrationMarker = "// spark: existing Expo project";
@@ -87,7 +87,7 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
         if (!ignore.includes("!/spark-packages/**")) writeFileSync(ignoreFile, `${ignore}${ignore.endsWith("\n") || !ignore ? "" : "\n"}\n# Spark verified release package inputs\n!/spark-packages/\n!/spark-packages/**\n`);
       }
     }
-    await run(root, managerCommand(manager, ["install"]));
+    await installWithEnrichedHtmlPins(root, manager);
     console.log("Desktop integration already exists; dependencies installed. Existing configuration preserved.");
     return;
   }
@@ -165,6 +165,6 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   if (release) await materializeReleasePackages(release, root);
   for (const [file, content] of files) writeFileSync(path.join(root, file), content);
   if (release) verifyMaterializedReleasePackages(release, root);
-  await run(root, managerCommand(manager, ["install"]));
+  await installWithEnrichedHtmlPins(root, manager);
   console.log(`Added desktop support to ${root}. Existing entry point and mobile/web scripts are unchanged.\nRun spark build --dev --platform macos, then spark dev --platform macos. Windows native builds run on Windows.`);
 }

@@ -149,8 +149,12 @@ try {
   // Fresh and upgraded apps record their installed version before native preflight.
   mkdirSync(path.join(consumer, ".spark"));
   writeFileSync(path.join(consumer, ".spark/version"), VERSION + "\n");
-  const before = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
   const cli = path.join(consumer, "node_modules/.bin/spark");
+  const webPins = await runNpm(consumer, ["exec", "--", "spark", "build", "--dev"]);
+  if (webPins.status === 0 || !webPins.output.includes("Run npm install")) throw new Error(`Installed CLI did not repair outdated enriched-html web pins:\n${webPins.output}`);
+  const reinstall = await runNpm(consumer, managerInstallArgs("npm"));
+  if (reinstall.status !== 0) throw new Error(`Web pin reinstall failed:\n${reinstall.output}`);
+  const before = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
   const rejected = await spawnProcess([cli, "build", "--dev"], { cwd: consumer, env: { ...process.env, CI: "1" }, stdout: "pipe", stderr: "pipe" });
   const [rejectStatus, rejectOut, rejectErr] = await Promise.all([rejected.exited, new Response(rejected.stdout!).text(), new Response(rejected.stderr!).text()]);
   const rejectOutput = `${rejectOut}\n${rejectErr}`;

@@ -42,3 +42,13 @@ export function applyOverrides(pkg: any, overrides: Record<string, string>, mana
   else pkg.overrides = { ...existing, ...overrides };
 }
 export function localArchive(file: string) { return `file:${path.resolve(file).replaceAll("\\", "/")}`; }
+
+
+/** Match Yarn paths, version-qualified npm selectors and pnpm parent>child selectors. */
+export function overridePackageName(selector: string, checked: readonly string[]): string | undefined {
+  // Comparators after @, whitespace or || belong to the version range.
+  const child = selector.split(/(?<![@\s|])>(?=[@a-zA-Z])/).at(-1)!;
+  const segments = child.split("/");
+  const childName = segments.at(-2)?.startsWith("@") ? segments.slice(-2).join("/") : segments.at(-1)!;
+  return checked.find(name => childName === name || childName.startsWith(name + "@"));
+}

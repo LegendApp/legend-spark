@@ -1,9 +1,10 @@
+import { enrichedHtmlPins, installWithEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { writePackageConfig } from "./package-manager-config.ts";
 import { initializeTemplate } from "./init-template.cjs";
 import { installedSparkVersion, migrateProject, refreshPointers } from "./migrations.cjs";
 import { creationManifest } from "./local.ts";
 import { installedRelease, materializeReleasePackages, packageSources, verifyMaterializedReleasePackages } from "./release.ts";
-import { packageManager, managerCommand, applyOverrides, localArchive, type PackageManager } from "./package-manager.ts";
+import { packageManager, applyOverrides, localArchive, type PackageManager } from "./package-manager.ts";
 import { packArchive } from "./pack-archive.ts";
 import { nodeCommand, spawnProcess } from "./process.ts";
 import { checkExpoDesktopNode } from "./expo-node.ts";
@@ -15,7 +16,6 @@ import os from "node:os";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { readJson } from "./json.ts";
-import { run } from "./commands.ts";
 
 // Resolve relative to the installed CLI so packed consumers use the same starter.
 const template = path.resolve(import.meta.dirname, "../templates/blank-typescript");
@@ -23,8 +23,8 @@ const template = path.resolve(import.meta.dirname, "../templates/blank-typescrip
 export async function refreshLocalPackages(root: string, manifest: string, selectedManager?: PackageManager) {
   const pkg = readJson(path.join(root, "package.json"));
   // The template owns the tested compatibility matrix, not module inclusion.
-  const defaults = readJson(path.join(template, "package.json"));
-  const pins = { ...defaults.overrides, ...Object.fromEntries(Object.entries(defaults.dependencies)
+  const defaults: { overrides: Record<string, string>; dependencies: Record<string, string> } = readJson(path.join(template, "package.json"));
+  const pins = { ...Object.fromEntries(Object.entries(defaults.overrides).filter(([name]) => !(name in enrichedHtmlPins) && name !== "react-dom")), ...Object.fromEntries(Object.entries(defaults.dependencies)
     .filter(([name]) => name.startsWith("expo-desktop"))) };
   for (const [name, version] of Object.entries(pins)) {
     if (pkg.dependencies?.[name]) pkg.dependencies[name] = version;
@@ -38,8 +38,8 @@ export async function refreshLocalPackages(root: string, manifest: string, selec
     if (pkg.allowScripts?.[name]) pkg.allowScripts[archive] = true;
   }
   applyOverrides(pkg, overrides, manager);
-  writePackageConfig(root, pkg, manager);
-  await run(root, managerCommand(manager, ["install"]));
+  writePackageConfig(root, pkg, manager, root, [...Object.keys(enrichedHtmlPins), "react-dom"]);
+  await installWithEnrichedHtmlPins(root, manager);
   upgradeManagedEntry(root);
 }
 
