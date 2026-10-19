@@ -91,6 +91,7 @@ function manifest(archive: string, react: string) {
       "@legendapp/spark": `file:${archive}`,
       expo: "54.0.37",
       react,
+      ...(react === "19.1.4" ? { "react-dom": react } : {}),
       "react-native": "0.81.6",
     },
     devDependencies: { "@types/node": "24.13.6", "@types/react": "19.1.10", typescript: "5.9.3" },
@@ -118,7 +119,7 @@ try {
   const cliToolchain = verifyCliToolchain(consumer);
   const singletonPaths = await verifyConsumerSingletons(consumer);
   const publicReact = singletonPaths.react!;
-  const graph = await runNpm(consumer, ["ls", "react", "react-native", "expo", "--all", "--json"]);
+  const graph = await runNpm(consumer, ["ls", "react", "react-dom", "react-native", "expo", "--all", "--json"]);
   if (graph.status !== 0) throw new Error(`Installed framework dependency graph is invalid:\n${graph.output}`);
   const graphJson = JSON.parse(graph.output.slice(graph.output.indexOf("{")));
   const versions = new Map<string, Set<string>>();
@@ -145,14 +146,19 @@ try {
   if (diagnostics.length) throw new Error(`Installed consumer declarations failed to typecheck:\n${diagnostics.join("\n")}`);
 
   writeFileSync(path.join(consumer, "app.json"), JSON.stringify({ expo: { name: "preflight-fixture", slug: "preflight-fixture", platforms: ["macos"] } }, null, 2) + "\n");
+  // Fresh and upgraded apps record their installed version before native preflight.
+  mkdirSync(path.join(consumer, ".spark"));
+  writeFileSync(path.join(consumer, ".spark/version"), VERSION + "\n");
   const before = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
   const cli = path.join(consumer, "node_modules/.bin/spark");
   const rejected = await spawnProcess([cli, "build", "--dev"], { cwd: consumer, env: { ...process.env, CI: "1" }, stdout: "pipe", stderr: "pipe" });
   const [rejectStatus, rejectOut, rejectErr] = await Promise.all([rejected.exited, new Response(rejected.stdout!).text(), new Response(rejected.stderr!).text()]);
   const rejectOutput = `${rejectOut}\n${rejectErr}`;
   if (rejectStatus === 0 || !/Native patch preparation stopped before changing project files:/m.test(rejectOutput)) throw new Error(`Installed CLI did not reject missing patch receipts with an actionable preflight error:\n${rejectOutput}`);
-  const onlyLogs = (name: string) => name === ".spark" && readdirSync(path.join(consumer, name)).every(entry => entry === "logs");
-  const after = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name)) && !onlyLogs(name)));
+  if (readFileSync(path.join(consumer, ".spark/version"), "utf8") !== VERSION + "\n" ||
+      readdirSync(path.join(consumer, ".spark")).some(entry => entry !== "version" && entry !== "logs"))
+    throw new Error("Native preflight rejection changed recorded project state");
+  const after = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
   if ([...after].some(name => !before.has(name))) throw new Error(`Native preflight rejection wrote project state: ${[...after].filter(name => !before.has(name)).join(", ")}`);
 
   const incompatible = path.join(root, "incompatible"); mkdirSync(incompatible);
@@ -190,7 +196,7 @@ try {
     }
   }
 
-  console.log(`PASS: full ${VERSION} Spark archive ${archiveName} (sha256 ${archiveHash}) installed with ${managerResults.map(result => `${result.manager}@${result.version}${result.singletonVerified ? " (single React/RN/Expo paths)" : " (not tested)"}`).join(", ")}; packed CLI ran on Node and Bun for all installed managers and resolved npm ${cliToolchain.npm} with tar ${cliToolchain.tar} and ws ${cliToolchain.ws}; React DOM remained optional; complete public declarations typechecked with npm; npm rejected React 18.2.0 peer conflict; installed CLI rejected an unpatched native graph before project writes. Lifecycle scripts and native compilation were intentionally skipped.`);
+  console.log(`PASS: full ${VERSION} Spark archive ${archiveName} (sha256 ${archiveHash}) installed with ${managerResults.map(result => `${result.manager}@${result.version}${result.singletonVerified ? " (single React/RN/Expo paths)" : " (not tested)"}`).join(", ")}; packed CLI ran on Node and Bun for all installed managers and resolved npm ${cliToolchain.npm} with tar ${cliToolchain.tar} and ws ${cliToolchain.ws}; React DOM public peer remained optional and the fixture supplied its matching web renderer; complete public declarations typechecked with npm; npm rejected React 18.2.0 peer conflict; installed CLI rejected an unpatched native graph before project writes. Lifecycle scripts and native compilation were intentionally skipped.`);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }
