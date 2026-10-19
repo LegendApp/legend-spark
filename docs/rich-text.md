@@ -127,11 +127,18 @@ components; they do not establish native acceptance.
 ## Web dependency pins
 
 Spark's creator templates pin DOMPurify 3.4.17 and the complete Tiptap 3.32.0
-family to address upstream advisories. They also install React DOM 19.1.4 to
-match React 19.1.4. These are application-owned overrides; installing the SDK
-archive alone does not apply them. A bare installation of
-`react-native-enriched-html@1.1.1` still resolves its original DOMPurify 3.4.11
-and Tiptap 3.27.1 dependencies, including their web advisories.
+family to address upstream advisories, with React DOM matching React. Installing
+the SDK archive alone initially resolves enriched-html's upstream dependencies.
+Spark's existing native-patch preflights check the installed web dependencies
+from enriched-html's own location. When versions are outdated or the renderer
+mismatches React, they repair app-level pins and stop with a package-manager
+reinstall command. Existing add-desktop, refresh and upgrade install paths
+perform the reinstall. `spark doctor` reports these issues and directs you to
+`spark upgrade`, consistent with its other dependency-pin checks.
+
+Newer explicit pins are preserved. If an explicit renderer pin still mismatches
+React after reinstalling, align that pin with React before retrying. Already
+fixed installations and apps without enriched-html require no pin changes.
 
 For a manual bare install, take the `dompurify` and every `@tiptap/*` entry
 from the installed
