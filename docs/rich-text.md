@@ -123,3 +123,28 @@ and accepted, external, and rejected values with mocked native text components. 
 Click hit testing, reader/editor layout parity, and formatting on supported
 hosts still need native acceptance. The portable tests use mocked native
 components; they do not establish native acceptance.
+
+## Web dependency pins
+
+Spark's creator templates pin DOMPurify 3.4.17 and the complete Tiptap 3.32.0
+family to address upstream advisories. They also install React DOM 19.1.4 to
+match React 19.1.4. These are application-owned overrides; installing the SDK
+archive alone does not apply them. A bare installation of
+`react-native-enriched-html@1.1.1` still resolves its original DOMPurify 3.4.11
+and Tiptap 3.27.1 dependencies, including their web advisories.
+
+For a manual bare install, take the `dompurify` and every `@tiptap/*` entry
+from the installed
+`node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-cli/templates/universal/package.json`.
+The installed SDK must contain the pins listed above. Put those web entries in
+the application's `overrides` (npm/Bun), `resolutions` (Yarn), or
+`pnpm.overrides` in package.json (pnpm 10). For pnpm 11, use `overrides` in
+`pnpm-workspace.yaml`. Set both the direct `react-dom` dependency and its manager
+override/resolution to the app's exact React version, then reinstall with that
+manager. Existing apps can also use their installed CLI's
+`spark upgrade --dry-run` to check the target release's pins before running
+`spark upgrade`.
+
+Spark's native patch runs after dependency resolution; changing enriched-html's
+manifest there does not install fixed web dependencies. These web dependencies
+are not used by the macOS native HTML renderer.

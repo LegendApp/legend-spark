@@ -32,6 +32,14 @@ test("the React Native CLI reads launcher activities with the updated XML parser
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test("creator templates keep the web renderer on the native React baseline", () => {
+  for (const template of ["blank-typescript", "universal", "windows"]) {
+    const pkg = require(`../packages/cli/templates/${template}/package.json`);
+    expect(pkg.dependencies["react-dom"]).toBe(pkg.dependencies.react);
+    expect(pkg.overrides["react-dom"]).toBe(pkg.dependencies.react);
+  }
+});
+
 test("the pinned web renderer can render with the app's React baseline", () => {
   const React = require("react");
   const { renderToString } = require("react-dom/server");
