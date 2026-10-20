@@ -32,7 +32,7 @@ The same tarball works with `expo-desktop create-app --template` without going t
 
 ## Compatibility handling
 
-**npm 12 local template metadata.** In 1.0.0, `npmPackAsync` accepts an array, or a record keyed by the requested package spec. npm 12 returns a record keyed by the package's name when inspecting a local tarball, so lookup by absolute tarball path fails. The CLI includes npm `11.21.0` and puts its small launcher first on PATH only for the creator subprocess. This npm release bundles `tar` `7.5.22`, which includes the fix for [GHSA-23hp-3jrh-7fpw](https://github.com/advisories/GHSA-23hp-3jrh-7fpw). Expo Desktop performs extraction normally and delegates installation to the selected package manager. Global npm and upstream source remain unchanged.
+**npm 12 local template metadata.** In 1.0.0, `npmPackAsync` accepts an array, or a record keyed by the requested package spec. npm 12 returns a record keyed by the package's name when inspecting a local tarball, so lookup by absolute tarball path fails. The CLI includes npm `11.21.1` and puts its small launcher first on PATH only for the creator subprocess. This npm release bundles `tar` `7.5.22`, which includes the fix for [GHSA-23hp-3jrh-7fpw](https://github.com/advisories/GHSA-23hp-3jrh-7fpw). Expo Desktop performs extraction normally and delegates installation to the selected package manager. Global npm and upstream source remain unchanged.
 
 For direct template creation, use npm 11 on PATH. The installed CLI's `src/npm-bin` directory supplies the same scoped compatibility launcher; `test:templates` exercises this path. Remove this adapter once upstream accepts npm 12 local-tarball metadata and the direct-creation checks pass.
 
@@ -154,3 +154,7 @@ rebuild against this SDK. These checks establish macOS development/runtime behav
 Windows native compilation/execution, live iOS/Android execution, and signed/notarized
 release artifacts were not verified on this Mac. The pre-existing Windows/menu drafts
 remain separate from this upgrade.
+
+Native component specs remain in a development Metro graph after their last
+import is removed, matching the HMR client's module lifetime. Restart Metro
+after deleting a retained native package or switching its source tree.

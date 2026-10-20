@@ -123,3 +123,35 @@ and accepted, external, and rejected values with mocked native text components. 
 Click hit testing, reader/editor layout parity, and formatting on supported
 hosts still need native acceptance. The portable tests use mocked native
 components; they do not establish native acceptance.
+
+## Web dependency pins
+
+Spark's creator templates pin DOMPurify 3.4.17 and the complete Tiptap 3.32.0
+family to address upstream advisories, with React DOM matching React. Installing
+the SDK archive alone initially resolves enriched-html's upstream dependencies.
+Spark's existing native-patch preflights check the installed web dependencies
+from enriched-html's own location. When versions are outdated or the renderer
+mismatches React, they repair app-level pins and stop with a package-manager
+reinstall command. Existing add-desktop, refresh and upgrade install paths
+perform the reinstall. `spark doctor` reports these issues and directs you to
+`spark upgrade`, consistent with its other dependency-pin checks.
+
+Newer explicit pins are preserved. If an explicit renderer pin still mismatches
+React after reinstalling, align that pin with React before retrying. Already
+fixed installations and apps without enriched-html require no pin changes.
+
+For a manual bare install, take the `dompurify` and every `@tiptap/*` entry
+from the installed
+`node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-cli/templates/universal/package.json`.
+The installed SDK must contain the pins listed above. Put those web entries in
+the application's `overrides` (npm/Bun), `resolutions` (Yarn), or
+`pnpm.overrides` in package.json (pnpm 10). For pnpm 11, use `overrides` in
+`pnpm-workspace.yaml`. Set both the direct `react-dom` dependency and its manager
+override/resolution to the app's exact React version, then reinstall with that
+manager. Existing apps can also use their installed CLI's
+`spark upgrade --dry-run` to check the target release's pins before running
+`spark upgrade`.
+
+Spark's native patch runs after dependency resolution; changing enriched-html's
+manifest there does not install fixed web dependencies. These web dependencies
+are not used by the macOS native HTML renderer.

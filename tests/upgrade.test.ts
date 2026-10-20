@@ -53,6 +53,7 @@ beforeEach(() => {
     defaults.dependencies.react = "19.2.0";
     defaults.overrides.react = "19.2.0";
     defaults.overrides["@expo/cli"] = "54.0.99";
+    defaults.overrides.dompurify = "3.4.19";
     for (const template of ["blank-typescript", "windows", "universal"]) writeJson(path.join(cli, "templates", template, "package.json"), defaults);
     writeJson(path.join(cli, "dist/release.json"), { schema: 1, version: next, revision: "a".repeat(40), runners: {}, packages: {
       "@react-native-runtimes/core": { url: `https://github.com/LegendApp/legend-spark/releases/download/v${next}/core.tgz`, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") },
@@ -216,4 +217,35 @@ test.each(["0.0.1-next.2", "1.0.0", "invalid"])("next rejects an invalid or olde
   await expect(upgrade(root)).rejects.toThrow("compatible Spark update");
   expect(readFileSync(path.join(root, "package.json"))).toEqual(before);
   expect(pacote.extract).not.toHaveBeenCalled();
+});
+
+
+test("upgrade previews the target release's newer web policy without changing the app", async () => {
+  for (const [name, version, dependencies] of [
+    ["react", "19.1.4", {}], ["react-native-enriched-html", "1.1.1", { dompurify: "3.4.17" }], ["dompurify", "3.4.17", {}],
+  ] as const) writeJson(path.join(root, "node_modules", name, "package.json"), { name, version, dependencies });
+  const before = readFileSync(path.join(root, "package.json"));
+  await upgrade(root, true);
+  expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/dompurify.*3\.4\.17.*3\.4\.19/));
+  expect(readFileSync(path.join(root, "package.json"))).toEqual(before);
+  expect(run).not.toHaveBeenCalled();
+});
+
+test("upgrade installs the target web policy and retains a newer pnpm YAML pin", async () => {
+  vi.mocked(packageManager).mockReturnValue("pnpm");
+  for (const [name, version, dependencies] of [
+    ["react", "19.1.4", {}], ["react-native-enriched-html", "1.1.1", { dompurify: "3.4.17" }], ["dompurify", "3.4.17", {}],
+  ] as const) writeJson(path.join(root, "node_modules", name, "package.json"), { name, version, dependencies });
+  const pkg = read("package.json"); pkg.pnpm = { overrides: { dompurify: "3.4.17" } }; writeJson(path.join(root, "package.json"), pkg);
+  writeFileSync(path.join(root, "pnpm-workspace.yaml"), "overrides:\n  dompurify: 3.4.20\n");
+  const install = vi.mocked(run).getMockImplementation()!;
+  vi.mocked(run).mockImplementation(async (...args) => {
+    expect(read("package.json").pnpm.overrides.dompurify).toBe("3.4.20");
+    expect(readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8")).toContain("dompurify: 3.4.20");
+    await install(...args);
+    writeJson(path.join(root, "node_modules/dompurify/package.json"), { name: "dompurify", version: "3.4.20" });
+    return "";
+  });
+  await upgrade(root);
+  expect(run).toHaveBeenCalledExactlyOnceWith(root, ["pnpm", "install"]);
 });

@@ -6,6 +6,8 @@
 #import <stdio.h>
 
 #if defined(SPARK_FILE_MUTATIONS_TESTING)
+static void (^SparkRemoveTestHook)(void);
+void SparkSetRemoveTestHook(void (^hook)(void)) { SparkRemoveTestHook = [hook copy]; }
 static unsigned SparkTransferTestFailures;
 static BOOL SparkForceCrossVolumeMove;
 void SparkSetTransferTestFailures(unsigned failures, BOOL forceCrossVolumeMove) {
@@ -202,14 +204,13 @@ BOOL SparkRemoveFile(NSURL *url, BOOL recursive, NSError **error) {
       userInfo:@{NSUnderlyingErrorKey: [NSError errorWithDomain:NSPOSIXErrorDomain code:code userInfo:nil]}];
     return NO;
   }
-  NSFileManager *fm = NSFileManager.defaultManager;
-  if (S_ISDIR(info.st_mode) && !recursive) {
-    NSArray *children = [fm contentsOfDirectoryAtPath:url.path error:error];
-    if (!children) return NO;
-    if (children.count) {
-      if (error) *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:ENOTEMPTY userInfo:nil];
-      return NO;
-    }
-  }
-  return [fm removeItemAtURL:url error:error];
+#if defined(SPARK_FILE_MUTATIONS_TESTING)
+  if (SparkRemoveTestHook) { void (^hook)(void) = SparkRemoveTestHook; SparkRemoveTestHook = nil; hook(); }
+#endif
+  if (recursive && S_ISDIR(info.st_mode)) return [NSFileManager.defaultManager removeItemAtURL:url error:error];
+  // The OS checks emptiness atomically; never recursively remove a concurrent child.
+  if ((S_ISDIR(info.st_mode) ? rmdir(url.fileSystemRepresentation) : unlink(url.fileSystemRepresentation)) == 0) return YES;
+  int code = errno;
+  if (code != ENOENT && code != ENOTDIR && error) *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:code userInfo:nil];
+  return NO;
 }

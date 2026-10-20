@@ -1,5 +1,7 @@
+import { parse } from "yaml";
+import { writePackageConfig } from "../packages/cli/src/package-manager-config.ts";
 import { expect, test } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { applyOverrides, managerCommand, packageManager } from "../packages/cli/src/package-manager.ts";
@@ -47,6 +49,20 @@ test("override conversion keeps pins and writes each manager's supported field",
     expect(pkg.dependencies["@legendapp/spark"]).toBe("file:/tmp/frame.tgz");
   }
 });
+test("pnpm archive overrides provide the native peer at the installation root", () => {
+  const archive = "file:./spark-packages/nitro.tgz";
+  for (const manager of ["npm", "yarn", "bun", "pnpm"] as const) {
+    const pkg: any = { dependencies: { "@legendapp/spark": "0.0.1-next.5" } };
+    applyOverrides(pkg, { "react-native-nitro-modules": archive }, manager);
+    expect(pkg.dependencies["react-native-nitro-modules"]).toBe(manager === "pnpm" ? archive : undefined);
+    if (manager === "pnpm") {
+      expect(pkg.pnpm.overrides["react-native-nitro-modules"]).toBe(archive);
+      applyOverrides(pkg, { "react-native-nitro-modules": "file:./spark-packages/new-nitro.tgz" }, manager);
+      expect(pkg.dependencies["react-native-nitro-modules"]).toBe("file:./spark-packages/new-nitro.tgz");
+    }
+  }
+});
+
 test("all package manager overrides preserve portable release archive references", () => {
   const source = "file:./spark-packages/react-native-webview-" + "a".repeat(64) + ".tgz";
   for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {
@@ -61,4 +77,21 @@ test("all package manager overrides preserve portable release archive references
 test("manager invocations reuse the invoking JavaScript executable", () => {
   expect(managerCommand("pnpm", ["install"], { npm_config_user_agent: "pnpm/10", npm_execpath: "/space here/pnpm.cjs" })).toEqual([process.execPath, "/space here/pnpm.cjs", "install"]);
   expect(managerCommand("npm", ["install"], { npm_config_user_agent: "pnpm/10", npm_execpath: "/pnpm.cjs" })).toEqual(["npm", "install"]);
+});
+
+test("pnpm configuration persists pins and build permissions while retaining user YAML", () => {
+  const f = fixture();
+  try {
+    const file = path.join(f.root, "pnpm-workspace.yaml");
+    writeFileSync(file, "# Keep team configuration\npackages:\n  - .\noverrides:\n  custom: 1.0.0\nallowBuilds:\n  fsevents: false\n");
+    const pkg = { dependencies: { "@legendapp/spark": "file:./spark.tgz" }, pnpm: { overrides: { react: "19.1.4" }, onlyBuiltDependencies: ["fsevents", "@legendapp/spark"] } };
+    writePackageConfig(f.root, pkg, "pnpm");
+    expect(parse(readFileSync(file, "utf8"))).toEqual({ packages: ["."], nodeLinker: "hoisted", overrides: { custom: "1.0.0", react: "19.1.4" }, allowBuilds: { fsevents: false, "@legendapp/spark": true, "@legendapp/spark@file:spark.tgz": true } });
+    expect(readFileSync(file, "utf8")).toContain("# Keep team configuration");
+    expect(pkg.pnpm.onlyBuiltDependencies).toContain("@legendapp/spark@file:spark.tgz");
+    expect(pkg.pnpm.onlyBuiltDependencies).not.toContain("fsevents");
+    pkg.pnpm.overrides.react = "19.1.5";
+    writePackageConfig(f.root, pkg, "pnpm");
+    expect(parse(readFileSync(file, "utf8")).overrides.react).toBe("19.1.5");
+  } finally { f.close(); }
 });

@@ -6,6 +6,7 @@ import {
   VERSION,
   goConfigurationIssues,
   hashFiles,
+  dependencyStamp,
   nativePackages,
   nativePreparationFingerprint,
   installedPackages,
@@ -123,6 +124,49 @@ test("native source content changes invalidate hashes without build-directory no
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+test.each([{}, { sdk: true, requires: ["other"], upstreamIntegrity: "sha512-upstream" }])(
+  "workspace and packed patch metadata produce the same native signature (%j)", (spark) => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "spark-patch-hash-"));
+    try {
+      const name = "patched-native";
+      const module = path.join(root, "node_modules", name);
+      mkdirSync(path.join(module, "ios"), { recursive: true });
+      writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { [name]: "1.0.0" } }));
+      const manifest = { name, version: "1.0.0", codegenConfig: { name: "PatchedSpec" } };
+      const file = path.join(module, "package.json");
+      const source = path.join(module, "ios/Module.mm");
+      writeFileSync(source, "native source");
+      writeFileSync(file, JSON.stringify({ ...manifest, scripts: { prepare: "build", test: "test" }, spark: {
+        ...spark, workspacePatch: { patchHash: "workspace" }, dependencyPatch: { patchHash: "dependency" },
+      } }, null, 2));
+      const workspace = nativePackages(root)[0]!.signature;
+      writeFileSync(file, JSON.stringify({ ...manifest, scripts: { test: "test" }, spark: { ...spark, patchHash: "packed" } }));
+      expect(nativePackages(root)[0]!.signature).toBe(workspace);
+      writeFileSync(file, JSON.stringify({ ...manifest, ...(Object.keys(spark).length ? { spark } : {}) }));
+      expect(nativePackages(root)[0]!.signature).toBe(workspace);
+      writeFileSync(source, "changed native source");
+      expect(nativePackages(root)[0]!.signature).not.toBe(workspace);
+      writeFileSync(source, "native source");
+      writeFileSync(file, JSON.stringify({ ...manifest, version: "2.0.0", spark }));
+      expect(nativePackages(root)[0]!.signature).not.toBe(workspace);
+      writeFileSync(file, JSON.stringify({ ...manifest, spark: { ...spark, nativeModules: ["ChangedModule"] } }));
+      expect(nativePackages(root)[0]!.signature).not.toBe(workspace);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  },
+);
+test("dependency stamps retain package scripts and patch receipts", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-dependency-stamp-"));
+  try {
+    const file = path.join(root, "package.json");
+    writeFileSync(file, JSON.stringify({ scripts: { prepare: "one" } }));
+    const initial = dependencyStamp(root);
+    writeFileSync(file, JSON.stringify({ scripts: { prepare: "two" } }));
+    const changed = dependencyStamp(root);
+    expect(changed).not.toBe(initial);
+    writeFileSync(file, JSON.stringify({ scripts: { prepare: "two" }, spark: { workspacePatch: "receipt" } }));
+    expect(dependencyStamp(root)).not.toBe(changed);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test("enriched-markdown postinstall assets do not change Runner compatibility", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-markdown-hash-"));

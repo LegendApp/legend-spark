@@ -1,3 +1,4 @@
+import { writePackageConfig } from "../packages/cli/src/package-manager-config.ts";
 import { applyOverrides, localArchive, managerCommand, packageManager } from "../packages/cli/src/package-manager.ts";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -24,7 +25,7 @@ writeFileSync(path.join(root, "index.ts"), 'import * as clipboard from "@legenda
 const manager = packageManager(root);
 const pkg = readJson(path.join(root, "package.json"));
 applyOverrides(pkg, pkg.overrides, manager);
-writeJson(path.join(root, "package.json"), pkg);
+writePackageConfig(root, pkg, manager);
 await run(root, managerCommand(manager, ["install"]));
 const output = path.join(root, "results"); mkdirSync(output, { recursive: true });
 const results = [];

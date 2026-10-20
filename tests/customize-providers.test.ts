@@ -22,6 +22,8 @@ describe("customize provider configuration", () => {
   it("invalidates customize release caches without rebuilding development hosts for source or tooling edits", async () => {
     const source = path.join(root, "cli"), app = path.join(root, "app"); mkdirSync(source); mkdirSync(app);
     for (const file of ["project.ts", "platform.ts", "helpers.ts", "macos-release.ts", "json.ts"]) copyFileSync(path.resolve("packages/cli/src", file), path.join(source, file));
+    // Fingerprinting supplied native inputs must not run dependency preparation.
+    writeFileSync(path.join(source, "enriched-html-pins.ts"), 'export function assertEnrichedHtmlPins() { throw new Error("unexpected dependency preparation"); }');
     symlinkSync(path.resolve("node_modules"), path.join(root, "node_modules"));
     writeFileSync(path.join(app, "package.json"), JSON.stringify({ name: "cache-test", dependencies: {} }));
     writeFileSync(path.join(app, "index.js"), "original");

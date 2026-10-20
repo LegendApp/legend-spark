@@ -27,7 +27,7 @@ function preparePatch(root) {
   const manifest = expoRequire.resolve('@expo/cli/package.json');
   const version = JSON.parse(fs.readFileSync(manifest, 'utf8')).version;
   if (version !== VERSION) throw new Error(`spark desktop keys require @expo/cli ${VERSION}; found ${version}. Restore the supported version or update the spark Expo patch.`);
-  return new Map(patches.map(([relative, hash, before, after]) => {
+  const result = new Map(patches.map(([relative, hash, before, after]) => {
     const file = fs.realpathSync(path.join(path.dirname(manifest), 'build/src/start', relative));
     const source = fs.readFileSync(file, 'utf8');
     if (createHash('sha256').update(source).digest('hex') !== hash || source.split(before).length !== 2) {
@@ -35,6 +35,35 @@ function preparePatch(root) {
     }
     return [file, source.replace(before, after)];
   }));
+  const graph = fs.realpathSync(createRequire(manifest).resolve('metro/private/DeltaBundler/Graph'));
+  const source = fs.readFileSync(graph, 'utf8');
+  const before = '  _freeModule(module, delta) {\n    if (delta.added.has(module.path)) {';
+  const methods = ['traverseDependencies', 'initialTraverseDependencies'];
+  if (source.split(before).length !== 2 || methods.some(name => !source.includes(`  async ${name}(`))) throw new Error('Unsupported Metro graph source. Update the Spark Metro patch before starting desktop development.');
+  // Metro snapshots released modules, but its cycle collector also frees modules
+  // that the same update may reimport. Retain their data before collecting them.
+  result.set(graph, source.replace(before, `  _freeModule(module, delta) {
+    if (!delta.updatedModuleData.has(module.path) && !delta.baseModuleData.has(module.path)) {
+      delta.baseModuleData.set(module.path, this._moduleSnapshot(module));
+    }
+    if (delta.added.has(module.path)) {`) + `
+// The HMR client keeps removed modules. Re-adding a collected native spec would
+// hot-evaluate its view registration again. Promote specs only after the entire
+// graph transaction succeeds, so failed updates can roll back their additions.
+for (const name of ${JSON.stringify(methods)}) {
+  const traverse = exports.Graph.prototype[name];
+  exports.Graph.prototype[name] = async function(...args) {
+    const delta = await traverse.apply(this, args);
+    if (this.transformOptions.dev) {
+      for (const path of delta.added.keys()) {
+        if (/NativeComponent\\.[jt]sx?$/.test(path)) this.entryPoints.add(path);
+      }
+    }
+    return delta;
+  };
+}
+`);
+  return result;
 }
 
 module.exports = { VERSION, preparePatch };

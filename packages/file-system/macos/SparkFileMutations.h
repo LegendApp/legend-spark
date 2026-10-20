@@ -18,6 +18,7 @@ enum SparkTransferTestFailure {
   SparkFailBackupRemoval = 1 << 5,
   SparkFailStageCleanup = 1 << 6,
 };
+void SparkSetRemoveTestHook(void (^hook)(void));
 void SparkSetTransferTestFailures(unsigned failures, BOOL forceCrossVolumeMove);
 #endif
 /** Copies or moves, replacing the destination only when overwrite is set. An existing destination otherwise conflicts with NSFileWriteFileExistsError, including a dangling link. Self-transfers and overlapping paths reject. Transfers stage beside the destination before publication; cross-volume moves copy then delete. A cross-volume source-cleanup failure can leave a partial source; source-cleanup and backup-cleanup errors report committed and retained paths. */

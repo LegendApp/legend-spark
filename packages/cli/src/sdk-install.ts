@@ -35,11 +35,16 @@ const tooling = path.join(root, ".cli");
 mkdirSync(tooling, { recursive: true });
 const { values } = parseArgs({ options: { "package-manager": { type: "string" } } });
 const manager = packageManager(root, values["package-manager"]);
-const pkg = { name: "spark-sdk-tools", private: true, dependencies: { ...metadata.tooling?.dependencies, "@legendapp/spark": overrides["@legendapp/spark"] } };
+const builds = ["@legendapp/spark", "react-native-enriched-markdown", "fsevents"];
+const pkg = { name: "spark-sdk-tools", private: true, pnpm: { onlyBuiltDependencies: builds }, dependencies: { ...metadata.tooling?.dependencies, "@legendapp/spark": overrides["@legendapp/spark"] } };
 applyOverrides(pkg, { ...metadata.tooling?.overrides, ...overrides }, manager);
+if (manager === "pnpm") builds.push(`@legendapp/spark@file:${path.relative(tooling, overrides["@legendapp/spark"]!.slice(5)).replaceAll("\\", "/")}`);
 writeFileSync(path.join(tooling, "package.json"), JSON.stringify(pkg, null, 2));
 if (manager === "yarn") writeFileSync(path.join(tooling, ".yarnrc.yml"), "nodeLinker: node-modules\n");
-if (manager === "pnpm") writeFileSync(path.join(tooling, ".npmrc"), "node-linker=hoisted\n");
+if (manager === "pnpm") {
+  const allowBuilds = Object.fromEntries(builds.map(name => [name, true]));
+  writeFileSync(path.join(tooling, "pnpm-workspace.yaml"), JSON.stringify({ nodeLinker: "hoisted", overrides: (pkg as any).pnpm.overrides, allowBuilds }));
+}
 const [executable, ...args] = managerCommand(manager, ["install"]);
 // Only fixed manager names + 'install' use a Windows shell; paths/CLI arguments
 // are always passed directly to Node without shell interpolation.

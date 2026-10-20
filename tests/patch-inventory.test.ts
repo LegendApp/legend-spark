@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, cpSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { patchedPackageNames, validatePatchedArchive, type PackageProvenance } from "../scripts/patch-inventory.ts";
@@ -40,6 +40,7 @@ test("native archive recipe identity changes with workspace, Windows, and macOS 
     const patch = path.join(workspace, "react-native-nitro-modules@0.37.0.patch");
     writeFileSync(patch, "diff --git a/file b/file\nfirst\n");
     writeFileSync(path.join(adapter, "adapter.cpp"), "adapter fixture\n");
+    cpSync(path.join(root, "patches/licenses"), path.join(fixture, "patches/licenses"), { recursive: true });
     const pin = { version: "0.37.0", integrity: "sha512-fixture" };
     const before = windowsPatchHash("react-native-nitro-modules", pin, fixture);
     writeFileSync(patch, "diff --git a/file b/file\nsecond\n");

@@ -1,3 +1,4 @@
+import { enrichedHtmlPinIssues } from "./enriched-html-pins.ts";
 import { publishCustomize } from "./customize-artifacts.ts";
 import type { PackageManager } from "./package-manager.ts";
 import { nodeCommand, spawnProcess } from "./process.ts";
@@ -165,7 +166,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       if (root) {
         ensureProjectVersion(root);
         try {
-          const issues = upgradeDependencyPins(root, true);
+          const issues = [...upgradeDependencyPins(root, true), ...enrichedHtmlPinIssues(root)];
           printDependencyPins(issues);
           if (issues.length) {
             process.exitCode = 1;

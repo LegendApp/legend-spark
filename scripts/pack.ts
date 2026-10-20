@@ -48,6 +48,7 @@ export async function packLocal(root: string, output: string) {
     provenance[name] = { file, sha256: createHash("sha256").update(readFileSync(path.join(output, file))).digest("hex"), patchHash: metadata.spark.patchHash, version: metadata.version };
   }
   writeJson(path.join(output, "provenance.json"), provenance);
+  await run(root, ["bun", path.join(root, "tests/patched-licenses.integration.ts"), path.join(output, "manifest.json")]);
   await packTemplates(root, output, manifest);
   registerPackages(path.join(output, "manifest.json"));
   return { manifest, createNpm };

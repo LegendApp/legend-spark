@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, cpSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
@@ -26,7 +26,10 @@ test("distributed audio archives apply the exact workspace delta and verify upst
     const archive = path.join(cache, "upstream.tgz"); await packArchive(stage, archive);
     writeFileSync(path.join(root, "patches/workspace/upstream.json"), JSON.stringify({ "expo-audio": { version: "1.1.1", integrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}` } }));
     writeFileSync(path.join(root, "patches/workspace/expo-audio@1.1.1.patch"), patch);
+    cpSync(path.join(actual, "patches/licenses"), path.join(root, "patches/licenses"), { recursive: true });
     const manifest = await packAudio(root, output); const packed = path.join(output, manifest["expo-audio"]);
+    expect(execFileSync("tar", ["-tzf", packed], { encoding: "utf8" })).not.toContain("package/.spark/");
+    for (const file of ["LICENSE", "LICENSE.provenance"]) expect(execFileSync("tar", ["-xOf", packed, `package/${file}`], { encoding: "utf8" })).toBe(readFileSync(path.join(actual, "patches/licenses/expo-audio", file), "utf8"));
     const metadata = JSON.parse(execFileSync("tar", ["-xOf", packed, "package/package.json"], { encoding: "utf8" }));
     expect(metadata.spark).toMatchObject({ sdk: true, upstreamIntegrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`, patchHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
     for (const [relative, value] of expected) {

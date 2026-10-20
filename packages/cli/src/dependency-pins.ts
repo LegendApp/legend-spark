@@ -1,3 +1,4 @@
+import { overridePackageName } from "./package-manager.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
@@ -42,12 +43,7 @@ export function dependencyPinIssues(pkg: any, platforms: readonly string[], expe
   }
   function overrides(entries: any, where: string[], parent?: string) {
     for (const [selector, value] of Object.entries(entries ?? {})) {
-      // Yarn paths/globs, version-qualified npm selectors and pnpm parent>child selectors.
-      // Comparators after @, whitespace or || belong to the version range.
-      const child = selector.split(/(?<![@\s|])>(?=[@a-zA-Z])/).at(-1)!;
-      const segments = child.split("/");
-      const childName = segments.at(-2)?.startsWith("@") ? segments.slice(-2).join("/") : segments.at(-1)!;
-      const name = selector === "." ? parent : checked.find(name => childName === name || childName.startsWith(name + "@"));
+      const name = selector === "." ? parent : overridePackageName(selector, checked);
       const location = [...where, selector];
       if (value && typeof value === "object" && !Array.isArray(value)) overrides(value, location, name);
       else if (name) check(name, value, location);

@@ -10,12 +10,18 @@ const waitForNextCheck = (milliseconds: number) => new Promise<void>(resolve => 
 type Wait = typeof waitForNextCheck;
 const archiveIntegrity = (archive: string) => `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`;
 
+export function changelogSection(changelog: string, version: string): string | undefined {
+  const heading = new RegExp(`^## ${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?: — preview)?$`, "m").exec(changelog);
+  if (!heading) return undefined;
+  const start = heading.index + heading[0].length;
+  const end = changelog.indexOf("\n## ", start);
+  return changelog.slice(start, end < 0 ? undefined : end).trim();
+}
+
 export function releaseNotes(changelog: string, version: string) {
-  const heading = `## ${version} — preview`;
-  const start = changelog.indexOf(heading);
-  if (start < 0) throw new Error(`Missing changelog notes for ${version}`);
-  const end = changelog.indexOf("\n## ", start + heading.length);
-  return changelog.slice(start + heading.length, end < 0 ? undefined : end).trim();
+  const notes = changelogSection(changelog, version);
+  if (notes === undefined) throw new Error(`Missing changelog notes for ${version}`);
+  return notes;
 }
 
 export const publishedPackages = ["@legendapp/spark", "@legendapp/create-spark"] as const;

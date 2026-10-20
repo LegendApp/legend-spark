@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, renameSync, cpSync } from "node:fs";
 import path from "node:path";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { readJson } from "../packages/cli/src/project.ts";
@@ -8,7 +8,7 @@ import { run } from "../packages/cli/src/commands.ts";
 
 export function audioPatchHash(root: string) {
   const pin = readJson(path.join(root, "patches/workspace/upstream.json"))["expo-audio"];
-  return createHash("sha256").update(JSON.stringify(pin)).update(readFileSync(import.meta.filename)).update(readFileSync(path.join(root, `patches/workspace/expo-audio@${pin.version}.patch`))).digest("hex");
+  return createHash("sha256").update(JSON.stringify(pin)).update(readFileSync(import.meta.filename)).update(readFileSync(path.join(root, "patches/licenses/expo-audio/LICENSE"))).update(readFileSync(path.join(root, "patches/licenses/expo-audio/LICENSE.provenance"))).update(readFileSync(path.join(root, `patches/workspace/expo-audio@${pin.version}.patch`))).digest("hex");
 }
 
 /** The workspace and distributed SDK consume the same pinned Expo Audio delta. */
@@ -22,7 +22,7 @@ export async function packAudio(root: string, output: string) {
   }
   if (`sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}` !== pin.integrity) throw new Error("Integrity mismatch: expo-audio");
   const stage = path.join(cache, "stage"); rmSync(stage, { recursive: true, force: true }); mkdirSync(stage);
-  await run(stage, ["tar", "-xzf", archive, "--strip-components=1"], { capture: true });
+  await run(root, ["tar", "-xzf", archive, "--strip-components=1", "-C", stage], { capture: true });
   if (readJson(path.join(stage, "package.json")).version !== pin.version) throw new Error("Unexpected expo-audio version");
   const { parsePatch, applyPatch } = createRequire(import.meta.url)("diff");
   for (const patch of parsePatch(readFileSync(path.join(root, `patches/workspace/expo-audio@${pin.version}.patch`), "utf8"))) {
@@ -31,6 +31,7 @@ export async function packAudio(root: string, output: string) {
     if (next === false) throw new Error(`Could not apply Expo Audio patch to ${target}`);
     writeFileSync(target, next);
   }
+  cpSync(path.join(root, "patches/licenses/expo-audio"), stage, { recursive: true });
   const pkg = readJson(path.join(stage, "package.json"));
   pkg.spark = { ...pkg.spark, sdk: true, upstreamIntegrity: pin.integrity, patchHash: audioPatchHash(root) };
   writeFileSync(path.join(stage, "package.json"), JSON.stringify(pkg, null, 2) + "\n");

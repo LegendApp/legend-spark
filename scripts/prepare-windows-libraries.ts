@@ -13,7 +13,7 @@ export function windowsPatchHash(name: string, pin: { version: string; integrity
   const workspacePin = readJson(path.join(sourceRoot, "patches/workspace/upstream.json"))[name];
   const workspacePatch = `patches/workspace/${name.replace(/^@/, "").replaceAll("/", "-")}@${workspacePin.version}.patch`;
   const files = [workspacePatch];
-  if (adapter === "nitro") files.push("patches/camera/react-native-nitro-modules.patch");
+  if (adapter === "nitro") files.push("patches/camera/react-native-nitro-modules.patch", "patches/licenses/react-native-nitro-modules/LICENSE", "patches/licenses/react-native-nitro-modules/LICENSE.provenance");
   if (adapter) files.push(...listFiles(path.join(sourceRoot, `patches/windows/${adapter}`)).map(file => path.relative(sourceRoot, file)));
   if (name === "react-native-webview") files.push("patches/windows/webview.patch");
   const recipe = readFileSync(import.meta.filename, "utf8") + readFileSync(new URL("./patch-inventory.ts", import.meta.url), "utf8");
@@ -41,6 +41,7 @@ export async function packWindowsLibraries(output: string) {
       pkg.files = [...new Set([...(pkg.files ?? []), "windows", "react-native.config.js"])];
     }
     if (adapter === "nitro") {
+      cpSync(path.join(root, "patches/licenses/react-native-nitro-modules"), stage, { recursive: true });
       const { parsePatch, applyPatch } = createRequire(import.meta.url)("diff");
       for (const file of parsePatch(readFileSync(path.join(root, "patches/camera/react-native-nitro-modules.patch"), "utf8"))) {
         const target = path.join(stage, file.newFileName.replace(/^b\//, ""));

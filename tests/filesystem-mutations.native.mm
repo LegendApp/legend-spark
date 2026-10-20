@@ -22,6 +22,15 @@ int main(int argc, const char **argv) { @autoreleasepool {
   check(SparkRemoveFile(link, NO, &error) && !error, "remove dangling link itself");
   check(!SparkRemoveFile(link, NO, &error) && !error, "repeat removal is absent");
   check(!SparkRemoveFile(root, NO, &error) && [error.domain isEqual:NSPOSIXErrorDomain] && error.code == ENOTEMPTY, "nonempty directory rejects"); error = nil;
+  NSURL *racingDirectory = [root URLByAppendingPathComponent:@"racing-directory" isDirectory:YES];
+  check([fm createDirectoryAtURL:racingDirectory withIntermediateDirectories:NO attributes:nil error:&error], "create racing directory");
+  NSURL *racingChild = [racingDirectory URLByAppendingPathComponent:@"new-child"];
+  SparkSetRemoveTestHook(^{ check([@"keep" writeToURL:racingChild atomically:YES encoding:NSUTF8StringEncoding error:nil], "insert child immediately before removal"); });
+  check(!SparkRemoveFile(racingDirectory, NO, &error) && [error.domain isEqual:NSPOSIXErrorDomain] && error.code == ENOTEMPTY,
+    "concurrent insertion rejects nonrecursive removal"); error = nil;
+  check([[NSString stringWithContentsOfURL:racingChild encoding:NSUTF8StringEncoding error:nil] isEqual:@"keep"], "concurrent child survives");
+  check(SparkRemoveFile(racingChild, NO, &error) && !error, "remove regular file nonrecursively");
+  check(SparkRemoveFile(racingDirectory, NO, &error) && !error, "remove empty directory nonrecursively");
   NSURL *copySource = [root URLByAppendingPathComponent:@"copy-source"];
   check([@"source" writeToURL:copySource atomically:YES encoding:NSUTF8StringEncoding error:&error], "create transfer source");
   check(!SparkTransferPath(copySource, file, SparkTransferCopy, NO, &error) && error.code == NSFileWriteFileExistsError, "copy conflicts with an existing destination"); error = nil;

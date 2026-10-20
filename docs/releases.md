@@ -96,13 +96,16 @@ From a clean `main` checkout on the signing Apple Silicon Mac, use Bun 1.3.14
 and Node 24.19.0 or newer, install dependencies once with `bun install --frozen-lockfile`, and run:
 
 ```sh
-bun run release --latest
+bun run release
 ```
 
-The command selects the next `-next.N` version above the checkout and npm
-registry versions, updates workspace manifests, `bun.lock`, templates, CLI version,
-and current release documentation, and generates changelog notes from committed
-changes since the previous release tag. It checks GitHub/npm authentication,
+The command releases the checkout's unpublished `-next.N` version, or selects
+the next preview when that version is already published. It promotes both packages
+to `next`; add `--latest` to also promote both to `latest`. When a version bump
+is needed, it updates workspace manifests, `bun.lock`, templates, CLI version,
+and current release documentation. It preserves an existing changelog section
+for the selected version, or generates notes from committed changes since the
+previous published preview tag. It checks GitHub/npm authentication,
 repository identity, Developer ID signing, and notarization credentials before
 changing versions. Signing secrets remain in Keychain; `.env` may select an
 identity and Keychain profile using the existing `SPARK_*` configuration.

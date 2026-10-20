@@ -59,7 +59,7 @@ function verifyCliToolchain(consumer: string) {
   const sdk = require("@legendapp/spark/package.json");
   const cliManifestPath = path.join(consumer, "node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-cli/package.json");
   const cli = JSON.parse(readFileSync(cliManifestPath, "utf8"));
-  if (cli.dependencies.npm !== "11.21.0" || cli.dependencies.ws !== "8.21.0") throw new Error("Packed CLI dependency pins do not include the verified npm and WebSocket fixes");
+  if (cli.dependencies.npm !== "11.21.1" || cli.dependencies.ws !== "8.21.0") throw new Error("Packed CLI dependency pins do not include the verified npm and WebSocket fixes");
   const cliRequire = createRequire(realpathSync(cliManifestPath));
   const npmPath = cliRequire.resolve("npm/package.json");
   const npm = JSON.parse(readFileSync(npmPath, "utf8"));
@@ -67,9 +67,9 @@ function verifyCliToolchain(consumer: string) {
   const tar = JSON.parse(readFileSync(tarPath, "utf8"));
   const wsPath = cliRequire.resolve("ws/package.json");
   const ws = JSON.parse(readFileSync(wsPath, "utf8"));
-  if (npm.version !== "11.21.0" || npm.dependencies.tar !== "^7.5.22" || tar.version !== "7.5.22") throw new Error(`Packed CLI resolved npm ${npm.version} with bundled tar ${tar.version}; expected npm 11.21.0 with tar 7.5.22`);
+  if (npm.version !== "11.21.1" || npm.dependencies.tar !== "^7.5.22" || tar.version !== "7.5.22") throw new Error(`Packed CLI resolved npm ${npm.version} with bundled tar ${tar.version}; expected npm 11.21.1 with tar 7.5.22`);
   if (ws.version !== "8.21.0") throw new Error(`Packed CLI resolved ws ${ws.version}; expected 8.21.0`);
-  if (sdk.dependencies.npm !== "11.21.0" || sdk.dependencies.ws !== "8.21.0") throw new Error("Packed SDK public dependency manifest does not expose the verified CLI tool versions");
+  if (sdk.dependencies.npm !== "11.21.1" || sdk.dependencies.ws !== "8.21.0") throw new Error("Packed SDK public dependency manifest does not expose the verified CLI tool versions");
   return { npm: npm.version, tar: tar.version, ws: ws.version };
 }
 async function verifyCliRuntimes(consumer: string) {
@@ -91,6 +91,7 @@ function manifest(archive: string, react: string) {
       "@legendapp/spark": `file:${archive}`,
       expo: "54.0.37",
       react,
+      ...(react === "19.1.4" ? { "react-dom": react } : {}),
       "react-native": "0.81.6",
     },
     devDependencies: { "@types/node": "24.13.6", "@types/react": "19.1.10", typescript: "5.9.3" },
@@ -118,7 +119,7 @@ try {
   const cliToolchain = verifyCliToolchain(consumer);
   const singletonPaths = await verifyConsumerSingletons(consumer);
   const publicReact = singletonPaths.react!;
-  const graph = await runNpm(consumer, ["ls", "react", "react-native", "expo", "--all", "--json"]);
+  const graph = await runNpm(consumer, ["ls", "react", "react-dom", "react-native", "expo", "--all", "--json"]);
   if (graph.status !== 0) throw new Error(`Installed framework dependency graph is invalid:\n${graph.output}`);
   const graphJson = JSON.parse(graph.output.slice(graph.output.indexOf("{")));
   const versions = new Map<string, Set<string>>();
@@ -145,14 +146,23 @@ try {
   if (diagnostics.length) throw new Error(`Installed consumer declarations failed to typecheck:\n${diagnostics.join("\n")}`);
 
   writeFileSync(path.join(consumer, "app.json"), JSON.stringify({ expo: { name: "preflight-fixture", slug: "preflight-fixture", platforms: ["macos"] } }, null, 2) + "\n");
-  const before = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
+  // Fresh and upgraded apps record their installed version before native preflight.
+  mkdirSync(path.join(consumer, ".spark"));
+  writeFileSync(path.join(consumer, ".spark/version"), VERSION + "\n");
   const cli = path.join(consumer, "node_modules/.bin/spark");
+  const webPins = await runNpm(consumer, ["exec", "--", "spark", "build", "--dev"]);
+  if (webPins.status === 0 || !webPins.output.includes("Run npm install")) throw new Error(`Installed CLI did not repair outdated enriched-html web pins:\n${webPins.output}`);
+  const reinstall = await runNpm(consumer, managerInstallArgs("npm"));
+  if (reinstall.status !== 0) throw new Error(`Web pin reinstall failed:\n${reinstall.output}`);
+  const before = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
   const rejected = await spawnProcess([cli, "build", "--dev"], { cwd: consumer, env: { ...process.env, CI: "1" }, stdout: "pipe", stderr: "pipe" });
   const [rejectStatus, rejectOut, rejectErr] = await Promise.all([rejected.exited, new Response(rejected.stdout!).text(), new Response(rejected.stderr!).text()]);
   const rejectOutput = `${rejectOut}\n${rejectErr}`;
   if (rejectStatus === 0 || !/Native patch preparation stopped before changing project files:/m.test(rejectOutput)) throw new Error(`Installed CLI did not reject missing patch receipts with an actionable preflight error:\n${rejectOutput}`);
-  const onlyLogs = (name: string) => name === ".spark" && readdirSync(path.join(consumer, name)).every(entry => entry === "logs");
-  const after = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name)) && !onlyLogs(name)));
+  if (readFileSync(path.join(consumer, ".spark/version"), "utf8") !== VERSION + "\n" ||
+      readdirSync(path.join(consumer, ".spark")).some(entry => entry !== "version" && entry !== "logs"))
+    throw new Error("Native preflight rejection changed recorded project state");
+  const after = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
   if ([...after].some(name => !before.has(name))) throw new Error(`Native preflight rejection wrote project state: ${[...after].filter(name => !before.has(name)).join(", ")}`);
 
   const incompatible = path.join(root, "incompatible"); mkdirSync(incompatible);
@@ -190,7 +200,7 @@ try {
     }
   }
 
-  console.log(`PASS: full ${VERSION} Spark archive ${archiveName} (sha256 ${archiveHash}) installed with ${managerResults.map(result => `${result.manager}@${result.version}${result.singletonVerified ? " (single React/RN/Expo paths)" : " (not tested)"}`).join(", ")}; packed CLI ran on Node and Bun for all installed managers and resolved npm ${cliToolchain.npm} with tar ${cliToolchain.tar} and ws ${cliToolchain.ws}; React DOM remained optional; complete public declarations typechecked with npm; npm rejected React 18.2.0 peer conflict; installed CLI rejected an unpatched native graph before project writes. Lifecycle scripts and native compilation were intentionally skipped.`);
+  console.log(`PASS: full ${VERSION} Spark archive ${archiveName} (sha256 ${archiveHash}) installed with ${managerResults.map(result => `${result.manager}@${result.version}${result.singletonVerified ? " (single React/RN/Expo paths)" : " (not tested)"}`).join(", ")}; packed CLI ran on Node and Bun for all installed managers and resolved npm ${cliToolchain.npm} with tar ${cliToolchain.tar} and ws ${cliToolchain.ws}; React DOM public peer remained optional and the fixture supplied its matching web renderer; complete public declarations typechecked with npm; npm rejected React 18.2.0 peer conflict; installed CLI rejected an unpatched native graph before project writes. Lifecycle scripts and native compilation were intentionally skipped.`);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

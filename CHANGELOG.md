@@ -9,6 +9,16 @@ macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 - Add native Markdown and HTML readers alongside editable rich text, with reviewed public exports.
 - Verify local SDK and creator tarballs by scaffolding, installing, and typechecking a fresh npm app in CI.
 - Rewrite the quick start and clarify platform support and prerelease installation.
+- Keep fresh apps compatible with Runner when native dependencies carry workspace patch receipts.
+- Preserve SidebarSplitView pane state and divider behavior.
+- Make nonrecursive directory removal preserve children created concurrently.
+- Remove build-machine paths and command logs from distributed archives, and include creator and starter READMEs.
+- Persist pnpm 11 installation settings, dependency overrides, and local archive build approvals during creation and upgrades.
+- Align the Markdown backend peer with the bundled 1.1.1 version.
+- Preserve Metro module data when Fast Refresh removes and reuses imports. Keep native component specs registered once across remove/re-add transitions, including recovery from failed updates.
+- Keep new and refreshed pnpm 10 apps' native peers on the SDK's patched Nitro archive.
+- Update installer and diff dependencies for security fixes. Pin new creator apps' web/build dependencies and match their React DOM renderer to React 19.1.4; repair application-owned enriched-html web pins during CLI preparation and existing install paths, with doctor reporting outdated resolved dependencies.
+- Include authoritative Audio and Nitro licenses and provenance in patched archives; record the missing upstream Runtimes license text.
 
 ## 0.0.1-next.4 — preview
 

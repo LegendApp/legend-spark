@@ -1,3 +1,4 @@
+import { assertEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -69,6 +70,7 @@ export function validateWorkspaceNativePatches(root: string, packages: Pick<Nati
 }
 
 export function assertNativePatchPreflight(root: string) {
+  assertEnrichedHtmlPins(root);
   prepareNativePatches(root);
   const packages = installedPackages(root);
   const framework = findFramework(root);

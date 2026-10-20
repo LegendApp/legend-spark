@@ -1,3 +1,5 @@
+import { enrichedHtmlPinPolicy, installWithEnrichedHtmlPins, repairEnrichedHtmlPins } from "./enriched-html-pins.ts";
+import { writePackageConfig } from "./package-manager-config.ts";
 import { createRequire } from "node:module";
 import { mkdtempSync, rmSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -7,8 +9,7 @@ import { supportedPlatforms } from "@legendapp/spark-desktop-config/config.cjs";
 import { readJson } from "./json.ts";
 import { installedSparkVersion } from "./migrations.cjs";
 import { upgradeDependencyPins, printDependencyPins } from "./dependency-pins.ts";
-import { packageManager, managerCommand } from "./package-manager.ts";
-import { run } from "./commands.ts";
+import { packageManager } from "./package-manager.ts";
 
 function cliRoot(spark: string) {
   const pkg = readJson(path.join(spark, "package.json"));
@@ -42,16 +43,18 @@ export async function upgrade(root: string, dryRun = false) {
     const platforms = supportedPlatforms(root);
     const template = platforms.length > 1 ? "universal" : platforms.includes("windows") ? "windows" : "blank-typescript";
     const defaults: { dependencies: Record<string, string>; overrides: Record<string, string> } = readJson(path.join(cli, "templates", template, "package.json"));
+    const webPins = enrichedHtmlPinPolicy(defaults.overrides);
     const releaseTools = await import(pathToFileURL(path.join(cli, "dist/release.js")).href);
     const manifest = releaseTools.installedRelease();
     const sources: Record<string, string> = releaseTools.packageSources(undefined, manifest);
-    const pins = { ...defaults.overrides, ...defaults.dependencies, ...sources, "@legendapp/spark": version };
+    const webPin = (name: string) => name in webPins || name === "react-dom";
+    const pins = Object.fromEntries(Object.entries({ ...defaults.overrides, ...defaults.dependencies, ...sources, "@legendapp/spark": version }).filter(([name]) => !webPin(name)));
     const requiredOverrides = {
       where: manager === "pnpm" ? ["pnpm", "overrides"] : [manager === "yarn" ? "resolutions" : "overrides"],
       pins: Object.fromEntries(Object.entries({ ...defaults.overrides, ...sources }).filter(([name]) =>
-        (name !== "react-native-macos" || platforms.includes("macos")) && (name !== "react-native-windows" || platforms.includes("windows")))),
+        !webPin(name) && (name !== "react-native-macos" || platforms.includes("macos")) && (name !== "react-native-windows" || platforms.includes("windows")))),
     };
-    const issues = upgradeDependencyPins(root, true, pins, requiredOverrides);
+    const issues = [...upgradeDependencyPins(root, true, pins, requiredOverrides), ...repairEnrichedHtmlPins(root, manager, true, webPins)];
     console.log(`Spark ${current} → ${version} (${channel})${dryRun ? " — dry run" : ""}`);
     printDependencyPins(issues);
     const targetMigrations: typeof import("./migrations.cjs") = createRequire(path.join(cli, "package.json"))("./dist/migrations.cjs");
@@ -69,7 +72,8 @@ export async function upgrade(root: string, dryRun = false) {
     // Keep the old receipt until installation and finalization both succeed.
     targetMigrations.applyMigrationPlan(root, plan, false);
     upgradeDependencyPins(root, false, pins, requiredOverrides);
-    await run(root, managerCommand(manager, ["install"]));
+    writePackageConfig(root, readJson(path.join(root, "package.json")), manager, root, [...Object.keys(webPins), "react-dom"]);
+    await installWithEnrichedHtmlPins(root, manager, webPins);
     const req = createRequire(path.join(root, "package.json"));
     // Read fresh bytes: the running process may have cached the old manifest.
     const installed = path.dirname(req.resolve("@legendapp/spark/package.json"));

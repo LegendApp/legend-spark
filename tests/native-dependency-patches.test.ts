@@ -136,6 +136,8 @@ test("workspace Nitro adapters and automatic camera patch receipts survive repea
 test.each(["react-native-enriched-markdown", "react-native-enriched-html"])("%s installs and repairs independently of camera or Nitro", (name) => {
   const { root, spark, packages } = fixture(true);
   try {
+    mkdirSync(path.join(root, "node_modules/react"), { recursive: true });
+    writeFileSync(path.join(root, "node_modules/react/package.json"), JSON.stringify({ name: "react", version: "19.1.4" }));
     const manifest = JSON.parse(readFileSync(path.join(spark, "package.json"), "utf8"));
     manifest.dependencies = { [name]: "1.1.1" };
     for (const camera of [...names, "react-native-nitro-modules"]) rmSync(path.join(packages, camera), { recursive: true });
