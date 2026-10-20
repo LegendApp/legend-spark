@@ -10,6 +10,7 @@ import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { pointer, claudePointer } from "../packages/cli/src/migrations.cjs";
 
 vi.mock("../packages/cli/src/expo-node.ts", () => ({ checkExpoDesktopNode: vi.fn() }));
+vi.mock("../packages/cli/src/executable.ts", () => ({ which: vi.fn((command: string) => command) }));
 vi.mock("../packages/cli/src/process.ts", () => ({ nodeCommand: () => ["node", "expo-desktop"], spawnProcess: vi.fn() }));
 vi.mock("../packages/cli/src/pack-archive.ts", () => ({ packArchive: vi.fn() }));
 vi.mock("../packages/cli/src/release.ts", () => ({ installedRelease: () => undefined, packageSources: (manifest: string) => ({ "@react-native-runtimes/core": "file:" + manifest.replace(/packages\.json$/, "core.tgz"), "@legendapp/spark": "file:" + manifest.replace(/packages\.json$/, "spark.tgz") }) }));
