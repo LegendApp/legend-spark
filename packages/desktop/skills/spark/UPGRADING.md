@@ -244,3 +244,11 @@ import { Html } from '@legendapp/spark/html';
 Existing `MarkdownInput` and `HtmlInput` imports continue to work. Typecheck your
 app and exercise any rich text views you add; rebuild a custom runtime if its
 native rich text dependencies changed since your previous SDK version.
+
+## 0.0.1-next.6
+
+Breaking: no. No app source or configuration migration is required from next.5.
+
+This release republishes the creator from the release artifacts. The next.5 creator was a local
+development pack and could not create new apps; create them with
+`npm create @legendapp/spark@next MyApp`.
