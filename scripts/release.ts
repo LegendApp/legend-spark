@@ -23,7 +23,7 @@ await releaseCommand(root, async () => {
       for (const destination of destinations) {
         const space = statfsSync(destination);
         const available = space.bavail * space.bsize;
-        if (available <= 50_000_000_000 + headroom) throw new Error(`Insufficient disk space on ${destination}: ${(available / 1e9).toFixed(1)} GB available. Preserve the 50 GB reserve; review cleanup before resuming.`);
+        if (available <= 30_000_000_000 + headroom) throw new Error(`Insufficient disk space on ${destination}: ${(available / 1e9).toFixed(1)} GB available. Preserve the 30 GB reserve; review cleanup before resuming.`);
       }
     }
     checkSpace();
