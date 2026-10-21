@@ -53,7 +53,7 @@ export async function credentials(root: string, reset = false, execute: Runner =
   const matches = chooseIdentity(discovered, identity, teamId);
   const defaultChoice = Math.max(0, matches.findIndex(item => item.hash === saved.hash)) + 1;
   let selected = matches[defaultChoice - 1]!;
-  if (process.stdin.isTTY) {
+  if (process.stdin.isTTY && !process.env.SPARK_DEVELOPER_ID_APPLICATION) {
     console.log("Available Developer ID signing certificates:");
     console.log(matches.map((item, index) => `${index + 1}. ${item.name} [${item.hash}]`).join("\n"));
     const choice = await choose("Signing certificate", defaultChoice, matches.length);
@@ -65,7 +65,7 @@ export async function credentials(root: string, reset = false, execute: Runner =
   let suggestedProfile = keychainProfile || `spark-${selected.teamId}`;
   let result!: SigningCredentials;
   let validated = false;
-  let needsSelection = Boolean(process.stdin.isTTY);
+  let needsSelection = Boolean(process.stdin.isTTY && !process.env.SPARK_NOTARY_KEYCHAIN_PROFILE);
   while (!validated) {
     if (needsSelection || !keychainProfile) {
       if (!process.stdin.isTTY) throw new Error("Notarization is not configured. Set SPARK_NOTARY_KEYCHAIN_PROFILE or run spark credentials interactively.");

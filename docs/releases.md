@@ -2,6 +2,25 @@
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
+## Create an app
+
+Choose a channel explicitly with any supported package manager:
+
+| Manager | Next preview | Latest |
+| --- | --- | --- |
+| npm | `npm create @legendapp/spark@next MyApp -- --next` | `npm create @legendapp/spark@latest MyApp -- --latest` |
+| Bun | `bun create @legendapp/spark@next MyApp --next` | `bun create @legendapp/spark@latest MyApp --latest` |
+| pnpm | `pnpm create @legendapp/spark MyApp --next` | `pnpm create @legendapp/spark MyApp --latest` |
+| Yarn (including Yarn 1) | `yarn create @legendapp/spark MyApp --next` | `yarn create @legendapp/spark MyApp --latest` |
+
+pnpm can drop the creator tag, and Yarn 1 cannot take a tag in `yarn create`.
+The self-contained creator resolves explicit channel flags through npm dist-tags.
+It pins the SDK to its bundled release metadata. If the selected version differs,
+it prints an exact `npx @legendapp/create-spark@<version>` command to run; version
+selection downloads no SDK. `--spark-version <version|tag>` selects another release;
+use only one selection flag. With no flag, the creator uses its own release.
+These commands require the matching creator and release assets to be published.
+
 ## App upgrade contract
 
 Each release must retain the cumulative app-facing notes in
@@ -17,8 +36,9 @@ only needs app decisions, its migration still emits actionable `manualStep`
 entries linked to its version notes. Nonbreaking releases with no migration must
 still have notes. `tests/upgrade-release-policy.test.ts` gates changelog versions,
 breaking markers and migration coverage; the release workflow runs it in the
-full suite after selecting/bumping the version. Supply notes/migrations for the
-selected version before completing that gate; a version bump alone is incomplete.
+full suite after selecting/bumping the version. The workflow fails before building
+if the selected version has no reviewed `UPGRADING.md` section. Supply notes/migrations for that exact version and retry;
+app-facing upgrade guidance is not generated from commit titles.
 
 Migration `apply(context)` uses the typed `MigrationContext` in
 `migration-helpers.d.cts`; helpers work on an in-memory file view shared by the
@@ -115,7 +135,10 @@ first, followed by saved notarization Keychain profiles. Notarization setup offe
 explicit choices to select a saved profile, enter another name, or create one;
 creation is never selected automatically. A profile such
 as `Moo.do` must have been stored by `notarytool`, independently of the certificate
-name. A missing profile returns to the setup choices before any build begins.
+name. A missing profile returns to the setup choices before any build begins. The chosen
+certificate and profile persist in `.spark/release-signing/.spark/signing.json` and
+are passed through the environment to Runner signing and subsequent resumes,
+without a second selection prompt. Explicit `SPARK_*` values override saved choices.
 
 It runs `bun install --frozen-lockfile`, typechecking, and portable tests before committing the version
 change. It then builds/signs/notarizes the Runner, assembles immutable artifacts,
@@ -141,6 +164,23 @@ check can leave the script's version edits uncommitted; preserve them for resume
 The ignored `.spark/release-workflow.json` records the selected inputs, and a PID
 lock prevents two local release runs. Do not remove the checkpoint to restart an
 unresolved notarization submission.
+
+To skip all build/sign steps and publish an already assembled candidate, run:
+
+```sh
+bun run release --resume-from publish
+```
+
+This requires the saved committed candidate, its clean source revision, and
+`artifacts/releases/<version>/`. It verifies artifact checksums and the creator's
+embedded `dist/release.json` and package version against the SDK version before
+publication. Dev packs under `artifacts/packages/` cannot be published. The remote
+source tag must already exist; this resume mode does not push source or tags.
+
+npm publish and dist-tag changes require **both stdin and stdout attached to a
+TTY**. Run directly in a terminal, without `tee` or output redirection, so npm can
+show its browser authentication URL and complete its prompt. npm output stays
+attached to the terminal; the workflow does not intercept authentication URLs.
 
 If npm already accepted the archive and only tag promotion/completion remains,
 including a release started with older scripts, run:
@@ -173,10 +213,11 @@ records the creator submission. Resume waits instead of publishing either again.
 The requested tags move only after both archives verify.
 Authentication failures or changed archive bytes still stop the release.
 
-The workflow checks disk space before commands and every 30 seconds while they
-run, preserves a 50 GB reserve, and requires an additional 10 GB of headroom before
-dependency installation, native builds, and packed-consumer installs. If it stops
-for space, review cleanup and rerun with `--resume`.
+The workflow checks disk space immediately before heavy steps (dependency
+installation, tests, native builds and packed-consumer installs). It preserves a
+30 GB reserve and requires an additional 10 GB of build headroom. It does not run
+a disk monitor that can terminate signing, notarization or npm authentication.
+If a space check fails, review cleanup and rerun with `--resume`.
 
 This workflow publishes a prerelease for macOS Apple Silicon. Its
 automated checks do not perform native UI or clean-recipient Runner acceptance.

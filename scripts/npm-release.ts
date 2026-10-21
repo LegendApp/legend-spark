@@ -1,5 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import type { Execute } from "./release-workflow.ts";
 import { CommandError, isNetworkError } from "../packages/cli/src/errors.ts";
@@ -25,6 +26,22 @@ export function releaseNotes(changelog: string, version: string) {
 }
 
 export const publishedPackages = ["@legendapp/spark", "@legendapp/create-spark"] as const;
+
+export function requireNpmTerminal(stdin: Pick<NodeJS.ReadStream, "isTTY"> = process.stdin, stdout: Pick<NodeJS.WriteStream, "isTTY"> = process.stdout) {
+  if (!stdin.isTTY || !stdout.isTTY) throw new Error("npm publish/dist-tag requires both stdin and stdout to be TTYs for browser authentication. Run in a terminal without piping through tee; resume with bun run release --resume-from publish.");
+}
+
+export function verifyCreatorArchive(root: string, version: string, archive: string) {
+  const folder = path.join(realpathSync(root), "artifacts/releases", version);
+  if (path.dirname(realpathSync(archive)) !== folder) throw new Error(`Refusing to publish create-spark: archive must be under ${folder}/, not artifacts/packages or another directory.`);
+  const read = (file: string) => {
+    try { return JSON.parse(execFileSync("tar", ["-xOzf", archive, `package/${file}`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 4 * 1024 * 1024 })); }
+    catch { throw new Error(`Refusing to publish create-spark: tarball lacks valid ${file}. Reassemble the release; dev packs cannot be published.`); }
+  };
+  const manifest = read("package.json");
+  const release = read("dist/release.json");
+  if (manifest?.name !== "@legendapp/create-spark" || manifest?.version !== version || release?.version !== version) throw new Error(`Refusing to publish create-spark: package version ${manifest?.version} and dist/release.json version ${release?.version} must match SDK ${version}.`);
+}
 
 export async function alreadyPublished(version: string, archive: string, execute: Execute, name = "@legendapp/spark") {
   const argv = ["npm", "view", `${name}@${version}`, "version", "dist.integrity", "--json", "--prefer-online", "--fetch-retries=0", "--fetch-timeout=15000"];
@@ -57,6 +74,7 @@ export async function waitForPublication(version: string, archive: string, execu
 
 export async function publishAndWait(root: string, release: { version: string; revision: string; archive: string; published: boolean; name?: string }, execute: Execute, publish: () => Promise<void>, wait: Wait = waitForNextCheck) {
   const name = release.name ?? publishedPackages[0];
+  if (name === "@legendapp/create-spark") verifyCreatorArchive(root, release.version, release.archive);
   const filename = name === publishedPackages[0] ? `${release.version}.json` : `${name.replace(/^@/, "").replaceAll("/", "-")}-${release.version}.json`;
   const receiptFile = path.join(root, ".spark/npm-publications", filename);
   const receipt = { schema: 1, name, version: release.version, revision: release.revision, integrity: archiveIntegrity(release.archive) };

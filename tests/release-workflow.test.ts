@@ -46,6 +46,7 @@ function fixture() {
   write("packages/desktop/package.json", '{"version":"0.0.1-next.2"}\n');
   write("packages/cli/templates/blank-typescript/package.json", '{"dependencies":{"@legendapp/spark":"0.0.1-next.2"}}\n');
   write("packages/cli/src/project.ts", 'export const VERSION = "0.0.1-next.2";\n');
+  write("packages/desktop/skills/spark/UPGRADING.md", "# Upgrading Spark apps\n\n## 0.0.1-next.3\n\nReviewed upgrade notes.\n\n## 0.0.1-next.2\n\nBaseline.\n");
   write("CHANGELOG.md", "# Changelog\n\n## 0.0.1-next.2 — preview\n\nHistorical notes.\n");
   write("docs/releases.md", "Legend Spark currently identifies itself as `0.0.1-next.2`.\n");
   write("docs/release-support-matrix.json", JSON.stringify({ version: "0.0.1-next.2", entries: [] }, null, 2) + "\n");
@@ -60,7 +61,12 @@ function fixture() {
   const staged = () => {
     const version = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
     const folder = `artifacts/releases/${version}`;
-    write(`${folder}/create-spark.tgz`, "exact create release archive"); write(`${folder}/spark.tgz`, "exact signed release archive"); write(`${folder}/runner-manifest.json`, "{}\n");
+    write(".spark/create-fixture/package/package.json", JSON.stringify({ name: "@legendapp/create-spark", version }));
+    write(".spark/create-fixture/package/dist/release.json", JSON.stringify({ version }));
+    mkdirSync(path.join(root, folder), { recursive: true });
+    const packed = spawnSync("tar", ["-czf", path.join(root, folder, "create-spark.tgz"), "-C", path.join(root, ".spark/create-fixture"), "package"]);
+    if (packed.status) throw new Error("Failed to pack creator fixture");
+    write(`${folder}/spark.tgz`, "exact signed release archive"); write(`${folder}/runner-manifest.json`, "{}\n");
     const sha256 = Object.fromEntries(["spark.tgz", "create-spark.tgz", "runner-manifest.json"].map(name => [name, createHash("sha256").update(readFileSync(path.join(root, folder, name))).digest("hex")]));
     write(`${folder}/release.json`, JSON.stringify({ version, revision: git("rev-parse", "HEAD"), npm: "spark.tgz", createNpm: "create-spark.tgz", sha256 }));
   };
@@ -443,4 +449,35 @@ test("npm retries accept exactly the published tarball and distinguish missing v
     writeFileSync(archive, "different bytes");
     await expect(alreadyPublished(metadata.version, archive, async () => ({ code: 0, output: JSON.stringify(metadata) }))).rejects.toThrow("different bytes");
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("missing reviewed upgrade notes stop before build or version writes", async () => {
+  const f = fixture();
+  try {
+    f.write("packages/desktop/skills/spark/UPGRADING.md", "# Upgrading Spark apps\n\n## 0.0.1-next.2\n\nBaseline.\n");
+    f.git("add", "packages/desktop/skills/spark/UPGRADING.md"); f.git("commit", "-m", "Prepare notes fixture");
+    await expect(f.release()).rejects.toThrow("Missing UPGRADING.md section for 0.0.1-next.3");
+    expect(JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8")).version).toBe("0.0.1-next.2");
+    expect(f.commands.some(args => args[1] === "install" || args.includes("release:runner") || args.includes("release:publish"))).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test("publish-only resume verifies staged artifacts and never consults signing or builds", async () => {
+  const f = fixture();
+  try {
+    await expect(releaseWorkflow(f.root, { resume: false, latest: false, resumeFrom: "publish" }, f.execute, async () => { throw new Error("Signing must not run"); }, () => { throw new Error("Runner must not run"); })).rejects.toThrow("No committed release");
+    f.setFailures(false, false, true);
+    await expect(f.release()).rejects.toThrow("Promotion interrupted");
+    const stateFile = path.join(f.root, ".spark/release-workflow.json");
+    const state = JSON.parse(readFileSync(stateFile, "utf8"));
+    // The build completed, but its publication checkpoint was lost.
+    delete state.publicationReady; writeFileSync(stateFile, JSON.stringify(state));
+    const before = f.commands.length;
+    expect(await releaseWorkflow(f.root, { resume: false, latest: false, resumeFrom: "publish" }, f.execute, async () => { throw new Error("Signing must not run"); }, () => { throw new Error("Runner must not run"); })).toBe(0);
+    const commands = f.commands.slice(before);
+    expect(commands.some(args => args[1] === "install" || args.includes("release:runner") || args[1] === "push")).toBe(false);
+    expect(commands.filter(args => args.includes("release:publish"))).toHaveLength(1);
+    f.write(`artifacts/releases/${state.version}/create-spark.tgz`, "tampered");
+    await expect(releaseWorkflow(f.root, { resume: false, latest: false, resumeFrom: "publish" }, f.execute, async () => {}, () => "")).rejects.toThrow("Release artifact changed");
+  } finally { f.cleanup(); }
 });

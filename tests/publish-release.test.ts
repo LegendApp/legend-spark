@@ -17,6 +17,8 @@ vi.mock("node:fs", async importOriginal => {
 });
 vi.mock("../scripts/npm-release.ts", async importOriginal => ({
   ...await importOriginal<typeof import("../scripts/npm-release.ts")>(),
+  verifyCreatorArchive: vi.fn(),
+  requireNpmTerminal: vi.fn(),
   alreadyPublished: async (_version: string, _archive: string, _execute: unknown, name: string) => {
     const count = state.checks.get(name) ?? 0;
     state.checks.set(name, count + 1);
@@ -63,7 +65,7 @@ vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, a
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-test.each(["success", "create failure", "not visible", "retry"])("release publication gates promotions: %s", async scenario => {
+test.each(["success", "create failure", "not visible", "retry", "invalid creator", "no terminal"])("release publication gates promotions: %s", async scenario => {
   vi.resetModules();
   state.commands = [];
   state.checks.clear();
@@ -79,7 +81,17 @@ test.each(["success", "create failure", "not visible", "retry"])("release public
     sha256: { "spark.tgz": hash, "create-spark.tgz": hash, "runner-manifest.json": hash } };
   vi.spyOn(process, "argv", "get").mockReturnValue([process.execPath, "publish-release.ts", "--latest"]);
   vi.spyOn(console, "log").mockImplementation(() => {});
+  const helpers = await import("../scripts/npm-release.ts");
+  vi.mocked(helpers.verifyCreatorArchive).mockReset();
+  vi.mocked(helpers.requireNpmTerminal).mockReset();
+  if (scenario === "invalid creator") vi.mocked(helpers.verifyCreatorArchive).mockImplementation(() => { throw new Error("Invalid creator release"); });
+  if (scenario === "no terminal") vi.mocked(helpers.requireNpmTerminal).mockImplementation(() => { throw new Error("Requires TTYs"); });
   const publication = import("../scripts/publish-release.ts");
+  if (scenario === "invalid creator" || scenario === "no terminal") {
+    await expect(publication).rejects.toThrow(scenario === "invalid creator" ? "Invalid creator release" : "Requires TTYs");
+    expect(state.commands).toEqual([]);
+    return;
+  }
   if (state.failCreate || !state.visible) {
     await expect(publication).rejects.toThrow(state.failCreate ? "npm publish @legendapp/create-spark exited 1" : "not visible yet");
     expect(state.commands.some(argv => argv[1] === "dist-tag")).toBe(false);
@@ -89,6 +101,8 @@ test.each(["success", "create failure", "not visible", "retry"])("release public
     }
   } else {
     await publication;
+    expect(helpers.verifyCreatorArchive).toHaveBeenCalledWith(expect.any(String), state.release.version, expect.stringContaining("/artifacts/releases/0.0.1-next.3/create-spark.tgz"));
+    expect(helpers.requireNpmTerminal).toHaveBeenCalledOnce();
     const publishes = state.commands.filter(argv => argv[1] === "publish");
     expect(publishes.map(argv => path.basename(argv[2]!))).toEqual(state.retry ? [] : ["spark.tgz", "create-spark.tgz"]);
     for (const argv of publishes) expect(argv.slice(-2)).toEqual(["--tag", "staging"]);

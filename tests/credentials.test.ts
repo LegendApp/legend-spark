@@ -165,7 +165,7 @@ test.each([true, false])("other notary failures propagate without offering creat
   execute.mockResolvedValueOnce(`1) ${identity.hash} "${identity.name}"`).mockRejectedValueOnce(failure);
   await expect(credentials(root, false, execute)).rejects.toBe(failure);
   expect(mocks.spawn).not.toHaveBeenCalled();
-  expect(mocks.question).toHaveBeenCalledTimes(interactive ? 2 : 0);
+  expect(mocks.question).toHaveBeenCalledTimes(interactive ? 1 : 0);
   expect(existsSync(stateFile(root, "signing.json"))).toBe(false);
 });
 
@@ -208,4 +208,14 @@ test("profile discovery errors stop setup rather than presenting an empty list",
   await expect(credentials(root, false, execute)).rejects.toBe(error);
   expect(mocks.spawn).not.toHaveBeenCalled();
   expect(existsSync(stateFile(root, "signing.json"))).toBe(false);
+});
+
+test("release environment reuses explicit certificate and notary choices without a second menu", async () => {
+  vi.stubEnv("SPARK_DEVELOPER_ID_APPLICATION", identity.hash);
+  vi.stubEnv("SPARK_NOTARY_KEYCHAIN_PROFILE", "release-profile");
+  const result = await credentials(root, false, execute);
+  expect(result.hash).toBe(identity.hash);
+  expect(result.keychainProfile).toBe("release-profile");
+  expect(mocks.question).not.toHaveBeenCalled();
+  expect(execute).toHaveBeenCalledWith(root, ["xcrun", "notarytool", "history", "--keychain-profile", "release-profile", "--output-format", "json"], { capture: true });
 });

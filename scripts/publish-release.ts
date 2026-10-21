@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { run } from "../packages/cli/src/commands.ts";
 import { readJson, VERSION } from "../packages/cli/src/project.ts";
-import { alreadyPublished, publishedPackages, publishAndWait, releaseNotes, waitForReleaseTags } from "./npm-release.ts";
+import { alreadyPublished, publishedPackages, publishAndWait, releaseNotes, waitForReleaseTags, verifyCreatorArchive, requireNpmTerminal } from "./npm-release.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 await releaseCommand(root, async () => {
@@ -21,6 +21,9 @@ await releaseCommand(root, async () => {
     if (path.basename(name) !== name || createHash("sha256").update(readFileSync(path.join(folder, name))).digest("hex") !== hash) throw new Error(`Release artifact changed: ${name}`);
   }
   if (!release.sha256[release.npm] || !release.sha256[release.createNpm] || !release.sha256["runner-manifest.json"]) throw new Error("Incomplete release artifact manifest");
+  verifyCreatorArchive(root, VERSION, path.join(folder, release.createNpm));
+  requireNpmTerminal();
+  console.log("\n========== npm browser authentication ==========\nFollow the npm authentication URL printed in this terminal. Keep stdout attached to the terminal.\n===============================================\n");
   const repo = "LegendApp/legend-spark", tag = `v${VERSION}`;
   const repository = JSON.parse(await run(root, ["gh", "repo", "view", repo, "--json", "visibility"], { capture: true }));
   if (repository.visibility !== "PUBLIC") throw new Error("Runner downloads require a public distribution repository. Do not publish npm while release assets are private.");

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { writeJson } from "../packages/cli/src/project.ts";
 import { CommandError } from "../packages/cli/src/errors.ts";
-import { alreadyPublished, changelogSection, publishedPackages, publishAndWait, waitForReleaseTags } from "./npm-release.ts";
+import { alreadyPublished, changelogSection, publishedPackages, publishAndWait, waitForReleaseTags, verifyCreatorArchive } from "./npm-release.ts";
 
 type Edit = { file: string; before: string; after: string };
 type State = { schema: 1; version: string; baseRevision: string; revision?: string; latest: boolean; edits: Edit[]; publicationReady?: boolean; complete?: boolean };
@@ -29,7 +29,13 @@ export function releaseTarget(current: string, published: string[]) {
   return { version: current, previous: `v${prefix}${latest}` };
 }
 
+function requireUpgradeNotes(root: string, version: string) {
+  const upgradeNotes = readFileSync(path.join(root, "packages/desktop/skills/spark/UPGRADING.md"), "utf8");
+  if (changelogSection(upgradeNotes, version) === undefined) throw new Error(`Missing UPGRADING.md section for ${version}. Add reviewed app upgrade notes (and a migration for breaking changes) before building this release.`);
+}
+
 export function versionEdits(root: string, files: string[], current: string, version: string, notes: string): Edit[] {
+  requireUpgradeNotes(root, version);
   const edits: Edit[] = [];
   for (const file of files) {
     const before = readFileSync(path.join(root, file), "utf8");
@@ -76,6 +82,7 @@ export function verifyReleaseArchive(root: string, version: string, revision: st
   for (const [name, expected] of Object.entries(release.sha256)) {
     if (path.basename(name) !== name || createHash("sha256").update(readFileSync(path.join(folder, name))).digest("hex") !== expected) throw new Error(`Release artifact changed: ${name}`);
   }
+  verifyCreatorArchive(root, version, path.join(folder, release.createNpm));
   return path.join(folder, release.npm);
 }
 
@@ -132,7 +139,7 @@ async function finishRelease(root: string, state: State, execute: Execute) {
   console.log(`Released ${state.version}. Native UI and clean-recipient Runner acceptance must still be recorded separately.`);
 }
 
-export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; finish?: boolean }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
+export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; finish?: boolean; resumeFrom?: "publish" }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
   const stateFile = path.join(root, ".spark/release-workflow.json");
   const run = async (argv: string[], capture = false) => {
     const result = await execute(argv, capture);
@@ -143,7 +150,17 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
   const clean = async () => { if (await git("status", "--porcelain")) throw new Error("Release requires a clean checkout. Commit or move drafts before retrying; the script never stashes them."); };
   const previous: State | undefined = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")) : undefined;
   if (previous && previous.schema !== 1) throw new Error("Unsupported release workflow state");
-  if (options.finish) {
+  if (options.resumeFrom === "publish") {
+    if (!previous?.revision) throw new Error("No committed release to resume from publish; preserve the workflow state and staged artifacts.");
+    if (options.latest && !previous.latest) throw new Error("Resume the original channel selection; retry without --latest.");
+    if (await git("rev-parse", "HEAD") !== previous.revision) throw new Error("Source revision changed since this release started");
+    await clean();
+    verifyReleaseArchive(root, previous.version, previous.revision);
+    await run(["bun", "run", "release:publish", ...(previous.latest ? ["--latest"] : [])]);
+    for (const name of publishedPackages) await waitForReleaseTags(previous.version, previous.latest, execute, undefined, name);
+    previous.complete = true;
+    writeJson(stateFile, previous);
+  } else if (options.finish) {
     if (!previous) throw new Error("No release to finish. Run bun run release to start a candidate.");
     if (options.latest && !previous.latest) throw new Error("This release was started without --latest. Retry --finish without --latest.");
     await finishRelease(root, previous, execute);
@@ -205,6 +222,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version !== state.version) throw new Error("Workspace version changed during release");
     if (!state.complete) {
       if (!state.publicationReady) {
+        requireUpgradeNotes(root, state.version);
         await run(["bun", "install", "--frozen-lockfile"]);
         await run(["bun", "run", "typecheck"]);
         await run(["bun", "run", "test"]);
