@@ -18,7 +18,22 @@ cd MyApp
 npm run macos
 ```
 
-`npx @legendapp/create-spark@next MyApp` is equivalent. Use `@next` for this prerelease; unqualified commands and `@latest` use npm's default channel and may resolve an older version. These commands require the matching creator package and release assets to be published.
+Choose a channel explicitly with any supported package manager:
+
+| Manager | Next preview | Latest |
+| --- | --- | --- |
+| npm | `npm create @legendapp/spark@next MyApp -- --next` | `npm create @legendapp/spark@latest MyApp -- --latest` |
+| Bun | `bun create @legendapp/spark@next MyApp --next` | `bun create @legendapp/spark@latest MyApp --latest` |
+| pnpm | `pnpm create @legendapp/spark MyApp --next` | `pnpm create @legendapp/spark MyApp --latest` |
+| Yarn (including Yarn 1) | `yarn create @legendapp/spark MyApp --next` | `yarn create @legendapp/spark MyApp --latest` |
+
+pnpm can drop the creator tag, and Yarn 1 cannot take a tag in `yarn create`.
+The self-contained creator resolves explicit channel flags through npm dist-tags.
+It pins the SDK to its bundled release metadata. If the selected version differs,
+it prints an exact `npx @legendapp/create-spark@<version>` command to run; version
+selection downloads no SDK. `--spark-version <version|tag>` selects another release;
+use only one selection flag. With no flag, the creator uses its own release.
+These commands require the matching creator and release assets to be published.
 
 Start in **Spark Runner**, the shared development runtime. Switch to a custom development build when you add native code, then build a standalone app with the native modules it needs. Node and Bun are development tools; neither is embedded in your app. Bun is optional for app developers.
 
