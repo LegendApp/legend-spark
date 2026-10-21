@@ -75,7 +75,7 @@ must include both SKILL.md and UPGRADING.md. Run `bun run typecheck` and the ful
 suite before release. Rebuilding native runtimes and affected app acceptance are
 separate checks from source migrations.
 
-Legend Spark currently identifies itself as `0.0.1-next.5` and publishes through
+Legend Spark currently identifies itself as `0.0.1-next.6` and publishes through
 the `next` preview channel. That identity remains experimental until the
 [release readiness matrix](release-readiness.md) and a completed
 [release evidence dossier](release-test-dossier.md) support a deliberate

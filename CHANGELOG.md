@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.1-next.6 — preview
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- Add next.6 upgrade notes
+- Lower release disk reserve to 30 GB
+- Republish create-spark from release artifacts (next.5 creator was a local dev pack)
+
 ## 0.0.1-next.5 — preview
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
