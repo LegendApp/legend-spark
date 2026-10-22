@@ -53,8 +53,10 @@ await releaseCommand(root, async () => {
     existing = { isDraft: true };
   }
   // Read authenticated GitHub assets while draft; verify bytes before making URLs public.
-  const releases = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/releases`, "--paginate", "--slurp"], { capture: true })).flat();
-  const uploaded = releases.find((item: any) => item.tag_name === tag);
+  // The tag endpoint omits drafts, so only a draft falls back to listing releases.
+  let uploaded: any;
+  try { uploaded = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/releases/tags/${tag}`], { capture: true })); }
+  catch { uploaded = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/releases`, "--paginate", "--slurp"], { capture: true })).flat().find((item: any) => item.tag_name === tag); }
   if (!uploaded) throw new Error("Uploaded release could not be found");
   let assets = uploaded.assets;
   if (uploaded.draft) {
@@ -70,25 +72,23 @@ await releaseCommand(root, async () => {
   }
   if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", "--prerelease"]);
   // npm web authentication needs the terminal; piping output disables its prompt.
-  // Publishing moves its dist-tag immediately; keep next/latest unchanged until both packages verify.
+  // Publish straight to the release channel: the SDK moves before the creator that pins it.
+  const latest = args.includes("--latest");
   for (const [index, name] of publishedPackages.entries()) {
     const archive = archives[index]!;
     await publishAndWait(root, { name, version: VERSION, revision, archive, published: published[index]! }, registryCommand, async () => {
-      const publish = spawnProcess(["npm", "publish", archive, "--access", "public", "--tag", "staging"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+      const publish = spawnProcess(["npm", "publish", archive, "--access", "public", "--tag", latest ? "latest" : "next"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
       const publishCode = await publish.exited;
       if (publishCode) throw new Error(`npm publish ${name} exited ${publishCode}`);
     });
-  }
-  for (const name of publishedPackages) {
-    for (const channel of ["next", ...(args.includes("--latest") ? ["latest"] : [])]) {
+    // Adds next after a --latest publish, and repairs channels a resumed publication missed.
+    const tags = JSON.parse(await run(root, ["npm", "view", name, "dist-tags", "--json", "--prefer-online"], { capture: true }));
+    for (const channel of ["next", ...(latest ? ["latest"] : [])]) {
+      if (tags[channel] === VERSION) continue;
       const promote = spawnProcess(["npm", "dist-tag", "add", `${name}@${VERSION}`, channel], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
-      if (await promote.exited) throw new Error(`npm ${name} ${channel} promotion failed; retry with the same release artifacts`);
+      if (await promote.exited) throw new Error(`npm ${name} ${channel} tag failed; retry with the same release artifacts`);
     }
-    await waitForReleaseTags(VERSION, args.includes("--latest"), registryCommand, undefined, name);
+    await waitForReleaseTags(VERSION, latest, registryCommand, undefined, name);
   }
-  for (const name of publishedPackages) {
-    const removeStaging = spawnProcess(["npm", "dist-tag", "rm", name, "staging"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
-    if (await removeStaging.exited) throw new Error(`npm ${name} staging tag removal failed; retry with the same release artifacts`);
-  }
-  console.log(`Published ${tag} under next${args.includes("--latest") ? " and latest" : ""}. Native UI and clean-machine Runner acceptance remain separate evidence.`);
+  console.log(`Published ${tag} under next${latest ? " and latest" : ""}. Native UI and clean-machine Runner acceptance remain separate evidence.`);
 });

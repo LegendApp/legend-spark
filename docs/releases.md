@@ -202,15 +202,20 @@ Signing menus reprompt on invalid choices. When Apple’s notarization service i
 unreachable, interactive setup offers to retry validation with the same profile;
 creating a profile always requires choosing the explicit create option.
 
-Both the SDK and creator package publish under `staging` first. The publisher
-checks each archive’s availability every 15 seconds
-while npm processes it. It verifies the exact archive integrity before promoting
-the requested `next`/`latest` tags, then waits for those tags to become visible
-before marking the release complete. There is no timeout for the processing delay;
-Ctrl+C pauses the release. The ignored `.spark/npm-publications/<version>.json`
-records the SDK submission; a separate `legendapp-create-spark-<version>.json`
-records the creator submission. Resume waits instead of publishing either again.
-The requested tags move only after both archives verify.
+The SDK and then the creator publish straight to their channel: `--tag next`, or
+`--tag latest` with `--latest`, followed by a `dist-tag add` that points `next` at
+the same version. Each npm write needs its own browser approval: a `next` release
+needs two (one publish per package) and a `--latest` release needs four. The
+publisher checks each archive’s availability every 15 seconds while npm processes
+it and verifies the exact archive integrity, then waits for the requested tags to
+become visible before marking the release complete. There is no timeout for the
+processing delay; Ctrl+C pauses the release. The ignored
+`.spark/npm-publications/<version>.json` records the SDK submission; a separate
+`legendapp-create-spark-<version>.json` records the creator submission. Resume
+waits instead of publishing either again and adds any channel tag still missing.
+Because publishing moves the channel immediately, a creator failure after the SDK
+publishes leaves the SDK on the new version and the creator, which pins its SDK
+release, on the previous one until the release resumes.
 Authentication failures or changed archive bytes still stop the release.
 
 The workflow checks disk space immediately before heavy steps (dependency

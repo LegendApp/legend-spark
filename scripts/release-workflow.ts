@@ -130,10 +130,6 @@ async function finishRelease(root: string, state: State, execute: Execute) {
     }
     await waitForReleaseTags(state.version, state.latest, execute, undefined, name);
   }
-  for (const name of publishedPackages) {
-    const tags = JSON.parse(await run(["npm", "view", name, "dist-tags", "--json", "--prefer-online"]));
-    if (tags.staging === state.version) await run(["npm", "dist-tag", "rm", name, "staging"], false);
-  }
   state.complete = true;
   writeJson(path.join(root, ".spark/release-workflow.json"), state);
   console.log(`Released ${state.version}. Native UI and clean-recipient Runner acceptance must still be recorded separately.`);

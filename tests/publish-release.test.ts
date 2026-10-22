@@ -4,7 +4,7 @@ import path from "node:path";
 
 const state = vi.hoisted(() => ({
   release: {} as any, commands: [] as string[][], checks: new Map<string, number>(),
-  failCreate: false, visible: true, retry: false,
+  failCreate: false, visible: true, retry: false, draft: false, latest: true,
   tags: {} as Record<string, Record<string, string>>,
 }));
 vi.mock("../scripts/release-env.ts", () => ({ loadReleaseEnv: vi.fn() }));
@@ -39,16 +39,13 @@ vi.mock("../packages/cli/src/process.ts", () => ({ spawnProcess: (argv: string[]
   const code = state.failCreate && argv[1] === "publish" && path.basename(argv[2]!) === "create-spark.tgz" ? 1 : 0;
   if (argv[1] === "publish" && !code) {
     const name = path.basename(argv[2]!) === "spark.tgz" ? "@legendapp/spark" : "@legendapp/create-spark";
-    // npm publish implicitly moves its chosen dist-tag, even before promotion.
+    // npm publish moves its chosen dist-tag.
     state.tags[name]![argv[argv.indexOf("--tag") + 1]!] = state.release.version;
   }
   if (argv[1] === "dist-tag") {
-    for (const name of Object.keys(state.tags)) expect(state.checks.get(name)).toBe(2);
-    if (argv[2] === "rm") delete state.tags[argv[3]!]![argv[4]!];
-    else {
-      const name = argv[3]!.slice(0, argv[3]!.lastIndexOf("@"));
-      state.tags[name]![argv[4]!] = state.release.version;
-    }
+    const name = argv[3]!.slice(0, argv[3]!.lastIndexOf("@"));
+    expect(state.checks.get(name)).toBe(2);
+    state.tags[name]![argv[4]!] = state.release.version;
   }
   return { exited: Promise.resolve(code) };
 } }));
@@ -56,8 +53,13 @@ vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, a
   if (argv[0] === "git") return argv[1] === "rev-parse" ? state.release.revision : "";
   if (argv.includes("visibility")) return '{"visibility":"PUBLIC"}';
   if (argv[1] === "api" && argv[2]?.includes("git/ref")) return JSON.stringify({ object: { type: "commit", sha: state.release.revision } });
-  if (argv[1] === "api") return JSON.stringify([[{ tag_name: `v${state.release.version}`, draft: false,
-    assets: Object.entries(state.release.sha256).map(([name, hash]) => ({ name, digest: `sha256:${hash}` })) }]]);
+  if (argv[1] === "api") {
+    state.commands.push(argv);
+    const uploaded = { tag_name: `v${state.release.version}`, draft: state.draft,
+      assets: [...Object.entries(state.release.sha256).map(([name, hash]) => ({ name, digest: `sha256:${hash}` })), { name: "checksums.txt" }, { name: "release.json" }] };
+    if (argv[2]!.includes("/releases/tags/")) { if (state.draft) throw new Error("HTTP 404"); return JSON.stringify(uploaded); }
+    return JSON.stringify([[uploaded]]);
+  }
   if (argv.includes("dist-tags")) return JSON.stringify(state.tags[argv[2]!]);
   if (argv[1] === "release") return '{"isDraft":false}';
   return "";
@@ -65,13 +67,15 @@ vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, a
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-test.each(["success", "create failure", "not visible", "retry", "invalid creator", "no terminal"])("release publication gates promotions: %s", async scenario => {
+test.each(["success", "next only", "draft", "create failure", "not visible", "retry", "invalid creator", "no terminal"])("release publication publishes to its channel: %s", async scenario => {
   vi.resetModules();
   state.commands = [];
   state.checks.clear();
   state.failCreate = scenario === "create failure";
   state.visible = scenario !== "not visible";
   state.retry = scenario === "retry";
+  state.draft = scenario === "draft";
+  state.latest = scenario !== "next only";
   state.tags = {
     "@legendapp/spark": { next: "0.0.1-next.2", latest: "0.0.1-next.1" },
     "@legendapp/create-spark": { next: "0.0.1-next.2", latest: "0.0.1-next.1" },
@@ -79,7 +83,7 @@ test.each(["success", "create failure", "not visible", "retry", "invalid creator
   const hash = createHash("sha256").update("archive bytes").digest("hex");
   state.release = { version: "0.0.1-next.3", revision: "a".repeat(40), npm: "spark.tgz", createNpm: "create-spark.tgz",
     sha256: { "spark.tgz": hash, "create-spark.tgz": hash, "runner-manifest.json": hash } };
-  vi.spyOn(process, "argv", "get").mockReturnValue([process.execPath, "publish-release.ts", "--latest"]);
+  vi.spyOn(process, "argv", "get").mockReturnValue([process.execPath, "publish-release.ts", ...(state.latest ? ["--latest"] : [])]);
   vi.spyOn(console, "log").mockImplementation(() => {});
   const helpers = await import("../scripts/npm-release.ts");
   vi.mocked(helpers.verifyCreatorArchive).mockReset();
@@ -92,27 +96,30 @@ test.each(["success", "create failure", "not visible", "retry", "invalid creator
     expect(state.commands).toEqual([]);
     return;
   }
+  const api = () => state.commands.filter(argv => argv[0] === "gh").map(argv => argv[2]);
+  const distTags = () => state.commands.filter(argv => argv[1] === "dist-tag").map(argv => argv.slice(3));
   if (state.failCreate || !state.visible) {
     await expect(publication).rejects.toThrow(state.failCreate ? "npm publish @legendapp/create-spark exited 1" : "not visible yet");
-    expect(state.commands.some(argv => argv[1] === "dist-tag")).toBe(false);
-    for (const tags of Object.values(state.tags)) {
-      expect(tags.next).toBe("0.0.1-next.2");
-      expect(tags.latest).toBe("0.0.1-next.1");
-    }
+    // The SDK is already on its channels; the creator that pins it is not.
+    expect(distTags()).toEqual([["@legendapp/spark@0.0.1-next.3", "next"]]);
+    expect(state.tags["@legendapp/spark"]).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.3" });
+    expect(state.tags["@legendapp/create-spark"]!.next).toBe("0.0.1-next.2");
+    expect(state.tags["@legendapp/create-spark"]!.latest).toBe(state.failCreate ? "0.0.1-next.1" : "0.0.1-next.3");
   } else {
     await publication;
     expect(helpers.verifyCreatorArchive).toHaveBeenCalledWith(expect.any(String), state.release.version, expect.stringContaining("/artifacts/releases/0.0.1-next.3/create-spark.tgz"));
     expect(helpers.requireNpmTerminal).toHaveBeenCalledOnce();
+    expect(api().filter(endpoint => endpoint!.includes("/releases"))).toEqual(state.draft
+      ? ["repos/LegendApp/legend-spark/releases/tags/v0.0.1-next.3", "repos/LegendApp/legend-spark/releases"]
+      : ["repos/LegendApp/legend-spark/releases/tags/v0.0.1-next.3"]);
     const publishes = state.commands.filter(argv => argv[1] === "publish");
     expect(publishes.map(argv => path.basename(argv[2]!))).toEqual(state.retry ? [] : ["spark.tgz", "create-spark.tgz"]);
-    for (const argv of publishes) expect(argv.slice(-2)).toEqual(["--tag", "staging"]);
-    const firstPromotion = state.commands.findIndex(argv => argv[1] === "dist-tag");
-    expect(state.commands.slice(firstPromotion).every(argv => argv[1] === "dist-tag")).toBe(true);
-    expect(state.commands.filter(argv => argv[1] === "dist-tag").map(argv => argv.slice(3))).toEqual([
+    for (const argv of publishes) expect(argv.slice(-2)).toEqual(["--tag", state.latest ? "latest" : "next"]);
+    // A --latest publish adds only next; a resume repairs every channel it missed.
+    expect(distTags()).toEqual(state.retry ? [
       ["@legendapp/spark@0.0.1-next.3", "next"], ["@legendapp/spark@0.0.1-next.3", "latest"],
       ["@legendapp/create-spark@0.0.1-next.3", "next"], ["@legendapp/create-spark@0.0.1-next.3", "latest"],
-      ["@legendapp/spark", "staging"], ["@legendapp/create-spark", "staging"],
-    ]);
-    for (const tags of Object.values(state.tags)) expect(tags.staging).toBeUndefined();
+    ] : state.latest ? [["@legendapp/spark@0.0.1-next.3", "next"], ["@legendapp/create-spark@0.0.1-next.3", "next"]] : []);
+    for (const tags of Object.values(state.tags)) expect(tags).toEqual({ next: "0.0.1-next.3", latest: state.latest ? "0.0.1-next.3" : "0.0.1-next.1" });
   }
 });
