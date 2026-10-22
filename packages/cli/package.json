@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-cli",
-  "version": "0.0.1-next.6",
+  "version": "0.0.1-next.7",
   "license": "MIT",
   "type": "module",
   "files": [
@@ -11,13 +11,13 @@
     "node": ">=24.19.0"
   },
   "dependencies": {
-    "@legendapp/spark-desktop-config": "0.0.1-next.6",
+    "@legendapp/spark-desktop-config": "0.0.1-next.7",
     "ws": "8.21.0",
     "expo-desktop": "1.0.0",
     "npm": "11.21.1",
     "typescript": "5.9.3",
     "cross-spawn": "7.0.6",
-    "@legendapp/spark-window-options": "0.0.1-next.6",
+    "@legendapp/spark-window-options": "0.0.1-next.7",
     "diff": "8.0.4",
     "yaml": "2.9.1"
   },

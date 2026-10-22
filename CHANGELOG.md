@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.1-next.7 — preview
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- test: align readme and creator receipt tests with publish guard
+- Add next.7 upgrade notes
+- fix: guard release publishing and resume
+- feat: add creator version selection flags
+
 ## 0.0.1-next.6 — preview
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
