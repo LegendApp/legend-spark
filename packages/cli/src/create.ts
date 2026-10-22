@@ -4,13 +4,14 @@ import { initializeTemplate } from "./init-template.cjs";
 import { installedSparkVersion, migrateProject, refreshPointers } from "./migrations.cjs";
 import { creationManifest } from "./local.ts";
 import { installedRelease, materializeReleasePackages, packageSources, verifyMaterializedReleasePackages } from "./release.ts";
-import { packageManager, applyOverrides, localArchive, type PackageManager } from "./package-manager.ts";
+import { packageManager, applyOverrides, localArchive, managerCommand, type PackageManager } from "./package-manager.ts";
+import { run } from "./commands.ts";
 import { packArchive } from "./pack-archive.ts";
 import { nodeCommand, spawnProcess } from "./process.ts";
 import { checkExpoDesktopNode } from "./expo-node.ts";
 import { configureExample, type Example } from "./examples.ts";
 import { hostPlatform, type AppPlatform } from "./platform.ts";
-import { cpSync, existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createInterface } from "node:readline";
@@ -19,6 +20,8 @@ import { readJson } from "./json.ts";
 
 // Resolve relative to the installed CLI so packed consumers use the same starter.
 const template = path.resolve(import.meta.dirname, "../templates/blank-typescript");
+// Yarn PnP's fs patch rejects the async iterables Expo Desktop extracts templates with.
+export const pnpWriteFile = `--import=data:text/javascript,${encodeURIComponent("import fs from 'node:fs'; const write = fs.promises.writeFile; fs.promises.writeFile = async (file, data, options) => write(file, data?.[Symbol.asyncIterator] ? Buffer.concat(await Array.fromAsync(data)) : data, options);")}`;
 
 export async function refreshLocalPackages(root: string, manifest: string, selectedManager?: PackageManager) {
   const pkg = readJson(path.join(root, "package.json"));
@@ -80,11 +83,13 @@ export async function create(root: string, archiveManifest: string | undefined, 
     // Expo Desktop misreads npm 12's record-shaped pack metadata for a local tarball.
     // Use the compatible npm executable for upstream extraction; the chosen manager installs.
     const npmBin = path.join(import.meta.dirname, "npm-bin");
+    // Yarn PnP (`yarn dlx`) loads Expo Desktop from zip archives.
+    const pnp = !!process.versions.pnp;
     // Expo needs file: to distinguish Windows drive paths from npm package names.
     const child = spawnProcess(nodeCommand(path.resolve(import.meta.dirname, ".."), "expo-desktop", "expo-desktop", [
       "create-app", root, "--template", `file:${templateFile}`, "--yes", "--no-agents-md",
-      "--display-name", name, "--rdns", `so.legend.spark.prototype.${name.toLowerCase()}`,
-    ]), { cwd: process.cwd(), env: { ...process.env, PATH: `${npmBin}${path.delimiter}${process.env.PATH ?? ""}`, npm_config_user_agent: `${manager}/spark`, CI: "1", ...(manager === "yarn" ? { YARN_ENABLE_IMMUTABLE_INSTALLS: "false" } : {}) }, stdout: "pipe", stderr: "inherit" });
+      "--display-name", name, "--rdns", `so.legend.spark.prototype.${name.toLowerCase()}`, ...(pnp ? ["--no-install"] : []),
+    ]), { cwd: process.cwd(), env: { ...process.env, PATH: `${npmBin}${path.delimiter}${process.env.PATH ?? ""}`, npm_config_user_agent: `${manager}/spark`, CI: "1", ...(pnp ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} ${pnpWriteFile}` } : {}), ...(manager === "yarn" ? { YARN_ENABLE_IMMUTABLE_INSTALLS: "false" } : {}) }, stdout: "pipe", stderr: "inherit" });
     // Spark owns the next steps; Expo's final block requires an unnecessary prebuild.
     let projectReady = false;
     for await (const line of createInterface({ input: Readable.from(child.stdout!), crlfDelay: Infinity })) {
@@ -92,6 +97,12 @@ export async function create(root: string, archiveManifest: string | undefined, 
       if (!projectReady) process.stdout.write(line + "\n");
     }
     if (await child.exited) throw new Error("Expo Desktop could not create the app. See its output above.");
+    if (pnp) {
+      // Expo Desktop's install would inherit the PnP runtime of `yarn dlx`; install without it.
+      process.env.NODE_OPTIONS = process.env.NODE_OPTIONS?.replace(/--(?:require|experimental-loader)[ =]("[^"]*\.pnp\.[^"]*"|\S*\.pnp\.\S*)/g, "");
+      if (manager === "yarn") appendFileSync(path.join(root, "yarn.lock"), "");
+      await run(root, managerCommand(manager, ["install"]));
+    }
   } finally { rmSync(temporary, { recursive: true, force: true }); }
   if (!archiveManifest) {
     const release = installedRelease();

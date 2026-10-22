@@ -8,10 +8,14 @@ import { writeJson } from "../packages/cli/src/json.ts";
 import { spawnProcess } from "../packages/cli/src/process.ts";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { pointer, claudePointer } from "../packages/cli/src/migrations.cjs";
+import { run } from "../packages/cli/src/commands.ts";
+import { pnpWriteFile } from "../packages/cli/src/create.ts";
+import { spawnSync } from "node:child_process";
 
 vi.mock("../packages/cli/src/expo-node.ts", () => ({ checkExpoDesktopNode: vi.fn() }));
 vi.mock("../packages/cli/src/executable.ts", () => ({ which: vi.fn((command: string) => command) }));
-vi.mock("../packages/cli/src/process.ts", () => ({ nodeCommand: () => ["node", "expo-desktop"], spawnProcess: vi.fn() }));
+vi.mock("../packages/cli/src/process.ts", () => ({ nodeCommand: (_root: string, _name: string, _bin: string, args: string[] = []) => ["node", "expo-desktop", ...args], spawnProcess: vi.fn() }));
+vi.mock("../packages/cli/src/commands.ts", async importOriginal => ({ ...await importOriginal<object>(), run: vi.fn() }));
 vi.mock("../packages/cli/src/pack-archive.ts", () => ({ packArchive: vi.fn() }));
 vi.mock("../packages/cli/src/release.ts", () => ({ installedRelease: () => undefined, packageSources: (manifest: string) => ({ "@react-native-runtimes/core": "file:" + manifest.replace(/packages\.json$/, "core.tgz"), "@legendapp/spark": "file:" + manifest.replace(/packages\.json$/, "spark.tgz") }) }));
 const version = JSON.parse(readFileSync("packages/cli/package.json", "utf8")).version;
@@ -65,4 +69,45 @@ test.each([["macos", "npm"], ["windows", "npm"], ["universal", "npm"], ["macos",
     expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(version + "\n");
     expect(JSON.parse(readFileSync(path.join(root, "desktop.config.json"), "utf8")).projectId).toBe("generated-guid");
   } finally { log.mockRestore(); output.mockRestore(); }
+});
+
+test("create under Yarn PnP keeps the PnP runtime out of the app install", async () => {
+  const temporary = mkdtempSync(path.join(os.tmpdir(), "spark-create-pnp-"));
+  roots.push(temporary);
+  const root = path.join(temporary, "MyApp");
+  const manifest = path.join(temporary, "packages.json");
+  writeJson(manifest, {});
+  vi.stubEnv("NODE_OPTIONS", "--require /tmp/dlx/.pnp.cjs --experimental-loader file:///tmp/dlx/.pnp.loader.mjs --max-old-space-size=4096");
+  Object.defineProperty(process.versions, "pnp", { value: "3", configurable: true });
+  let template: string;
+  vi.mocked(packArchive).mockImplementation(async source => { template = source; });
+  vi.mocked(spawnProcess).mockImplementation((argv, options) => {
+    expect(argv).toContain("--no-install");
+    expect(options!.env!.NODE_OPTIONS).toContain(".pnp.cjs");
+    expect(options!.env!.NODE_OPTIONS).toContain(pnpWriteFile);
+    cpSync(template, root, { recursive: true });
+    writeJson(path.join(root, "app.json"), { expo: { name: "MyApp", macos: { bundleIdentifier: "org.example.myapp" }, windows: { projectGuid: "generated-guid" } } });
+    writeJson(path.join(root, "node_modules/@legendapp/spark/package.json"), { version });
+    return { exited: Promise.resolve(0), stdout: new ReadableStream({ start(controller) { controller.close(); } }) } as ReturnType<typeof spawnProcess>;
+  });
+  vi.mocked(run).mockImplementation(async () => { expect(process.env.NODE_OPTIONS?.trim()).toBe("--max-old-space-size=4096"); return ""; });
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await createSpark([root, "--packages", manifest, "--package-manager", "yarn", "--platform", "macos"]);
+    expect(run).toHaveBeenCalledWith(root, ["yarn", "install"]);
+    expect(readFileSync(path.join(root, "yarn.lock"), "utf8")).toBe("");
+  } finally { log.mockRestore(); delete (process.versions as Record<string, string>).pnp; }
+  expect(JSON.parse(readFileSync("packages/create-spark/package.json", "utf8")).preferUnplugged).toBe(true);
+});
+
+test("PnP writeFile shim accepts the async iterables Node accepts", () => {
+  const temporary = mkdtempSync(path.join(os.tmpdir(), "spark-pnp-write-"));
+  roots.push(temporary);
+  // Yarn PnP routes fs.promises.writeFile through the callback API, which rejects iterables.
+  const pnp = path.join(temporary, "pnp.cjs"), file = path.join(temporary, "out.txt");
+  writeFileSync(pnp, "const fs = require('node:fs'); fs.promises.writeFile = require('node:util').promisify(fs.writeFile);\n");
+  const result = spawnSync(process.execPath, ["-e", `(async () => { await require("node:fs").promises.writeFile(${JSON.stringify(file)}, (async function* () { yield Buffer.from("a"); yield Buffer.from("b"); })()); })()`],
+    { env: { ...process.env, NODE_OPTIONS: `--require ${pnp} ${pnpWriteFile}` }, encoding: "utf8" });
+  expect(result.stderr).toBe("");
+  expect(readFileSync(file, "utf8")).toBe("ab");
 });

@@ -7,6 +7,7 @@
   "bin": {
     "create-spark": "dist/index.js"
   },
+  "preferUnplugged": true,
   "files": [
     "dist",
     "templates"
