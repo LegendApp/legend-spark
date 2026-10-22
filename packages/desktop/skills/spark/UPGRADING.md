@@ -252,3 +252,19 @@ Breaking: no. No app source or configuration migration is required from next.5.
 This release republishes the creator from the release artifacts. The next.5 creator was a local
 development pack and could not create new apps; create them with
 `npm create @legendapp/spark@next MyApp`.
+
+## 0.0.1-next.7
+
+Breaking: no. No app source or configuration migration is required from next.6.
+
+Creating apps: the creator now picks which Spark release to scaffold. Pass
+`--next` for the newest preview, `--latest` for the current stable release, or
+`--spark-version <version>` for an exact one. Use these with pnpm and yarn,
+which ignore or reject a tag in `pnpm create` / `yarn create`, for example
+`pnpm create @legendapp/spark MyApp --next`. If the creator you ran does not
+match the requested Spark version, it stops and prints the exact
+`npx @legendapp/create-spark@<version>` command to run instead.
+
+Publishing: releases now refuse to publish a creator that was not built from
+that release's artifacts or whose version differs from `@legendapp/spark`, so a
+broken creator like next.5's cannot ship again. Existing apps are unaffected.
