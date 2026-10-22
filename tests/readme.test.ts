@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 
 const readme = readFileSync("README.md", "utf8");
 
-test("README creator commands consistently use the prerelease channel", () => {
+test("README creator commands select an explicit channel", () => {
   const commands = [...readme.matchAll(/\b(?:npm create|bun create|pnpm create|yarn create|npx|bunx) (@legendapp\/(?:create-)?spark(?:@[^\s`]+)?)/g)].map(match => match[1]);
   expect(commands).toContain("@legendapp/spark@next");
-  expect(commands).toContain("@legendapp/create-spark@next");
-  for (const creator of commands) expect(creator).toMatch(/^@legendapp\/(?:create-)?spark@next$/);
+  expect(readme).toMatch(/--next\b/);
+  for (const creator of commands) expect(creator).toMatch(/^@legendapp\/(?:create-)?spark(?:@(?:next|latest|<version>))?$/);
 });
 
 test("README and kitchen sink guide distinguish published Runner downloads from local source builds", () => {

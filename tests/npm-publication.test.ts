@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { publishAndWait, waitForPublication, waitForReleaseTags } from "../scripts/npm-release.ts";
@@ -107,8 +108,14 @@ test("next-only releases do not wait for latest, and tag auth errors do not spin
 test("SDK and creator submission receipts recover independently after an interruption", async () => {
   const sdkPublish = vi.fn().mockResolvedValue(undefined);
   await expect(publishAndWait(root, release, async () => pending, sdkPublish, async () => { throw new Error("paused"); })).rejects.toThrow("paused");
-  const creatorArchive = path.join(root, "creator.tgz");
-  writeFileSync(creatorArchive, "exact creator archive");
+  const pkg = path.join(root, "creator-pack/package");
+  mkdirSync(path.join(pkg, "dist"), { recursive: true });
+  writeFileSync(path.join(pkg, "package.json"), JSON.stringify({ name: "@legendapp/create-spark", version: release.version }));
+  writeFileSync(path.join(pkg, "dist/release.json"), JSON.stringify({ version: release.version }));
+  const releaseDir = path.join(root, "artifacts/releases", release.version);
+  mkdirSync(releaseDir, { recursive: true });
+  const creatorArchive = path.join(releaseDir, "creator.tgz");
+  execFileSync("tar", ["-czf", creatorArchive, "-C", path.join(root, "creator-pack"), "package"]);
   const creator = { ...release, name: "@legendapp/create-spark", archive: creatorArchive };
   const creatorReady = { code: 0, output: JSON.stringify({ version: release.version, "dist.integrity": `sha512-${createHash("sha512").update(readFileSync(creatorArchive)).digest("base64")}` }) };
   const creatorPublish = vi.fn().mockResolvedValue(undefined);
