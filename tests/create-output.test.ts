@@ -71,26 +71,26 @@ test.each([["macos", "npm"], ["windows", "npm"], ["universal", "npm"], ["macos",
   } finally { log.mockRestore(); output.mockRestore(); }
 });
 
-test("create under Yarn PnP keeps the PnP runtime out of the app install", async () => {
+test.each(["--require /tmp/dlx/.pnp.cjs --experimental-loader file:///tmp/dlx/.pnp.loader.mjs --max-old-space-size=4096", undefined])("create under Yarn PnP keeps the PnP runtime out of the app install: %s", async nodeOptions => {
   const temporary = mkdtempSync(path.join(os.tmpdir(), "spark-create-pnp-"));
   roots.push(temporary);
   const root = path.join(temporary, "MyApp");
   const manifest = path.join(temporary, "packages.json");
   writeJson(manifest, {});
-  vi.stubEnv("NODE_OPTIONS", "--require /tmp/dlx/.pnp.cjs --experimental-loader file:///tmp/dlx/.pnp.loader.mjs --max-old-space-size=4096");
+  vi.stubEnv("NODE_OPTIONS", nodeOptions);
   Object.defineProperty(process.versions, "pnp", { value: "3", configurable: true });
   let template: string;
   vi.mocked(packArchive).mockImplementation(async source => { template = source; });
   vi.mocked(spawnProcess).mockImplementation((argv, options) => {
     expect(argv).toContain("--no-install");
-    expect(options!.env!.NODE_OPTIONS).toContain(".pnp.cjs");
+    if (nodeOptions) expect(options!.env!.NODE_OPTIONS).toContain(".pnp.cjs");
     expect(options!.env!.NODE_OPTIONS).toContain(pnpWriteFile);
     cpSync(template, root, { recursive: true });
     writeJson(path.join(root, "app.json"), { expo: { name: "MyApp", macos: { bundleIdentifier: "org.example.myapp" }, windows: { projectGuid: "generated-guid" } } });
     writeJson(path.join(root, "node_modules/@legendapp/spark/package.json"), { version });
     return { exited: Promise.resolve(0), stdout: new ReadableStream({ start(controller) { controller.close(); } }) } as ReturnType<typeof spawnProcess>;
   });
-  vi.mocked(run).mockImplementation(async () => { expect(process.env.NODE_OPTIONS?.trim()).toBe("--max-old-space-size=4096"); return ""; });
+  vi.mocked(run).mockImplementation(async () => { expect(process.env.NODE_OPTIONS?.trim()).toBe(nodeOptions ? "--max-old-space-size=4096" : ""); return ""; });
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     await createSpark([root, "--packages", manifest, "--package-manager", "yarn", "--platform", "macos"]);

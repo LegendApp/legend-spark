@@ -99,7 +99,7 @@ export async function create(root: string, archiveManifest: string | undefined, 
     if (await child.exited) throw new Error("Expo Desktop could not create the app. See its output above.");
     if (pnp) {
       // Expo Desktop's install would inherit the PnP runtime of `yarn dlx`; install without it.
-      process.env.NODE_OPTIONS = process.env.NODE_OPTIONS?.replace(/--(?:require|experimental-loader)[ =]("[^"]*\.pnp\.[^"]*"|\S*\.pnp\.\S*)/g, "");
+      process.env.NODE_OPTIONS = process.env.NODE_OPTIONS?.replace(/--(?:require|experimental-loader)[ =]("[^"]*\.pnp\.[^"]*"|\S*\.pnp\.\S*)/g, "") ?? "";
       if (manager === "yarn") appendFileSync(path.join(root, "yarn.lock"), "");
       await run(root, managerCommand(manager, ["install"]));
     }
