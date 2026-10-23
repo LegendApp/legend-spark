@@ -27,6 +27,13 @@ export function releaseNotes(changelog: string, version: string) {
 
 export const publishedPackages = ["@legendapp/spark", "@legendapp/create-spark"] as const;
 
+// Each release moves exactly one dist-tag: latest for a stable version, next for a
+// prerelease. --latest or --next overrides the default; true means latest.
+export function latestChannel(version: string, options: { latest?: boolean; next?: boolean }) {
+  if (options.latest && options.next) throw new Error("Choose either --latest or --next");
+  return options.latest || (!options.next && !/^\d+\.\d+\.\d+-/.test(version));
+}
+
 export function requireNpmTerminal(stdin: Pick<NodeJS.ReadStream, "isTTY"> = process.stdin, stdout: Pick<NodeJS.WriteStream, "isTTY"> = process.stdout) {
   if (!stdin.isTTY || !stdout.isTTY) throw new Error("npm publish/dist-tag requires both stdin and stdout to be TTYs for browser authentication. Run in a terminal without piping through tee; resume with bun run release --resume-from publish.");
 }
@@ -100,10 +107,10 @@ export async function waitForReleaseTags(version: string, latest: boolean, execu
       if (!isNetworkError(error) && !/\bE404\b/.test(result.output)) throw error;
     } else {
       const tags = JSON.parse(result.output);
-      verified = tags.next === version && (!latest || tags.latest === version);
+      verified = tags[latest ? "latest" : "next"] === version;
     }
     if (!verified) {
-      console.log(`Waiting for npm ${name} ${latest ? "next and latest" : "next"} tags to show ${version}. Checking again in 15s; Ctrl+C pauses this release.`);
+      console.log(`Waiting for npm ${name} ${latest ? "latest" : "next"} tag to show ${version}. Checking again in 15s; Ctrl+C pauses this release.`);
       await wait(pollInterval);
     }
   }

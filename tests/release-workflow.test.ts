@@ -58,6 +58,7 @@ function fixture() {
   const tags: Record<string, string> = { next: "0.0.1-next.2", latest: "0.0.1-next.2" };
   const createTags = { ...tags };
   let failTest = false, pendingRunner = false, failPublish = false;
+  const published = new Set<string>();
   const staged = () => {
     const version = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
     const folder = `artifacts/releases/${version}`;
@@ -92,7 +93,7 @@ function fixture() {
     if (argv[0] === "npm" && argv[1] === "view" && argv.includes("dist.integrity")) {
       const version = argv[2]!.slice(argv[2]!.lastIndexOf("@") + 1);
       const creator = argv[2]!.startsWith("@legendapp/create-spark@");
-      if ((creator ? createTags : tags).next !== version) return { code: 1, output: "npm error E404" };
+      if (!published.has(argv[2]!)) return { code: 1, output: "npm error E404" };
       const integrity = `sha512-${createHash("sha512").update(readFileSync(path.join(root, `artifacts/releases/${version}/${creator ? "create-spark" : "spark"}.tgz`))).digest("base64")}`;
       return { code: 0, output: JSON.stringify({ version, "dist.integrity": integrity }) };
     }
@@ -107,9 +108,12 @@ function fixture() {
       staged();
     }
     if (argv.includes("release:publish")) {
-      tags.next = createTags.next = "0.0.1-next.3";
+      expect(argv.filter(arg => arg === "--latest" || arg === "--next")).toHaveLength(1);
+      published.add("@legendapp/spark@0.0.1-next.3").add("@legendapp/create-spark@0.0.1-next.3");
+      // An interrupted publication leaves the packages published but the channel tag unconfirmed.
       if (failPublish) { failPublish = false; return { code: 1, output: "Promotion interrupted" }; }
-      if (argv.includes("--latest")) { tags.latest = tags.next; createTags.latest = createTags.next; }
+      const channel = argv.includes("--latest") ? "latest" : "next";
+      tags[channel] = createTags[channel] = "0.0.1-next.3";
     }
     return { code: 0, output: "" };
   };
@@ -229,7 +233,7 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(f.commands).toContainEqual(["bun", "run", "release:publish", "--latest"]);
     expect(f.commands).toContainEqual(["npm", "view", "@legendapp/create-spark", "dist-tags", "--json", "--prefer-online", "--fetch-retries=0", "--fetch-timeout=15000"]);
     expect(JSON.parse(readFileSync(path.join(f.root, "packages/create-spark/package.json"), "utf8")).version).toBe("0.0.1-next.3");
-    expect(f.tags).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.3" });
+    expect(f.tags).toEqual({ next: "0.0.1-next.2", latest: "0.0.1-next.3" });
     expect(f.commands.filter(args => args.includes("release:runner"))).toHaveLength(2);
     expect(f.commands.filter(args => args[0] === "git" && args[1] === "commit")).toHaveLength(1);
     expect(f.commands.find(args => args.includes("tests/packed-consumer.integration.ts"))).toEqual([process.execPath, "tests/packed-consumer.integration.ts", "--archive", path.join(f.root, "artifacts/releases/0.0.1-next.3/spark.tgz")]);
@@ -249,6 +253,7 @@ test("finish recovers an old checkpoint using published artifacts while preservi
     f.write("draft.ts", "preserve this\n");
     f.write("package.json", '{"version":"0.0.1-next.99"}\n');
     const revision = f.git("rev-parse", "HEAD");
+    await expect(releaseWorkflow(f.root, { resume: false, latest: false, next: true, finish: true }, f.execute, async () => {}, () => "")).rejects.toThrow("Retry without --next");
     const before = f.commands.length;
     expect(await f.finish()).toBe(0);
     const finishing = f.commands.slice(before);
@@ -257,7 +262,7 @@ test("finish recovers an old checkpoint using published artifacts while preservi
     expect(finishing).toContainEqual(["npm", "dist-tag", "add", "@legendapp/spark@0.0.1-next.3", "latest"]);
     expect(finishing).toContainEqual(["npm", "dist-tag", "add", "@legendapp/create-spark@0.0.1-next.3", "latest"]);
     expect(finishing.filter(args => args[1] === "dist-tag")).toHaveLength(2);
-    expect(f.tags).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.3" });
+    expect(f.tags).toEqual({ next: "0.0.1-next.2", latest: "0.0.1-next.3" });
     expect(JSON.parse(readFileSync(stateFile, "utf8")).complete).toBe(true);
     expect(f.git("rev-parse", "HEAD")).toBe(revision);
     expect(readFileSync(path.join(f.root, "draft.ts"), "utf8")).toBe("preserve this\n");

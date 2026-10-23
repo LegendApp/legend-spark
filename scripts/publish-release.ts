@@ -6,12 +6,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { run } from "../packages/cli/src/commands.ts";
 import { readJson, VERSION } from "../packages/cli/src/project.ts";
-import { alreadyPublished, publishedPackages, publishAndWait, releaseNotes, waitForReleaseTags, verifyCreatorArchive, requireNpmTerminal } from "./npm-release.ts";
+import { alreadyPublished, latestChannel, publishedPackages, publishAndWait, releaseNotes, waitForReleaseTags, verifyCreatorArchive, requireNpmTerminal } from "./npm-release.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 await releaseCommand(root, async () => {
   const args = process.argv.slice(2);
-  if (args.some(arg => arg !== "--latest")) throw new Error("Usage: bun run release:publish [--latest]");
+  if (args.some(arg => !["--latest", "--next"].includes(arg))) throw new Error("Usage: bun run release:publish [--latest | --next]");
+  const latest = latestChannel(VERSION, { latest: args.includes("--latest"), next: args.includes("--next") });
   loadReleaseEnv(root);
   const folder = path.join(root, "artifacts/releases", VERSION);
   const release = readJson(path.join(folder, "release.json"));
@@ -73,7 +74,6 @@ await releaseCommand(root, async () => {
   if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", "--prerelease"]);
   // npm web authentication needs the terminal; piping output disables its prompt.
   // Publish straight to the release channel: the SDK moves before the creator that pins it.
-  const latest = args.includes("--latest");
   for (const [index, name] of publishedPackages.entries()) {
     const archive = archives[index]!;
     await publishAndWait(root, { name, version: VERSION, revision, archive, published: published[index]! }, registryCommand, async () => {
@@ -81,14 +81,14 @@ await releaseCommand(root, async () => {
       const publishCode = await publish.exited;
       if (publishCode) throw new Error(`npm publish ${name} exited ${publishCode}`);
     });
-    // Adds next after a --latest publish, and repairs channels a resumed publication missed.
+    // Repairs the channel when a resumed publication found the version already published.
+    const channel = latest ? "latest" : "next";
     const tags = JSON.parse(await run(root, ["npm", "view", name, "dist-tags", "--json", "--prefer-online"], { capture: true }));
-    for (const channel of ["next", ...(latest ? ["latest"] : [])]) {
-      if (tags[channel] === VERSION) continue;
+    if (tags[channel] !== VERSION) {
       const promote = spawnProcess(["npm", "dist-tag", "add", `${name}@${VERSION}`, channel], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
       if (await promote.exited) throw new Error(`npm ${name} ${channel} tag failed; retry with the same release artifacts`);
     }
     await waitForReleaseTags(VERSION, latest, registryCommand, undefined, name);
   }
-  console.log(`Published ${tag} under next${latest ? " and latest" : ""}. Native UI and clean-machine Runner acceptance remain separate evidence.`);
+  console.log(`Published ${tag} under ${latest ? "latest" : "next"}. Native UI and clean-machine Runner acceptance remain separate evidence.`);
 });

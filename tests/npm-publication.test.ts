@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { publishAndWait, waitForPublication, waitForReleaseTags } from "../scripts/npm-release.ts";
+import { latestChannel, publishAndWait, waitForPublication, waitForReleaseTags } from "../scripts/npm-release.ts";
 import type { Execute } from "../scripts/release-workflow.ts";
 
 let root: string;
@@ -87,18 +87,26 @@ test("temporary network failures retry availability, while auth and integrity fa
   expect(wait).not.toHaveBeenCalled();
 });
 
-test("tag propagation polls until every requested channel matches", async () => {
+test("the channel defaults from the version and flags override it", () => {
+  expect(latestChannel("0.0.1", {})).toBe(true);
+  expect(latestChannel("0.0.1-next.8", {})).toBe(false);
+  expect(latestChannel("0.0.1-next.8", { latest: true })).toBe(true);
+  expect(latestChannel("0.0.1", { next: true })).toBe(false);
+  expect(() => latestChannel("0.0.1", { latest: true, next: true })).toThrow("Choose either --latest or --next");
+});
+
+test("tag propagation polls until the release channel matches", async () => {
   const execute = vi.fn<Execute>()
     .mockResolvedValueOnce({ code: 1, output: "npm error ETIMEDOUT" })
     .mockResolvedValueOnce({ code: 0, output: JSON.stringify({ next: release.version, latest: "0.0.1-next.2" }) })
-    .mockResolvedValue({ code: 0, output: JSON.stringify({ next: release.version, latest: release.version }) });
+    .mockResolvedValue({ code: 0, output: JSON.stringify({ next: "0.0.1-next.2", latest: release.version }) });
   const wait = vi.fn().mockResolvedValue(undefined);
   await waitForReleaseTags(release.version, true, execute, wait);
   expect(wait.mock.calls).toEqual([[15_000], [15_000]]);
   expect(execute).toHaveBeenCalledTimes(3);
 });
 
-test("next-only releases do not wait for latest, and tag auth errors do not spin", async () => {
+test("next releases do not wait for latest, and tag auth errors do not spin", async () => {
   const wait = vi.fn();
   await waitForReleaseTags(release.version, false, async () => ({ code: 0, output: JSON.stringify({ next: release.version, latest: "old" }) }), wait);
   await expect(waitForReleaseTags(release.version, true, async () => ({ code: 1, output: "npm error E401" }), wait)).rejects.toThrow("E401");

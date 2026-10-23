@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { writeJson } from "../packages/cli/src/project.ts";
 import { CommandError } from "../packages/cli/src/errors.ts";
-import { alreadyPublished, changelogSection, publishedPackages, publishAndWait, waitForReleaseTags, verifyCreatorArchive } from "./npm-release.ts";
+import { alreadyPublished, changelogSection, latestChannel, publishedPackages, publishAndWait, waitForReleaseTags, verifyCreatorArchive } from "./npm-release.ts";
 
 type Edit = { file: string; before: string; after: string };
 type State = { schema: 1; version: string; baseRevision: string; revision?: string; latest: boolean; edits: Edit[]; publicationReady?: boolean; complete?: boolean };
@@ -111,7 +111,8 @@ async function finishRelease(root: string, state: State, execute: Execute) {
     const asset = uploaded.assets.find((item: any) => item.name === name);
     if (!asset || asset.digest !== `sha256:${expected}`) throw new Error(`GitHub asset is missing or has a different digest: ${name}. Preserve the release and repair the upload explicitly.`);
   }
-  console.log(`Finishing ${state.version} under next${state.latest ? " and latest" : ""}; using its existing published artifacts.`);
+  const channel = state.latest ? "latest" : "next";
+  console.log(`Finishing ${state.version} under ${channel}; using its existing published artifacts.`);
   const folder = path.join(root, "artifacts/releases", state.version);
   const archives = [release.npm, release.createNpm].map(file => path.join(folder, file));
   for (const [index, name] of publishedPackages.entries()) {
@@ -125,9 +126,7 @@ async function finishRelease(root: string, state: State, execute: Execute) {
   verifyReleaseArchive(root, state.version, state.revision);
   for (const name of publishedPackages) {
     const tags = JSON.parse(await run(["npm", "view", name, "dist-tags", "--json", "--prefer-online"]));
-    for (const channel of ["next", ...(state.latest ? ["latest"] : [])]) {
-      if (tags[channel] !== state.version) await run(["npm", "dist-tag", "add", `${name}@${state.version}`, channel], false);
-    }
+    if (tags[channel] !== state.version) await run(["npm", "dist-tag", "add", `${name}@${state.version}`, channel], false);
     await waitForReleaseTags(state.version, state.latest, execute, undefined, name);
   }
   state.complete = true;
@@ -135,7 +134,7 @@ async function finishRelease(root: string, state: State, execute: Execute) {
   console.log(`Released ${state.version}. Native UI and clean-recipient Runner acceptance must still be recorded separately.`);
 }
 
-export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; finish?: boolean; resumeFrom?: "publish" }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
+export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; next?: boolean; finish?: boolean; resumeFrom?: "publish" }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
   const stateFile = path.join(root, ".spark/release-workflow.json");
   const run = async (argv: string[], capture = false) => {
     const result = await execute(argv, capture);
@@ -146,19 +145,24 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
   const clean = async () => { if (await git("status", "--porcelain")) throw new Error("Release requires a clean checkout. Commit or move drafts before retrying; the script never stashes them."); };
   const previous: State | undefined = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")) : undefined;
   if (previous && previous.schema !== 1) throw new Error("Unsupported release workflow state");
+  // A resumed release keeps its saved channel; an override must not contradict it.
+  const sameChannel = (saved: State) => {
+    const flag = options.latest && !saved.latest ? "--latest" : options.next && saved.latest ? "--next" : undefined;
+    if (flag) throw new Error(`Resume the original channel selection; this release was started for ${saved.latest ? "latest" : "next"}. Retry without ${flag}.`);
+  };
   if (options.resumeFrom === "publish") {
     if (!previous?.revision) throw new Error("No committed release to resume from publish; preserve the workflow state and staged artifacts.");
-    if (options.latest && !previous.latest) throw new Error("Resume the original channel selection; retry without --latest.");
+    sameChannel(previous);
     if (await git("rev-parse", "HEAD") !== previous.revision) throw new Error("Source revision changed since this release started");
     await clean();
     verifyReleaseArchive(root, previous.version, previous.revision);
-    await run(["bun", "run", "release:publish", ...(previous.latest ? ["--latest"] : [])]);
+    await run(["bun", "run", "release:publish", previous.latest ? "--latest" : "--next"]);
     for (const name of publishedPackages) await waitForReleaseTags(previous.version, previous.latest, execute, undefined, name);
     previous.complete = true;
     writeJson(stateFile, previous);
   } else if (options.finish) {
     if (!previous) throw new Error("No release to finish. Run bun run release to start a candidate.");
-    if (options.latest && !previous.latest) throw new Error("This release was started without --latest. Retry --finish without --latest.");
+    sameChannel(previous);
     await finishRelease(root, previous, execute);
   } else {
     const revision = await git("rev-parse", "HEAD");
@@ -167,7 +171,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (options.resume && !previous) throw new Error("No release to resume");
     if (await git("branch", "--show-current") !== "main") throw new Error("Run the release from main");
     if (!resume) await clean();
-    if (resume && options.latest && !previous!.latest) throw new Error("Resume the original channel selection; this release was started without --latest. Retry without --latest.");
+    if (resume) sameChannel(previous!);
     if (!previous?.publicationReady || !resume) await preflight();
     const remote = await git("remote", "get-url", "origin");
     if (!/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)LegendApp\/legend-spark(?:\.git)?$/i.test(remote)) throw new Error("origin must be the public LegendApp/legend-spark repository");
@@ -191,10 +195,10 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
       }
       const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["bun.lock", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md", "docs/release-support-matrix.json", "docs/release-support-matrix.md"].includes(file));
       const edits = versionEdits(root, files, current, version, notes);
-      state = { schema: 1, version, baseRevision: revision, revision: edits.length ? undefined : revision, latest: options.latest, edits };
+      state = { schema: 1, version, baseRevision: revision, revision: edits.length ? undefined : revision, latest: latestChannel(version, options), edits };
       writeJson(stateFile, state);
     }
-    console.log(`Releasing ${state.version} under next${state.latest ? " and latest" : ""}.`);
+    console.log(`Releasing ${state.version} under ${state.latest ? "latest" : "next"}.`);
     if (state.revision) {
       if (state.revision !== revision) throw new Error("Source revision changed since this release started; preserve its artifacts and start a new candidate");
       await clean();
@@ -254,7 +258,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
         writeJson(stateFile, state);
       }
       verifyReleaseArchive(root, state.version, state.revision!);
-      await run(["bun", "run", "release:publish", ...(state.latest ? ["--latest"] : [])]);
+      await run(["bun", "run", "release:publish", state.latest ? "--latest" : "--next"]);
     }
     for (const name of publishedPackages) await waitForReleaseTags(state.version, state.latest, execute, undefined, name);
     state.complete = true;

@@ -419,8 +419,8 @@ Optional [audio/media sessions](docs/audio.md) and [browser authentication](docs
 
 Release maintainers: run `bun run release` from a clean `main`
 checkout on the signing Apple Silicon Mac to version, verify, sign/notarize,
-and publish the preview under `next`. Add `--latest` to promote both the SDK and
-creator to `latest` too. Use `bun run release --resume`
+and publish. A prerelease goes to npm `next` and a stable version to `latest`;
+`--latest` or `--next` overrides the channel. Use `bun run release --resume`
 to continue the same release. See the [preview release workflow](docs/releases.md)
 for prerequisites, retry behavior, and separate clean-machine acceptance.
 

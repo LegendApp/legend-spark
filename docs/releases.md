@@ -120,8 +120,12 @@ bun run release
 ```
 
 The command releases the checkout's unpublished `-next.N` version, or selects
-the next preview when that version is already published. It promotes both packages
-to `next`; add `--latest` to also promote both to `latest`. When a version bump
+the next preview when that version is already published. Each release moves
+exactly one npm dist-tag on both packages: `latest` for a stable version such as
+`0.0.1`, `next` for a prerelease such as `0.0.1-next.8`. Pass `--latest` or
+`--next` to override that channel, for example `--latest` to put a prerelease on
+`latest`. A resumed release keeps its original channel and refuses a conflicting
+flag. When a version bump
 is needed, it updates workspace manifests, `bun.lock`, templates, CLI version,
 and current release documentation. It preserves an existing changelog section
 for the selected version, or generates notes from committed changes since the
@@ -144,8 +148,7 @@ It runs `bun install --frozen-lockfile`, typechecking, and portable tests before
 change. It then builds/signs/notarizes the Runner, assembles immutable artifacts,
 and runs the packed-consumer integration against the **exact staged npm archive**.
 After successful checks it atomically pushes `main` and the matching release tag,
-publishes the GitHub prerelease and npm `next`, and assigns npm `latest` when
-`--latest` was supplied. Omit `--latest` to publish only through `next`.
+publishes the GitHub prerelease and both npm packages to the release's channel.
 
 If notarization is pending or a later step fails, retry the same release command
 to continue the unfinished release automatically, or run:
@@ -202,17 +205,16 @@ Signing menus reprompt on invalid choices. When Apple’s notarization service i
 unreachable, interactive setup offers to retry validation with the same profile;
 creating a profile always requires choosing the explicit create option.
 
-The SDK and then the creator publish straight to their channel: `--tag next`, or
-`--tag latest` with `--latest`, followed by a `dist-tag add` that points `next` at
-the same version. Each npm write needs its own browser approval: a `next` release
-needs two (one publish per package) and a `--latest` release needs four. The
+The SDK and then the creator publish straight to their channel with `--tag next`
+or `--tag latest`; the other tag stays where it was. Each npm write needs its own
+browser approval, so a release needs two (one publish per package). The
 publisher checks each archive’s availability every 15 seconds while npm processes
 it and verifies the exact archive integrity, then waits for the requested tags to
 become visible before marking the release complete. There is no timeout for the
 processing delay; Ctrl+C pauses the release. The ignored
 `.spark/npm-publications/<version>.json` records the SDK submission; a separate
 `legendapp-create-spark-<version>.json` records the creator submission. Resume
-waits instead of publishing either again and adds any channel tag still missing.
+waits instead of publishing either again and adds the channel tag if it is missing.
 Because publishing moves the channel immediately, a creator failure after the SDK
 publishes leaves the SDK on the new version and the creator, which pins its SDK
 release, on the previous one until the release resumes.
@@ -313,7 +315,7 @@ bun run release:publish
 
 The publisher verifies staged checksums and repository visibility, creates a
 draft prerelease, uploads and verifies assets, publishes the GitHub release,
-and publishes both exact assembled npm archives (`@legendapp/spark` and the peer-free `@legendapp/create-spark`) under `next` with matching versions and tags. It does not replace
+and publishes both exact assembled npm archives (`@legendapp/spark` and the peer-free `@legendapp/create-spark`) under the version's channel (`next` for a prerelease, `latest` for a stable version; `--latest` or `--next` overrides it) with matching versions and tags. It does not replace
 existing assets or move tags. Run interactively if npm needs browser
 authentication. Inspect registry tags after publication: npm may assign `latest`
 to an initial release, and `--tag next` does not by itself prove that no
