@@ -1,4 +1,4 @@
-import { releaseCommand } from "../packages/cli/src/errors.ts";
+import { CommandError, releaseCommand } from "../packages/cli/src/errors.ts";
 import { loadReleaseEnv } from "./release-env.ts";
 import { spawnProcess } from "../packages/cli/src/process.ts";
 import { createHash } from "node:crypto";
@@ -13,6 +13,7 @@ await releaseCommand(root, async () => {
   const args = process.argv.slice(2);
   if (args.some(arg => !["--latest", "--next"].includes(arg))) throw new Error("Usage: bun run release:publish [--latest | --next]");
   const latest = latestChannel(VERSION, { latest: args.includes("--latest"), next: args.includes("--next") });
+  const releaseFlags = VERSION.includes("-") ? ["--prerelease", "--latest=false"] : ["--prerelease=false", "--latest"];
   loadReleaseEnv(root);
   const folder = path.join(root, "artifacts/releases", VERSION);
   const release = readJson(path.join(folder, "release.json"));
@@ -49,7 +50,7 @@ await releaseCommand(root, async () => {
   catch {
     const notes = path.join(folder, "release-notes.md");
     writeFileSync(notes, releaseNotes(readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), VERSION) + "\n\nRequires Node 24.19.0 or newer. Runner downloads automatically on first desktop launch.\n");
-    await run(root, ["gh", "release", "create", tag, "--repo", repo, "--verify-tag", "--draft", "--prerelease", "--title", `Spark ${VERSION}`, "--notes-file", notes]);
+    await run(root, ["gh", "release", "create", tag, "--repo", repo, "--verify-tag", "--draft", ...releaseFlags, "--title", `Spark ${VERSION}`, "--notes-file", notes]);
     await run(root, ["gh", "release", "upload", tag, "--repo", repo, ...Object.keys(release.sha256).map(name => path.join(folder, name)), path.join(folder, "checksums.txt"), path.join(folder, "release.json")]);
     existing = { isDraft: true };
   }
@@ -71,7 +72,7 @@ await releaseCommand(root, async () => {
     const asset = assets.find((item: any) => item.name === name);
     if (!asset || asset.digest !== `sha256:${expected}`) throw new Error(`GitHub asset is missing or has a different digest: ${name}. Preserve the release and repair the upload explicitly.`);
   }
-  if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", "--prerelease"]);
+  if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", ...releaseFlags]);
   // npm web authentication needs the terminal; piping output disables its prompt.
   // Publish straight to the release channel: the SDK moves before the creator that pins it.
   for (const [index, name] of publishedPackages.entries()) {
@@ -83,7 +84,10 @@ await releaseCommand(root, async () => {
     });
     // Repairs the channel when a resumed publication found the version already published.
     const channel = latest ? "latest" : "next";
-    const tags = JSON.parse(await run(root, ["npm", "view", name, "dist-tags", "--json", "--prefer-online"], { capture: true }));
+    const argv = ["npm", "view", name, "dist-tags", "--json", "--prefer-online"];
+    const result = await registryCommand(argv);
+    if (result.code && !/\bE404\b/.test(result.output)) throw new CommandError(argv, result.code, result.output);
+    const tags = result.code ? {} : JSON.parse(result.output);
     if (tags[channel] !== VERSION) {
       const promote = spawnProcess(["npm", "dist-tag", "add", `${name}@${VERSION}`, channel], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
       if (await promote.exited) throw new Error(`npm ${name} ${channel} tag failed; retry with the same release artifacts`);

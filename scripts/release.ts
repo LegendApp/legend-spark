@@ -12,16 +12,16 @@ const root = path.resolve(import.meta.dirname, "..");
 await releaseCommand(root, async () => {
   const args = process.argv.slice(2);
   if (args.includes("--help")) {
-    console.log("Usage: bun run release [--latest | --next] [--resume | --resume-from publish | --finish]\n\nSelect the next preview version, verify, commit, build/sign/notarize, push and publish.\nEach release moves one npm dist-tag: latest for a stable version, next for a prerelease.\n--latest or --next overrides that channel; --resume retains the original version and channel. Unfinished releases resume automatically.\n--resume-from publish skips build/sign and verifies artifacts/releases/<version>/ before publishing.\n--finish only verifies the published candidate, finishes npm tags and marks it complete. It uses the saved channel and needs no signing credentials.\nRequires Bun, gh/npm login; building requires a clean main checkout on Apple Silicon,\nNode 24.19+, Apple tools and Developer ID / notarization credentials. Native recipient QA remains separate.");
+    console.log("Usage: bun run release [--stable] [--latest | --next] [--resume | --resume-from publish | --finish]\n\nSelect a release version, verify, commit, build/sign/notarize, push and publish.\n--stable promotes the current X.Y.Z-next.N line to X.Y.Z (for 0.0.1: bun run release --stable).\nWithout --stable, use the unpublished workspace version or advance an already published preview.\nEach release moves one npm dist-tag: latest for a stable version, next for a prerelease.\n--latest or --next overrides that channel; --resume retains the original version and channel. Unfinished releases resume automatically.\n--resume-from publish skips build/sign and verifies artifacts/releases/<version>/ before publishing.\n--finish only verifies the published candidate, finishes npm tags and marks it complete. It uses the saved channel and needs no signing credentials.\nRequires Bun, gh/npm login; building requires a clean main checkout on Apple Silicon,\nNode 24.19+, Apple tools and Developer ID / notarization credentials. Native recipient QA remains separate.");
   } else {
     const resumeIndex = args.indexOf("--resume-from");
     const resumeFrom = resumeIndex >= 0 ? args[resumeIndex + 1] : undefined;
     if (resumeIndex >= 0 && resumeFrom !== "publish") throw new Error("Use --resume-from publish to publish existing staged artifacts without build/sign steps.");
-    if (args.some((arg, index) => !["--latest", "--next", "--resume", "--finish", "--resume-from"].includes(arg) && !(resumeIndex >= 0 && index === resumeIndex + 1))) throw new Error("Unknown option. Run bun run release --help");
+    if (args.some((arg, index) => !["--stable", "--latest", "--next", "--resume", "--finish", "--resume-from"].includes(arg) && !(resumeIndex >= 0 && index === resumeIndex + 1))) throw new Error("Unknown option. Run bun run release --help");
     if (args.includes("--latest") && args.includes("--next")) throw new Error("Choose either --latest or --next. Run bun run release --help");
     if ([args.includes("--resume"), args.includes("--finish"), resumeFrom !== undefined].filter(Boolean).length > 1) throw new Error("Choose --resume, --resume-from publish, or --finish. Run bun run release --help");
     if (!process.versions.bun) throw new Error("Run the release with Bun: bun run release");
-    if (!args.includes("--finish") && !resumeFrom && (process.platform !== "darwin" || process.arch !== "arm64")) throw new Error("This automated preview release targets macOS Apple Silicon");
+    if (!args.includes("--finish") && !resumeFrom && (process.platform !== "darwin" || process.arch !== "arm64")) throw new Error("This automated release targets macOS Apple Silicon");
     loadReleaseEnv(root);
     function checkSpace(headroom = 0) {
       const destinations = args.includes("--finish") ? [root] : ["/System/Volumes/Data", root, process.env.TMPDIR ?? "/tmp", path.dirname(sparkHome())];
@@ -57,7 +57,7 @@ await releaseCommand(root, async () => {
       } finally { process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt); }
     };
     try {
-      process.exitCode = await releaseWorkflow(root, { resume: args.includes("--resume"), latest: args.includes("--latest"), next: args.includes("--next"), finish: args.includes("--finish"), resumeFrom: resumeFrom as "publish" | undefined }, execute, async () => {
+      process.exitCode = await releaseWorkflow(root, { resume: args.includes("--resume"), latest: args.includes("--latest"), stable: args.includes("--stable"), next: args.includes("--next"), finish: args.includes("--finish"), resumeFrom: resumeFrom as "publish" | undefined }, execute, async () => {
         const project = signingProject(root);
         const savedFile = path.join(project, ".spark/signing.json");
         if (existsSync(savedFile)) {

@@ -18,13 +18,16 @@ export function signingProject(root: string) {
 }
 
 export function releaseTarget(current: string, published: string[]) {
-  const match = /^(\d+\.\d+\.\d+)-next\.(\d+)$/.exec(current);
-  if (!match) throw new Error(`Expected a next preview version, received ${current}`);
+  const match = /^(\d+\.\d+\.\d+)(?:-next\.(\d+))?$/.exec(current);
+  if (!match) throw new Error(`Expected a stable or next preview version, received ${current}`);
   const prefix = `${match[1]}-next.`;
   const numbers = published.filter(value => value.startsWith(prefix) && /^\d+$/.test(value.slice(prefix.length))).map(value => Number(value.slice(prefix.length)));
   const latest = Math.max(...numbers);
-  if (published.includes(current)) return { version: `${prefix}${latest + 1}`, previous: `v${current}` };
-  if (latest > Number(match[2])) throw new Error(`A higher ${prefix} version is already published; cannot release ${current}`);
+  if (published.includes(current)) {
+    if (match[2] === undefined) throw new Error(`Stable version ${current} is already published; select a new version`);
+    return { version: `${prefix}${latest + 1}`, previous: `v${current}` };
+  }
+  if (match[2] !== undefined && latest > Number(match[2])) throw new Error(`A higher ${prefix} version is already published; cannot release ${current}`);
   if (!numbers.length) throw new Error(`No previous published ${prefix} version below ${current}`);
   return { version: current, previous: `v${prefix}${latest}` };
 }
@@ -58,7 +61,7 @@ export function versionEdits(root: string, files: string[], current: string, ver
     else if (file === "CHANGELOG.md") {
       if (changelogSection(before, version) !== undefined) continue;
       if (!before.startsWith("# Changelog\n")) throw new Error("Unrecognized changelog format");
-      after = before.replace("# Changelog\n", `# Changelog\n\n## ${version} — preview\n\nmacOS 14+ (Apple Silicon) supported; Windows preview, not yet verified\n\n${notes.trim()}\n`);
+      after = before.replace("# Changelog\n", `# Changelog\n\n## ${version}${version.includes("-") ? " — preview" : ""}\n\nmacOS 14+ (Apple Silicon) supported; Windows preview, not yet verified\n\n${notes.trim()}\n`);
     }
     if (after !== before) edits.push({ file, before, after });
   }
@@ -134,7 +137,7 @@ async function finishRelease(root: string, state: State, execute: Execute) {
   console.log(`Released ${state.version}. Native UI and clean-recipient Runner acceptance must still be recorded separately.`);
 }
 
-export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; next?: boolean; finish?: boolean; resumeFrom?: "publish" }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
+export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; stable?: boolean; next?: boolean; finish?: boolean; resumeFrom?: "publish" }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
   const stateFile = path.join(root, ".spark/release-workflow.json");
   const run = async (argv: string[], capture = false) => {
     const result = await execute(argv, capture);
@@ -147,6 +150,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
   if (previous && previous.schema !== 1) throw new Error("Unsupported release workflow state");
   // A resumed release keeps its saved channel; an override must not contradict it.
   const sameChannel = (saved: State) => {
+    if (options.stable && saved.version.includes("-")) throw new Error("Cannot promote an unfinished preview release. Finish it before starting a stable release.");
     const flag = options.latest && !saved.latest ? "--latest" : options.next && saved.latest ? "--next" : undefined;
     if (flag) throw new Error(`Resume the original channel selection; this release was started for ${saved.latest ? "latest" : "next"}. Retry without ${flag}.`);
   };
@@ -185,7 +189,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (!state) {
       const current = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version as string;
       const versions = JSON.parse(await run(["npm", "view", "@legendapp/spark", "versions", "--json"], true));
-      const { version, previous: tag } = releaseTarget(current, Array.isArray(versions) ? versions : [versions]);
+      const { version, previous: tag } = releaseTarget(options.stable ? current.replace(/-next\.\d+$/, "") : current, Array.isArray(versions) ? versions : [versions]);
       let notes = changelogSection(readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), version);
       if (notes === undefined) {
         const hasTag = await execute(["git", "rev-parse", "--verify", `refs/tags/${tag}`], true);

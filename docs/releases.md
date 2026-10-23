@@ -1,4 +1,4 @@
-# Preview release process
+# Release process
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
@@ -119,6 +119,20 @@ and Node 24.19.0 or newer, install dependencies once with `bun install --frozen-
 bun run release
 ```
 
+To release stable **0.0.1** from the current `0.0.1-next.N` line:
+
+```sh
+bun run release --stable
+```
+
+`--stable` removes the `-next.N` suffix, uses the latest published preview on
+that version line as the release-notes baseline, and defaults both npm packages
+to `latest`. A checkout already versioned `0.0.1` can use `bun run release`.
+An already published stable version is rejected; no patch bump is inferred.
+Add reviewed `UPGRADING.md` notes for `0.0.1` before starting. Finish any unfinished
+preview release before promoting. Stable releases are normal GitHub releases marked
+Latest; preview versions stay GitHub prereleases even with npm `--latest`.
+
 The command releases the checkout's unpublished `-next.N` version, or selects
 the next preview when that version is already published. Each release moves
 exactly one npm dist-tag on both packages: `latest` for a stable version such as
@@ -148,7 +162,7 @@ It runs `bun install --frozen-lockfile`, typechecking, and portable tests before
 change. It then builds/signs/notarizes the Runner, assembles immutable artifacts,
 and runs the packed-consumer integration against the **exact staged npm archive**.
 After successful checks it atomically pushes `main` and the matching release tag,
-publishes the GitHub prerelease and both npm packages to the release's channel.
+publishes the GitHub release and both npm packages to the release's channel.
 
 If notarization is pending or a later step fails, retry the same release command
 to continue the unfinished release automatically, or run:
@@ -226,7 +240,7 @@ installation, tests, native builds and packed-consumer installs). It preserves a
 a disk monitor that can terminate signing, notarization or npm authentication.
 If a space check fails, review cleanup and rerun with `--resume`.
 
-This workflow publishes a prerelease for macOS Apple Silicon. Its
+This workflow publishes releases for macOS Apple Silicon. Its
 automated checks do not perform native UI or clean-recipient Runner acceptance.
 Record those separately in the dossier. Intel macOS is not yet verified.
 Promoting npm `latest` does not change the platform support listed above.

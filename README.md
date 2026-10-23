@@ -420,8 +420,11 @@ Optional [audio/media sessions](docs/audio.md) and [browser authentication](docs
 Release maintainers: run `bun run release` from a clean `main`
 checkout on the signing Apple Silicon Mac to version, verify, sign/notarize,
 and publish. A prerelease goes to npm `next` and a stable version to `latest`;
-`--latest` or `--next` overrides the channel. Use `bun run release --resume`
-to continue the same release. See the [preview release workflow](docs/releases.md)
+`--latest` or `--next` overrides the channel. To release stable `0.0.1` from the
+current `0.0.1-next.N` line, add reviewed upgrade notes for `0.0.1` and run
+`bun run release --stable`. Stable GitHub releases are marked Latest; preview
+versions remain prereleases. Use `bun run release --resume`
+to continue the same release. See the [release workflow](docs/releases.md)
 for prerequisites, retry behavior, and separate clean-machine acceptance.
 
 ### Customize Mac apps

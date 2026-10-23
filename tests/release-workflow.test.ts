@@ -15,7 +15,13 @@ test("release targets advance published versions and retain unpublished workspac
   expect(releaseTarget("0.0.1-next.12", ["0.0.1-next.9", "0.0.1-next.10"])).toEqual({ version: "0.0.1-next.12", previous: "v0.0.1-next.10" });
   expect(() => releaseTarget("0.0.1-next.3", ["0.0.1-next.2", "0.0.1-next.4"])).toThrow("higher 0.0.1-next. version is already published");
   expect(() => releaseTarget("0.0.1-next.3", ["0.0.2-next.2", "0.0.1-next.bad"])).toThrow("No previous published 0.0.1-next. version below 0.0.1-next.3");
-  expect(() => releaseTarget("0.0.1", [])).toThrow("Expected a next preview");
+  expect(() => releaseTarget("0.0.1-beta.1", [])).toThrow("Expected a stable or next preview version");
+});
+
+test("stable targets use the latest published preview on their line and never advance a published stable version", () => {
+  expect(releaseTarget("0.0.1", ["0.0.1-next.9", "0.0.1-next.10", "0.0.2-next.30", "0.0.1-next.bad"])).toEqual({ version: "0.0.1", previous: "v0.0.1-next.10" });
+  expect(() => releaseTarget("0.0.1", ["0.0.1", "0.0.1-next.7"])).toThrow("Stable version 0.0.1 is already published");
+  expect(() => releaseTarget("0.0.1", ["0.0.2-next.1"])).toThrow("No previous published 0.0.1-next. version below 0.0.1");
 });
 
 test("release environment loading works without process.loadEnvFile and preserves shell values", () => {
@@ -109,11 +115,12 @@ function fixture() {
     }
     if (argv.includes("release:publish")) {
       expect(argv.filter(arg => arg === "--latest" || arg === "--next")).toHaveLength(1);
-      published.add("@legendapp/spark@0.0.1-next.3").add("@legendapp/create-spark@0.0.1-next.3");
+      const version = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
+      published.add(`@legendapp/spark@${version}`).add(`@legendapp/create-spark@${version}`);
       // An interrupted publication leaves the packages published but the channel tag unconfirmed.
       if (failPublish) { failPublish = false; return { code: 1, output: "Promotion interrupted" }; }
       const channel = argv.includes("--latest") ? "latest" : "next";
-      tags[channel] = createTags[channel] = "0.0.1-next.3";
+      tags[channel] = createTags[channel] = version;
     }
     return { code: 0, output: "" };
   };
@@ -121,6 +128,36 @@ function fixture() {
   const finish = (runner: Execute = execute, latest = false) => releaseWorkflow(root, { resume: false, latest, finish: true }, runner, async () => { throw new Error("Signing must not run"); }, () => { throw new Error("Runner must not be consulted"); });
   return { root, git, write, commands, tags, createTags, release, finish, execute, setFailures: (test: boolean, runner: boolean, publish: boolean) => { failTest = test; pendingRunner = runner; failPublish = publish; }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
+
+test.each(["promote", "workspace"])("stable release versions, resumes and publishes to latest: %s", async mode => {
+  const f = fixture();
+  try {
+    f.write("packages/desktop/skills/spark/UPGRADING.md", "# Upgrading Spark apps\n\n## 0.0.1\n\nReviewed stable upgrade notes.\n");
+    if (mode === "workspace") applyVersionEdits(f.root, versionEdits(f.root, f.git("ls-files").split("\n"), "0.0.1-next.2", "0.0.1", "Reviewed stable release notes."));
+    f.git("add", "."); f.git("commit", "-m", "Prepare stable upgrade notes");
+    const release = (resume: boolean) => releaseWorkflow(f.root, { resume, latest: false, stable: mode === "promote" }, f.execute, async () => {}, () => path.join(f.root, ".spark/runner"));
+    f.setFailures(false, true, false);
+    expect(await release(false)).toBe(2);
+    const state = JSON.parse(readFileSync(path.join(f.root, ".spark/release-workflow.json"), "utf8"));
+    expect(state).toMatchObject({ version: "0.0.1", latest: true });
+    expect(await release(true)).toBe(0);
+    expect(JSON.parse(readFileSync(path.join(f.root, "packages/create-spark/package.json"), "utf8")).version).toBe("0.0.1");
+    expect(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8")).toContain("\n## 0.0.1\n");
+    expect(f.commands).toContainEqual(["bun", "run", "release:publish", "--latest"]);
+    for (const tags of [f.tags, f.createTags]) expect(tags).toEqual({ latest: "0.0.1", next: "0.0.1-next.2" });
+  } finally { f.cleanup(); }
+});
+
+test("stable promotion refuses to resume an unfinished preview", async () => {
+  const f = fixture();
+  try {
+    f.setFailures(false, true, false);
+    expect(await f.release()).toBe(2);
+    f.commands.length = 0;
+    await expect(releaseWorkflow(f.root, { resume: false, latest: false, stable: true }, f.execute, async () => {}, () => "unused")).rejects.toThrow("Cannot promote an unfinished preview release");
+    expect(f.commands.some(argv => argv.includes("release:publish"))).toBe(false);
+  } finally { f.cleanup(); }
+});
 
 test.each(["hand-written", "generated"])("pre-bumped releases use the workspace version with %s notes", async notes => {
   const f = fixture();
