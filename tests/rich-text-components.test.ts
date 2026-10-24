@@ -204,3 +204,10 @@ for (const { Reader, preview, contentProp, blockStyle } of [
     expect(rendered.root.findByType(preview).props[contentProp]).toBe("");
   });
 }
+
+test("Markdown forwards the GitHub flavor for tables", async () => {
+  await act(async () => {
+    rendered = create(React.createElement(Markdown, { value: "| a |\n| - |\n| b |", flavor: "github" }));
+  });
+  expect(rendered.root.findByType("MarkdownPreview").props.flavor).toBe("github");
+});

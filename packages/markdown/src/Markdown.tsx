@@ -6,6 +6,7 @@ export interface MarkdownProps extends Omit<ViewProps, "children" | "style"> {
   children?: string;
   style?: StyleProp<TextStyle>;
   markdownStyle?: MarkdownStyle;
+  flavor?: "commonmark" | "github";
   selectable?: boolean;
   onLinkPress?(event: { url: string }): void;
 }
