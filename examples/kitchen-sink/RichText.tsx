@@ -26,6 +26,14 @@ export function RichText() {
         accessibilityLabel="Read-only Markdown"
         testID="markdown-reader"
       />
+      <Text>GitHub Flavored Markdown</Text>
+      <Markdown
+        value={githubMarkdownTable}
+        flavor="github"
+        style={styles.input}
+        accessibilityLabel="GitHub Flavored Markdown"
+        testID="markdown-github-reader"
+      />
       <Text>Read-only HTML</Text>
       <Html
         style={styles.input}
@@ -107,6 +115,12 @@ const message = "Hello, Spark";
 \`\`\`
 
 ![React Native logo](https://reactnative.dev/img/tiny_logo.png)
+`;
+
+const githubMarkdownTable = `| Reader | Tables |
+| --- | --- |
+| \`flavor="commonmark"\` | Plain text |
+| \`flavor="github"\` | Rendered |
 `;
 
 const htmlArticle = `<h1>A native HTML reader</h1>
