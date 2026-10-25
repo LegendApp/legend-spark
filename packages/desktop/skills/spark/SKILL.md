@@ -51,6 +51,6 @@ After installation, read this skill and `UPGRADING.md` from the **new installed 
 - Missing `pod` / `xcodebuild`: install the documented native prerequisites, then retry. Spark does not install Xcode or accept licenses.
 - Pin drift, stale Expo terminal patch, or pending migrations: inspect `spark doctor`, preview `spark upgrade --dry-run`, then upgrade. If install fails, fix the manager error and rerun upgrade; the migration version is not advanced by a failed install.
 - Malformed `spark:skill` markers: repair the paired marked section without removing user instructions, then rerun upgrade.
-- Build details live in `.spark/logs/` and `.spark/commands.jsonl`. Keep `.spark/`, generated native outputs, and dependency directories out of version control; commit source/configuration, AI pointer files, vendored release inputs, and the manager lockfile.
+- Build details live in `.spark/logs/` and `.spark/commands.jsonl`. Keep `.spark/` (except `.spark/version`), generated native outputs, and dependency directories out of version control; commit source/configuration, AI pointer files, vendored release inputs, and the manager lockfile.
 
 See the maintained [development guide](https://github.com/LegendApp/legend-spark/blob/main/docs/development.md), [packaging guide](https://github.com/LegendApp/legend-spark/blob/main/docs/packaging.md), and [Expo integration guide](https://github.com/LegendApp/legend-spark/blob/main/docs/add-desktop.md). Use the installed CLI's `--help` and templates for version-specific behavior.

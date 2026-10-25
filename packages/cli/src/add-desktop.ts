@@ -159,7 +159,7 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   files.set("desktop.config.json", JSON.stringify(desktop, null, 2) + "\n");
   const ignoreFile = path.join(root, ".gitignore");
   const ignore = existsSync(ignoreFile) ? readFileSync(ignoreFile, "utf8") : "";
-  files.set(".gitignore", `${ignore}${ignore.endsWith("\n") || !ignore ? "" : "\n"}\n# spark generated desktop state\n/.spark/\n/macos/\n/windows/\n${release ? "\n# Spark verified release package inputs\n!/spark-packages/\n!/spark-packages/**\n" : ""}`);
+  files.set(".gitignore", `${ignore}${ignore.endsWith("\n") || !ignore ? "" : "\n"}\n# spark generated desktop state\n/.spark/*\n!/.spark/version\n/macos/\n/windows/\n${release ? "\n# Spark verified release package inputs\n!/spark-packages/\n!/spark-packages/**\n" : ""}`);
   // All conflicts are checked before the first write. The integration is kept
   // reviewable/retryable if the package manager fails; never regenerate mobile.
   if (release) await materializeReleasePackages(release, root);
