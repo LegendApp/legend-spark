@@ -20,4 +20,4 @@ test("owned configuration schema keys track the public TypeScript contract", () 
     const type = checker.getDeclaredTypeOfSymbol(symbol);
     expect(type.getProperties().map(property => property.name).sort(), name).toEqual(Object.keys(shape.properties).sort());
   }
-});
+}, 30_000); // Type-checks the config declarations with a TypeScript program: under a second locally, up to 2.7 s on a loaded CI runner.
