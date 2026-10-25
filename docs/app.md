@@ -46,6 +46,8 @@ One process runs per project ID. This is always on rather than opt-in: windows, 
 
 A later launch forwards itself to the running process and exits. The running process brings its windows forward (the same path as clicking the Dock or taskbar icon, so `reopen` fires as well), emits `secondInstance` and then queues the launch's files and URLs as ordinary open requests, so `/app/documents` and `/links` subscribers receive them like any other open. `secondInstance` is live-only: a launch forwarded before JavaScript subscribes is not replayed, but its files and URLs are, through `/app/documents`.
 
+On macOS, LaunchServices launches use `/` as `secondInstance.workingDirectory`; a directly executed process forwards its actual working directory. Windows forwards the launch's working directory.
+
 ```ts
 import { addAppListener } from '@legendapp/spark/app';
 

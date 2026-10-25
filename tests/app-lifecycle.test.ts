@@ -43,7 +43,7 @@ test("relaunch snapshots and validates the owned argument array before yielding"
   await expect(pending).resolves.toEqual({ quitRequested: true });
   expect(calls("relaunch")).toEqual([{ arguments: ["original"] }]);
   const deceptive = ["valid"];
-  deceptive[Symbol.iterator] = function* () { yield "invalid\0copy"; };
+  deceptive[Symbol.iterator] = function* () { yield "invalid\0copy"; return undefined; };
   await expect(relaunch({ arguments: deceptive })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   expect(calls("relaunch")).toHaveLength(1);
 });
@@ -55,6 +55,40 @@ test("quit joins concurrent requests and waits for the native decision", async (
   resolve('{"quitRequested":false,"reason":"vetoed"}'); await expect(first).resolves.toEqual({ quitRequested: false, reason: "vetoed" });
   mocks.call.mockResolvedValue('{"quitRequested":true}'); await expect(quit()).resolves.toEqual({ quitRequested: true });
   mocks.call.mockResolvedValue('null'); await expect(quit()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+test.each([true, false])("relaunch preserves the pending quit decision (%s) after orphan cleanup", async allow => {
+  mocks.call.mockRejectedValue(Error("bridge failed"));
+  await expect(beforeQuit(() => true)).rejects.toMatchObject({ code: "E_NATIVE" });
+  mocks.call.mockClear();
+  let finishCleanup!: (value: string) => void, finishQuit!: (value: string) => void;
+  const cleanup = new Promise<string>(resolve => { finishCleanup = resolve; });
+  const decision = new Promise<string>(resolve => { finishQuit = resolve; });
+  let pending = false;
+  mocks.call.mockImplementation(method => {
+    if (method === "quitGuard") {
+      if (pending) finishQuit('{"quitRequested":false,"reason":"vetoed"}');
+      return cleanup;
+    }
+    pending = true;
+    return decision;
+  });
+  const quitting = quit();
+  await tick();
+  const restarting = relaunch();
+  await tick();
+  expect(calls("quit")).toHaveLength(0);
+  expect(calls("relaunch")).toHaveLength(0);
+  finishCleanup("null");
+  await tick();
+  expect(calls("quitGuard")).toHaveLength(1);
+  expect(calls("quit")).toHaveLength(1);
+  expect(calls("relaunch")).toHaveLength(1);
+  const joined = relaunch();
+  await tick();
+  expect(calls("quitGuard")).toHaveLength(1);
+  const result = allow ? { quitRequested: true } : { quitRequested: false, reason: "vetoed" };
+  finishQuit(JSON.stringify(result));
+  await expect(Promise.all([quitting, restarting, joined])).resolves.toEqual([result, result, result]);
 });
 test("live app events validate payloads and never expose guard protocol or unrelated events", () => {
   const listener = vi.fn(), registration = addAppListener("secondInstance", listener);
