@@ -7,6 +7,8 @@
 // defaults (SPUSkippedUpdate.m); its API is private. A minor skip stores the
 // skipped CFBundleVersion; a major-upgrade skip stores the item's
 // minimumAutoupdateVersion plus the skipped CFBundleVersion.
+// Callers use standardUserDefaults, matching Sparkle's host domain only while
+// SUDefaultsDomain is unset. Spark does not support overriding that Info.plist key.
 static inline NSDictionary *SparkSkippedUpdates(NSUserDefaults *defaults) {
   return @{ @"skippedBuild": [defaults stringForKey:@"SUSkippedVersion"] ?: NSNull.null,
             @"skippedMajorBuild": [defaults stringForKey:@"SUSkippedMajorSubreleaseVersion"] ?: NSNull.null };

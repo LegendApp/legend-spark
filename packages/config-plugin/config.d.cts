@@ -3,7 +3,7 @@ import type { WindowConfiguration } from "@legendapp/spark-window-options";
 export type { WindowConfiguration } from "@legendapp/spark-window-options";
 export type SparkPlatform = "macos" | "windows" | "ios" | "android" | "web";
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-export interface UpdateConfiguration { feedURL: string; publicKey: string }
+export interface UpdateConfiguration { feedURL: string; publicKey: string; maximumDeltas?: number }
 export interface DocumentType { name: string; contentTypes: string[]; role?: "Editor" | "Viewer" }
 export type HelperTarget = "macos-arm64" | "macos-x64" | "windows-arm64" | "windows-x64";
 export type HelperConfiguration = string | Partial<Record<HelperTarget, { directory: string; executable: string }>>;

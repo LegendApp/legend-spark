@@ -232,7 +232,15 @@ Release intervals, so Spark rejects them with `E_INVALID_ARGUMENT`. Status repor
 the persisted interval and automatic-check preference before the updater starts
 (Sparkle's default interval is 86400 seconds), and `lastCheckedAt` once it has.
 
+Skip status and clearing use the app's standard defaults domain. Do not set
+Sparkle's `SUDefaultsDomain` Info.plist override; that configuration is unsupported.
+
 ## Automated checks
+
+The UPD e2e registry is deferred until the runner has a backend for the update UI
+and standalone updater lifecycle. Register availability/refusal, start/check,
+interval, delta/downgrade and skip/clear checks together with executable flows;
+the unit and Sparkle integration tests below do not count as e2e flow coverage.
 
 ```sh
 bun run typecheck

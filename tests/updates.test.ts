@@ -1,10 +1,10 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { verifyUpdateSignature, prepareUpdate, SPARKLE_VERSION, validateUpdateBuildVersion } from "../packages/cli/src/updates.ts";
+import { initializeUpdates, verifyUpdateSignature, prepareUpdate, SPARKLE_VERSION, validateUpdateBuildVersion } from "../packages/cli/src/updates.ts";
 import { goConfigurationIssues } from "../packages/cli/src/project.ts";
 const { updateConfiguration, updatePlist } = createRequire(import.meta.url)("../packages/config-plugin/updates.cjs");
 const valid = { feedURL: "https://example.com/updates/appcast.xml", publicKey: Buffer.alloc(32).toString("base64") };
@@ -63,6 +63,25 @@ test("delta generation is opt-in, bounded, and passed to generate_appcast", () =
   expect(updateConfiguration(config({ ...valid, maximumDeltas: 3 }))).toEqual({ ...valid, maximumDeltas: 3 });
   for (const maximumDeltas of [-1, 1.5, 11, "3", null]) expect(() => updateConfiguration(config({ ...valid, maximumDeltas }))).toThrow("maximumDeltas");
   expect(updatePlist(config({ ...valid, maximumDeltas: 3 }))).not.toHaveProperty("maximumDeltas");
+});
+test("updates init preserves maximumDeltas while replacing the feed URL", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-update-init-"));
+  try {
+    const home = path.join(root, "home");
+    vi.stubEnv("SPARK_HOME", home);
+    mkdirSync(path.join(home, "tools", `sparkle-${SPARKLE_VERSION}`, "bin"), { recursive: true });
+    writeFileSync(path.join(home, "tools", `sparkle-${SPARKLE_VERSION}`, "bin/generate_appcast"), "");
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ name: "Updates", projectId: "updates", version: "1", macos: { bundleIdentifier: "com.example.updates" }, updates: { ...valid, maximumDeltas: 3 } }));
+    const commands: string[][] = [];
+    const feedURL = "https://example.com/new/appcast.xml";
+    await initializeUpdates(root, feedURL, async (_root, command) => {
+      commands.push(command);
+      expect(path.basename(command[0])).toBe("generate_keys");
+      return command.includes("-p") ? valid.publicKey : "";
+    });
+    expect(commands).toHaveLength(2);
+    expect(JSON.parse(readFileSync(path.join(root, "desktop.config.json"), "utf8")).updates).toEqual({ ...valid, feedURL, maximumDeltas: 3 });
+  } finally { vi.unstubAllEnvs(); rmSync(root, { recursive: true, force: true }); }
 });
 test("packaging publishes, reports and keeps only the new build's signed deltas", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-update-deltas-"));
