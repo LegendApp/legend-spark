@@ -33,7 +33,7 @@ test.skipIf(process.platform !== "darwin")("Codex cancellation and turn lifecycl
     execFileSync("clang++", ["-DSPARK_CODEX_TESTING", "-fobjc-arc", "-fblocks", "-std=c++20", "packages/codex/cpp/HybridCodexAppServer.mm", "tests/codex-supervisor-harness.mm", "-framework", "Foundation", "-o", binary], { stdio: "pipe" });
     const runMode = (mode: string) => new Promise<{ code: number | null; output: string }>((resolve, reject) => {
       const modeMarker = path.join(root, `marker-${mode}`);
-      const child = spawn(binary, [mode], { cwd, detached: true, env: { ...process.env, CODEX_PATH: fake, CODEX_HOME: root, CODEX_TEST_MODE: mode, CODEX_TEST_MARKER: modeMarker, ...(mode === "preack" || mode === "postack" ? { CODEX_TEST_ACCEPT_TURN_AFTER_EXIT: "1" } : {}) }, stdio: ["ignore", "pipe", "pipe"] });
+      const child = spawn(binary, [mode], { cwd, detached: true, env: { ...process.env, CODEX_PATH: fake, CODEX_HOME: root, CODEX_TEST_MODE: mode, CODEX_TEST_MARKER: modeMarker, ...(mode === "preack" || mode === "postack" ? { CODEX_TEST_ACCEPT_TURN_AFTER_EXIT: "1" } : mode === "protocol-restart" ? { CODEX_TEST_ACCEPT_TURN_AFTER_EXIT: "next" } : {}) }, stdio: ["ignore", "pipe", "pipe"] });
       let output = "";
       child.stdout.on("data", (chunk) => { output += chunk.toString(); });
       child.stderr.on("data", (chunk) => { output += chunk.toString(); });
@@ -67,6 +67,9 @@ test.skipIf(process.platform !== "darwin")("Codex cancellation and turn lifecycl
     const postAck = await runMode("postack");
     expect(postAck.code, postAck.output).toBe(0);
     expect(postAck.output).toContain("output=postack");
+    const protocolRestart = await runMode("protocol-restart");
+    expect(protocolRestart.code, protocolRestart.output).toBe(0);
+    expect(readFileSync(path.join(root, "marker-protocol-restart.count"), "utf8")).toBe("2");
     const oversized = await runMode("oversize-preack");
     expect(oversized.code, oversized.output).toBe(0);
     expect(oversized.output).toContain("16 MiB pre-ack");

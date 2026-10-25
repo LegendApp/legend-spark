@@ -487,9 +487,13 @@ public:
       try {
         NSDictionary* turnResponse = request(@"turn/start", turnParams, deadline, acceptedCancellationGeneration, runProcessGeneration);
 #if defined(SPARK_CODEX_TESTING)
-        if (std::getenv("CODEX_TEST_ACCEPT_TURN_AFTER_EXIT") != nullptr) {
+        if (const char* accept = std::getenv("CODEX_TEST_ACCEPT_TURN_AFTER_EXIT")) {
+          // "next" also waits for a later process to start and end.
+          const bool next = std::string(accept) == "next";
           std::unique_lock lock(mutex_);
-          condition_.wait_until(lock, deadline, [&]() { return processGeneration_ != runProcessGeneration; });
+          condition_.wait_until(lock, deadline, [&]() {
+            return processGeneration_ != runProcessGeneration && (!next || (processGeneration_ == 0 && nextProcessGeneration_ > runProcessGeneration));
+          });
         }
 #endif
         throwIfCancelled();
@@ -1397,7 +1401,8 @@ private:
       return;
     }
     processError_ = actionableError(message);
-    for (auto& [turnId, state] : turns_) {
+    for (auto& [key, state] : turns_) {
+      if (key.first != generation) continue;
       state.error = processError_;
       state.done = true;
     }

@@ -21,6 +21,9 @@ def reply(message, result):
     print(json.dumps({"id": message["id"], "result": result}), flush=True)
 
 msg = read()
+if mode == "protocol-restart" and count > 0:
+    print("not json", flush=True)
+    sys.exit(0)
 mark("initialize")
 if mode == "cancel-init": time.sleep(20)
 reply(msg, {"userAgent": "fake"})
@@ -39,7 +42,7 @@ if msg is None: sys.exit(0)
 if msg.get("method") != "turn/start": sys.exit(3)
 mark("turn")
 if mode == "cancel-turn": time.sleep(20)
-if mode == "preack":
+if mode in ("preack", "protocol-restart"):
     print(json.dumps({"method": "turn/completed", "params": {"turn": {"id": "turn-1", "status": "completed", "items": [{"type": "agentMessage", "text": "preack"}]}}}), flush=True)
     reply(msg, {"turn": {"id": "turn-1"}})
     sys.exit(0)
