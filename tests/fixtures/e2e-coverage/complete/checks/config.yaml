@@ -1,0 +1,6 @@
+area: config
+prefix: CFG
+checks:
+  CFG-PLUGIN-01:
+    title: The config plugin applies desktop settings
+    covers: [./config]

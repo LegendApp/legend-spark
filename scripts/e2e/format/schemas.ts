@@ -2,7 +2,7 @@ import Ajv from "ajv";
 import { parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import { COMMANDS, isBare, type CommandSpec } from "./commands.ts";
 import {
-  anyStr, bool, byType, CHECK_ID, commands, condition, DEFINITIONS, dict, duration, list, MATRIX, obj, oneOf, PLATFORMS, str, type Schema,
+  anyStr, bool, byType, CHECK_ID, commands, condition, DEFINITIONS, dict, duration, list, MATRIX, obj, oneOf, PLATFORMS, str, SURFACE_ID, type Schema,
 } from "./primitives.ts";
 
 const DRAFT = "http://json-schema.org/draft-07/schema#";
@@ -72,7 +72,13 @@ export function buildRegistrySchema(): Schema {
         type: "object",
         minProperties: 1,
         propertyNames: { pattern: CHECK_ID },
-        additionalProperties: obj({ title: str, platforms: { ...list(oneOf(...PLATFORMS)), uniqueItems: true }, blocking: bool, spec: str }, ["title"]),
+        additionalProperties: obj({
+          title: str,
+          platforms: { ...list(oneOf(...PLATFORMS)), uniqueItems: true },
+          blocking: bool,
+          spec: str,
+          covers: { ...list(SURFACE_ID), uniqueItems: true, description: "The @legendapp/spark surface this check verifies (see bun run e2e:coverage)." },
+        }, ["title"]),
       },
     }, ["area", "prefix", "checks"]),
   };

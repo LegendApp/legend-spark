@@ -15,7 +15,7 @@ export type FlowHeader = {
   env?: Record<string, string>; onFlowStart?: FlowCommand[]; onFlowComplete?: FlowCommand[];
 };
 export type FlowAst = { file: string; header: FlowHeader; commands: FlowCommand[] };
-export type CheckRegistry = { area: string; prefix: string; checks: Record<string, { title: string; platforms?: Array<"macos" | "windows">; blocking?: boolean; spec?: string }> };
+export type CheckRegistry = { area: string; prefix: string; checks: Record<string, { title: string; platforms?: Array<"macos" | "windows">; blocking?: boolean; spec?: string; covers?: string[] }> };
 
 export class FlowFormatError extends Error {
   constructor(readonly diagnostics: Diagnostic[]) {
@@ -28,7 +28,7 @@ export const formatDiagnostic = (d: Diagnostic) => `${d.file}:${d.line}:${d.colu
 type Ranged = { range?: readonly number[] | null } | null | undefined;
 export type Loaded = { file: string; lines: LineCounter; docs: Document.Parsed[]; diagnostics: Diagnostic[] };
 
-function locate(loaded: Loaded, node: Ranged): SourceLocation {
+export function locate(loaded: Loaded, node: Ranged): SourceLocation {
   const { line, col } = loaded.lines.linePos(node?.range?.[0] ?? 0);
   return { file: loaded.file, line, column: col };
 }
