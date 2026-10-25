@@ -51,6 +51,7 @@ test.each(installedManagers)("verified release archives install and reinstall af
     const consumer = path.join(root, "consumer"); mkdirSync(consumer);
     const source = packageSources(undefined, releaseManifest)[packageName]!;
     const pkg: any = { name: "fixture-consumer", version: "1.0.0", private: true, dependencies: { [packageName]: source }, ...(manager === "bun" ? { trustedDependencies: [packageName] } : {}) };
+    if (manager === "npm") pkg.allowScripts = { [packageName]: true };
     applyOverrides(pkg, { [packageName]: source }, manager);
     writeJson(path.join(consumer, "package.json"), pkg);
     writeFileSync(path.join(consumer, ".gitignore"), "spark-packages\n!spark-packages/\n!spark-packages/**\n");
