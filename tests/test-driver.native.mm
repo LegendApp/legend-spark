@@ -11,6 +11,7 @@ static NSString *directory;
 static NSMutableArray<NSURL *> *openedURLs;
 static BOOL terminateRequested = NO;
 static std::atomic<bool> mounting{false};
+static NSDictionary *probeFrame; // waitFor's frame for probe-layer: points from the top-left of the captured frame view.
 static const char *token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 @interface Delegate : NSObject <NSApplicationDelegate>
@@ -120,6 +121,12 @@ static NSColor *Sample(NSString *file, NSRect rect, NSWindow *window) {
   NSInteger x = lround(center.x * scale), y = lround((window.frame.size.height - center.y) * scale);
   return [rep colorAtX:x y:y];
 }
+// Samples a point given in captured-frame points from the top-left, as waitFor reports frames.
+static NSColor *SampleTopLeft(NSString *file, CGFloat x, CGFloat y, CGFloat scale) {
+  NSBitmapImageRep *rep = [[NSBitmapImageRep imageRepWithData:[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:file]]]
+    bitmapImageRepByConvertingToColorSpace:NSColorSpace.sRGBColorSpace renderingIntent:NSColorRenderingIntentDefault];
+  return [rep colorAtX:lround(x * scale) y:lround(y * scale)];
+}
 static BOOL Near(NSColor *color, CGFloat r, CGFloat g, CGFloat b) {
   return fabs(color.redComponent - r) < 0.1 && fabs(color.greenComponent - g) < 0.1 && fabs(color.blueComponent - b) < 0.1;
 }
@@ -178,6 +185,7 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check([Code(Request(fd, @{ @"command": @"navigate", @"url": @"file:///etc/passwd" })) isEqual:@"E_INVALID_ARGUMENT"], @"file URLs are not navigation");
     NSDictionary *found = Request(fd, @{ @"command": @"waitFor", @"testID": @"probe-layer" });
     Check([found[@"ok"] boolValue] && [found[@"frame"][@"width"] isEqual:@100] && [found[@"window"] isEqual:@"spark.main"], @"waitFor finds an existing view");
+    probeFrame = found[@"frame"];
     Check([Code(Request(fd, @{ @"command": @"waitFor", @"testID": @"missing", @"timeoutMs": @100 })) isEqual:@"E_TIMEOUT"], @"waitFor times out");
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
       NSView *late = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)]; late.accessibilityIdentifier = @"late";
@@ -230,6 +238,10 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check(openedURLs.count == 1 && [openedURLs.firstObject.absoluteString isEqual:@"spark-ks://windows/frame"], @"navigate opens the URL through the app delegate");
     // A window that was never shown renders everything drawn in-process.
     Check(Near(Sample(@"cache.png", NSMakeRect(0, 200, 100, 100), window), 1, 0, 0), @"capture renders layer background colors");
+    CGFloat scale = [[NSBitmapImageRep imageRepWithData:[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"cache.png"]]] pixelsWide] / window.frame.size.width;
+    NSColor *atFrame = SampleTopLeft(@"cache.png", [probeFrame[@"x"] doubleValue] + 50, [probeFrame[@"y"] doubleValue] + 50, scale);
+    Check(Near(atFrame, 1, 0, 0) && [probeFrame[@"y"] doubleValue] < window.frame.size.height - 200 - 100 + 1,
+      [NSString stringWithFormat:@"waitFor frames are top-left points of the captured area (%@ sampled %@)", probeFrame, Describe(atFrame)]);
     Check(Near(Sample(@"cache.png", NSMakeRect(100, 200, 100, 100), window), 0, 1, 0), @"capture renders drawRect content");
     Check(Near(Sample(@"cache.png", NSMakeRect(200, 200, 100, 100), window), 0, 0, 1), @"capture renders layer contents");
     // Behind-window blur comes from the window server; in-process it is a flat material color.

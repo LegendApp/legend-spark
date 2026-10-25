@@ -85,16 +85,25 @@ describe("release gate", () => {
     expect(out.at(-1)).toMatch(/^Gate PASS on macos-14\/arm64@air-m1: 0 reasons\. Report: /);
   });
 
-  test("with the production backend table (empty until #50 and #226), the gate fails instead of passing vacuously", async () => {
+  test("with no backends registered, the gate fails instead of passing vacuously", async () => {
     const dir = repo();
-    const { env: gateEnv, out } = env({ backends: BACKENDS });
-    expect(Object.keys(BACKENDS)).toEqual([]);
+    const { env: gateEnv, out } = env({ backends: {} });
     expect(await gateCommand([], path.join(dir, "e2e"), gateEnv)).toBe(1);
     const report: GateReport = JSON.parse(readFileSync(path.join(dir, "reports/gate/report.json"), "utf8"));
     expect(report.verdict).toBe("FAIL");
     expect(reasons(report)).toEqual([`backend: ${NO_BACKENDS}`, "budgets: 1 budget for air-m1 not checked: no flows ran"]);
     expect(report.flows.filter(flow => !flow.manual).map(flow => flow.status)).toEqual(["not-run", "not-run", "not-run"]);
     expect(out.join("\n")).toContain(`[backend] ${NO_BACKENDS}`);
+  });
+
+  test("with the production backend table, the driver backend runs every flow: a flow it cannot drive fails, never skips", async () => {
+    const dir = repo();
+    const report = await gate(dir, { backends: BACKENDS });
+    expect(Object.keys(BACKENDS)).toEqual(["driver"]);
+    expect(report.backends).toEqual(["driver"]);
+    expect(reasons(report).filter(reason => reason.startsWith("backend:"))).toEqual([]);
+    // The fixture's build is an empty directory, so the driver cannot launch it.
+    expect(report.flows.filter(flow => !flow.manual).map(flow => [flow.status, flow.failure])).toEqual(Array(3).fill(["failed", expect.stringMatching(/KitchenSink\.app is not a macOS app bundle \[error\]$/)]));
   });
 
   test("backends for another platform only are no backend", async () => {

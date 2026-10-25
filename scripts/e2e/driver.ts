@@ -130,10 +130,12 @@ export class Driver {
     clearTimeout(timer);
     if (!exited) { this.app.kill("SIGKILL"); await this.app.exited; throw new Error(`The app did not quit within ${timeoutMs} ms`); }
   }
+  /** Whether the app process is still running. */
+  get running() { return this.app.exitCode === null && this.app.signalCode === null; }
   /** Kills the app if it is still running and removes the run directory, including captures. */
   async close() {
     this.socket.destroy();
-    if (this.app.exitCode === null && this.app.signalCode === null) { this.app.kill(); await this.app.exited; }
+    if (this.running) { this.app.kill(); await this.app.exited; }
     rmSync(this.directory, { recursive: true, force: true });
   }
 }
