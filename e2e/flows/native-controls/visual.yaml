@@ -1,0 +1,36 @@
+appId: so.legend.spark.examples.kitchensink
+name: Native controls screens match their goldens
+intent: >
+  Native controls screens open from their spark-ks:// deep links in the running Kitchen Sink and their roots render.
+  Split view, SF Symbols, Search field and Glass match the approved golden for the appearance (light and dark) and
+  locale (English and Arabic, where Split view and Search field mirror), with the shell sidebar masked. The three Sidebar
+  screens (data items, dynamic heights, React rows) match their goldens in light and dark, English and Arabic: rows fit
+  inside the Sidebar and mirror in Arabic (#264), and the selected row shows the unemphasized selection color (#265).
+checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://native-controls/split-view" }
+- assertVisible: { id: native-controls-split-view-root }
+- assertScreenshot: { golden: native-controls-split-view, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/symbol", stopApp: false }
+- assertVisible: { id: native-controls-symbol-root }
+- assertScreenshot: { golden: native-controls-symbol, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/search", stopApp: false }
+- assertVisible: { id: native-controls-search-root }
+- assertScreenshot: { golden: native-controls-search, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/glass", stopApp: false }
+- assertVisible: { id: native-controls-glass-root }
+- assertScreenshot: { golden: native-controls-glass, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-data-items", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-data-items-list }
+- assertScreenshot: { golden: native-controls-sidebar-data-items, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-dynamic-heights", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-dynamic-heights-list }
+- assertScreenshot: { golden: native-controls-sidebar-dynamic-heights, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-react-rows", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-react-rows-list }
+- assertScreenshot: { golden: native-controls-sidebar-react-rows, mask: [{ id: infra-shell-sidebar }] }

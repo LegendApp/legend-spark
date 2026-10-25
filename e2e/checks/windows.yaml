@@ -1,0 +1,8 @@
+area: windows
+prefix: WIN
+checks:
+  WIN-VISUAL-01:
+    title: The Window manager and Window controls screens match their approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"

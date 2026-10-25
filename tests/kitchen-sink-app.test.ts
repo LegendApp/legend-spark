@@ -7,14 +7,14 @@ const spark = vi.hoisted(() => ({
   args: [] as string[],
   locale: undefined as unknown as () => Promise<string>,
   menu: undefined as unknown as () => Promise<{ remove(): Promise<void> }>,
-  createMenu: undefined as any, registerShortcut: undefined as any, beforeQuit: undefined as any, beforeWindowClose: undefined as any,
+  createMenu: undefined as any, registerShortcut: undefined as any, beforeQuit: undefined as any, exposeTestState: undefined as any, beforeWindowClose: undefined as any,
   alert: undefined as any, openFileDialog: undefined as any, saveFileDialog: undefined as any, readText: undefined as any, writeText: undefined as any,
 }));
 function resetSpark() {
   const registration = () => Promise.resolve({ remove: async () => {} });
   Object.assign(spark, {
     args: [], locale: async () => "en_US", menu: registration,
-    createMenu: vi.fn(() => spark.menu()), registerShortcut: vi.fn(registration), beforeQuit: vi.fn(registration), beforeWindowClose: vi.fn(registration),
+    createMenu: vi.fn(() => spark.menu()), registerShortcut: vi.fn(registration), beforeQuit: vi.fn(registration), exposeTestState: vi.fn(() => ({ remove() {} })), beforeWindowClose: vi.fn(registration),
     alert: vi.fn(), openFileDialog: vi.fn(async () => ({ canceled: false, paths: ["/tmp/notes.txt"] })), saveFileDialog: vi.fn(),
     readText: vi.fn(async () => "Saved text"), writeText: vi.fn(async () => {}),
   });
@@ -22,7 +22,7 @@ function resetSpark() {
 vi.mock("react-native", () => ({ View: "View", Text: "Text", Pressable: "Pressable", ScrollView: "ScrollView", Alert: { alert: (...args: unknown[]) => spark.alert(...args) } }));
 vi.mock("uniwind", () => ({ Uniwind: { setTheme: () => {} }, useUniwind: () => ({ theme: "light", hasAdaptiveThemes: true }) }));
 vi.mock("@legendapp/spark/ui/uniwind", () => ({ Button: "Button" }));
-vi.mock("@legendapp/spark/app", () => ({ getAppContext: async () => ({ launchArguments: spark.args }), beforeQuit: (handler: unknown) => spark.beforeQuit(handler) }));
+vi.mock("@legendapp/spark/app", () => ({ getAppContext: async () => ({ launchArguments: spark.args }), beforeQuit: (handler: unknown) => spark.beforeQuit(handler), exposeTestState: (name: string, read: () => unknown) => spark.exposeTestState(name, read) }));
 vi.mock("@legendapp/spark/app/documents", () => ({ noteRecentDocument: async () => {} }));
 vi.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: (options: unknown) => spark.openFileDialog(options), saveFileDialog: (options: unknown) => spark.saveFileDialog(options) }));
 vi.mock("@legendapp/spark/files", () => ({ readText: (path: string) => spark.readText(path), writeText: (path: string, text: string) => spark.writeText(path, text) }));
@@ -35,7 +35,10 @@ vi.mock("@legendapp/spark/links", () => ({ addEventListener: () => ({ remove() {
 vi.mock("../examples/kitchen-sink/shell/catalog", async () => {
   const { createCatalog, defineScreens } = await import("../examples/kitchen-sink/shell/registry.ts");
   const component = () => React.createElement("Text", null, "Frame screen body");
-  return { catalog: createCatalog([["./windows/index.tsx", { default: defineScreens("windows", [{ id: "frame", title: "Frame", summary: "Frame summary", component }]) }]]) };
+  return { catalog: createCatalog([
+    ["./windows/index.tsx", { default: defineScreens("windows", [{ id: "frame", title: "Frame", titles: { ar: "الإطار" }, summary: "Frame summary", summaries: { ar: "ملخص الإطار" }, component }]) }],
+    ["./future-facing-capabilities/index.tsx", { default: defineScreens("future-facing-capabilities", [{ id: "ai-command-runner", title: "AI: command runner", titles: { ar: "الذكاء الاصطناعي: مشغّل الأوامر" }, summary: "Runner summary", summaries: { ar: "ملخص المشغّل" }, component }]) }],
+  ]) };
 });
 
 let rendered: any;
@@ -59,7 +62,7 @@ const host = (testID: string) => rendered.root.findAll((node: any) => typeof nod
 const text = (node: any): string => node.children.map((child: any) => typeof child === "string" ? child : text(child)).join("");
 const texts = () => rendered.root.findAll((node: any) => node.type === "Text").map(text);
 
-test("the Shell renders Arabic right to left, with a mirrored breadcrumb and the screen's root testID", async () => {
+test("the Shell renders Arabic right to left, with localized screen titles, a mirrored breadcrumb and the screen's root testID", async () => {
   spark.locale = async () => "ar_EG";
   const { navigation, Shell } = await start();
   await mount(Shell);
@@ -67,9 +70,13 @@ test("the Shell renders Arabic right to left, with a mirrored breadcrumb and the
   expect(texts()).toContain("كل الشاشات");
   expect(text(host("infra-shell-theme-toggle")[0])).toBe("المظهر: النظام ← فاتح");
   expect(host("infra-shell-area-windows")[0].props.accessibilityLabel).toBe("النوافذ، شاشة واحدة");
+  const card = host("infra-shell-screen-windows-frame")[0];
+  expect(card.props).toMatchObject({ accessibilityLabel: "الإطار", accessibilityHint: "ملخص الإطار" });
+  expect(card.findAll((node: any) => node.type === "Text").map(text)).toEqual(["الإطار", "ملخص الإطار", "spark-ks://windows/frame"]);
   await act(async () => navigation.navigate({ kind: "screen", area: "windows", screen: "frame" }));
-  expect(host("infra-shell-breadcrumb-separator").map(text)).toEqual(["‹", "‹"]);
-  expect(text(host("infra-shell-breadcrumb")[0])).toContain("النوافذ");
+  // One glyph; its right-to-left writing direction makes bidi draw it as "‹", along the reading direction.
+  expect(host("infra-shell-breadcrumb-separator").map((node: any) => [text(node), node.props.style.writingDirection])).toEqual([["›", "rtl"], ["›", "rtl"]]);
+  expect(host("infra-shell-breadcrumb")[0].props.accessibilityLabel).toBe("كل الشاشات › النوافذ › الإطار");
   expect(text(host("windows-frame-root")[0])).toBe("Frame screen body");
 });
 
@@ -78,9 +85,9 @@ test("the Shell renders English left to right and explains links that open no sc
   await mount(Shell);
   expect(host("infra-shell-root")[0].props.style).toEqual({ direction: "ltr" });
   expect(texts()).toContain("dev · ks");
-  expect(texts()).toContain("1 of 37 areas have screens. Every screen opens from spark-ks://<area>/<screen>.");
+  expect(texts()).toContain("2 of 38 areas have screens. Every screen opens from spark-ks://<area>/<screen>.");
   await act(async () => host("infra-shell-screen-windows-frame")[0].props.onPress());
-  expect(host("infra-shell-breadcrumb-separator").map(text)).toEqual(["›", "›"]);
+  expect(host("infra-shell-breadcrumb-separator").map((node: any) => [text(node), node.props.style.writingDirection])).toEqual([["›", "ltr"], ["›", "ltr"]]);
   expect(host("windows-frame-root")).toHaveLength(1);
   await act(async () => navigation.openLink("spark-ks://windows/missing"));
   expect(host("windows-frame-root")).toHaveLength(0);
@@ -89,6 +96,27 @@ test("the Shell renders English left to right and explains links that open no sc
   expect(text(host("infra-shell-not-found-reason")[0])).toBe("Only spark-ks:// links open Kitchen Sink screens.");
   await act(async () => navigation.openLink("spark-ks://menus"));
   expect(text(host("infra-shell-area-empty")[0])).toBe("No screens registered yet. Add them in screens/menus/index.tsx.");
+});
+
+test("a long breadcrumb truncates its middle crumb first, then the current one, and keeps the full path as tooltip and label", async () => {
+  for (const [locale, path, title] of [["en_US", "All screens › Future-facing capabilities › AI: command runner", "AI: command runner"], ["ar", "كل الشاشات › القدرات المستقبلية › الذكاء الاصطناعي: مشغّل الأوامر", "الذكاء الاصطناعي: مشغّل الأوامر"]]) {
+    spark.locale = async () => locale!;
+    vi.resetModules();
+    const { navigation, Shell } = await start();
+    await mount(Shell);
+    await act(async () => navigation.navigate({ kind: "screen", area: "future-facing-capabilities", screen: "ai-command-runner" }));
+    const breadcrumb = host("infra-shell-breadcrumb")[0];
+    expect(breadcrumb.props).toMatchObject({ accessibilityLabel: path, tooltip: path });
+    // Clips rather than overlap the theme toggle, whatever the window width.
+    expect(breadcrumb.props.className).toContain("overflow-hidden");
+    const [root, middle] = breadcrumb.findAll((node: any) => node.type === "Pressable");
+    const current = breadcrumb.findAll((node: any) => node.type === "Text" && node.props.accessibilityRole === "header");
+    expect(current.map(text)).toEqual([title]);
+    expect([root, middle, current[0]].map(node => node.props.style.flexShrink)).toEqual([0, 1000, 1]);
+    expect(middle.props.style.minWidth).toBeGreaterThan(0);
+    for (const crumb of breadcrumb.findAll((node: any) => node.type === "Text" && node.props.testID !== "infra-shell-breadcrumb-separator")) expect(crumb.props.numberOfLines).toBe(1);
+    await act(async () => { rendered.unmount(); rendered = undefined; });
+  }
 });
 
 test("the Shell waits for the locale and shows a startup failure", async () => {

@@ -38,6 +38,7 @@ export const AREAS = [
   { id: "multiwindow", prefix: "MW" },
   { id: "component-library", prefix: "COMP" },
   { id: "future-facing-capabilities", prefix: "FUT" },
+  { id: "devtools", prefix: "DEVT" },
 ] as const;
 
 export type AreaId = (typeof AREAS)[number]["id"];

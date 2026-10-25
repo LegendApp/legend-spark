@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useAppState, useI18n } from "./app-controller";
 import { catalog } from "./catalog";
 import { navigate, useLocation } from "./navigation";
-import type { CatalogArea, CatalogScreen } from "./registry";
+import { screenSummary, screenTitle, type CatalogArea, type CatalogScreen } from "./registry";
 import { routeURL, type Location, type Route } from "./routes";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -51,26 +51,34 @@ function NavRow({ title, count, selected, onPress, testID }: { title: string; co
   return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={count === undefined ? title : t.navLabel(title, count)}
     onPress={onPress} className={`mx-2 flex-row items-center gap-2 rounded-md px-3 py-1.5 ${selected ? "bg-highlight" : ""}`}>
     <Text numberOfLines={1} className={`flex-1 text-sm ${count === 0 ? "text-muted" : "text-foreground"}`}>{title}</Text>
-    {count !== undefined && <Text className="text-xs text-muted">{t.number(count)}</Text>}
+    {count !== undefined && <Text className="text-xs text-muted" testID={`${testID}-count`}>{t.number(count)}</Text>}
   </Pressable>;
 }
 
 function Breadcrumb({ location }: { location: Location }) {
-  const { t, rtl } = useI18n();
+  const { t, rtl, locale } = useI18n();
   const area = location.kind === "area" || location.kind === "screen" ? catalog.area(location.area) : undefined;
   const screen = location.kind === "screen" ? catalog.screen(location.area, location.screen) : undefined;
-  // The separator points along the reading direction.
-  const separator = <Text className="text-muted" testID="infra-shell-breadcrumb-separator">{rtl ? "‹" : "›"}</Text>;
-  return <View className="flex-1 flex-row items-center gap-2" testID="infra-shell-breadcrumb">
-    <Crumb onPress={location.kind === "catalog" ? undefined : () => navigate({ kind: "catalog" })}>{t.allScreens}</Crumb>
-    {area && <>{separator}<Crumb onPress={location.kind === "screen" ? () => navigate({ kind: "area", area: area.id }) : undefined}>{t.areas[area.id]}</Crumb></>}
-    {screen && <>{separator}<Crumb>{screen.title}</Crumb></>}
+  // "›" is bidi-mirrored: with an explicit right-to-left writing direction it draws as "‹", along the reading direction.
+  const separator = <Text className="text-muted" style={{ writingDirection: rtl ? "rtl" : "ltr" }} testID="infra-shell-breadcrumb-separator">›</Text>;
+  const title = screen && screenTitle(screen, locale);
+  const path = [t.allScreens, area && t.areas[area.id], title].filter(Boolean).join(" › ");
+  // Crumbs truncate instead of running under the theme toggle; the tooltip and label keep the full path.
+  // `tooltip` is a react-native-macos/-windows View prop that the react-native types lack.
+  return <View className="flex-1 flex-row items-center gap-2 overflow-hidden" testID="infra-shell-breadcrumb" accessibilityLabel={path} {...{ tooltip: path }}>
+    <Crumb shrink={area ? 0 : 1} onPress={location.kind === "catalog" ? undefined : () => navigate({ kind: "catalog" })}>{t.allScreens}</Crumb>
+    {area && <>{separator}<Crumb shrink={screen ? MIDDLE_SHRINK : 1} onPress={location.kind === "screen" ? () => navigate({ kind: "area", area: area.id }) : undefined}>{t.areas[area.id]}</Crumb></>}
+    {screen && <>{separator}<Crumb shrink={1}>{title}</Crumb></>}
   </View>;
 }
-function Crumb({ children, onPress }: { children: ReactNode; onPress?: () => void }) {
+// Yoga splits overflow by flexShrink × width, so a middle crumb absorbs it (down to room for an ellipsis)
+// before the last crumb loses a visible fraction of a point. The root keeps its width.
+const MIDDLE_SHRINK = 1000;
+function Crumb({ children, onPress, shrink }: { children: ReactNode; onPress?: () => void; shrink: number }) {
+  const style = { flexShrink: shrink, minWidth: shrink === MIDDLE_SHRINK ? 32 : 0 };
   return onPress
-    ? <Pressable accessibilityRole="link" onPress={onPress}><Text className="text-sm text-muted">{children}</Text></Pressable>
-    : <Text className="text-sm font-semibold text-foreground" accessibilityRole="header">{children}</Text>;
+    ? <Pressable accessibilityRole="link" onPress={onPress} style={style}><Text numberOfLines={1} className="text-sm text-muted">{children}</Text></Pressable>
+    : <Text numberOfLines={1} style={style} className="text-sm font-semibold text-foreground" accessibilityRole="header">{children}</Text>;
 }
 
 function Content({ location }: { location: Location }) {
@@ -90,7 +98,7 @@ function Home() {
   const { t } = useI18n();
   const populated = catalog.areas.filter(area => area.screens.length);
   return <ScrollView contentContainerClassName="gap-6 p-6" testID="infra-shell-home">
-    <Text className="text-sm text-muted">{t.home(populated.length, catalog.areas.length)}</Text>
+    <Text className="text-sm text-muted" testID="infra-shell-summary">{t.home(populated.length, catalog.areas.length)}</Text>
     {populated.map(area => <View key={area.id} className="gap-2">
       <Text className="text-lg font-semibold text-foreground" accessibilityRole="header">{t.areas[area.id]}</Text>
       {area.screens.map(screen => <ScreenRow key={screen.id} area={area} screen={screen} />)}
@@ -111,10 +119,13 @@ function AreaScreens({ area }: { area: CatalogArea }) {
 
 function ScreenRow({ area, screen }: { area: CatalogArea; screen: CatalogScreen }) {
   const route: Route = { kind: "screen", area: area.id, screen: screen.id };
-  return <Pressable testID={`infra-shell-screen-${area.id}-${screen.id}`} accessibilityRole="button" accessibilityLabel={screen.title} accessibilityHint={screen.summary}
+  const { locale } = useI18n();
+  const title = screenTitle(screen, locale);
+  const summary = screenSummary(screen, locale);
+  return <Pressable testID={`infra-shell-screen-${area.id}-${screen.id}`} accessibilityRole="button" accessibilityLabel={title} accessibilityHint={summary}
     onPress={() => navigate(route)} className="gap-1 rounded-lg border border-border bg-surface p-4">
-    <Text className="font-semibold text-foreground">{screen.title}</Text>
-    <Text className="text-sm text-muted">{screen.summary}</Text>
+    <Text className="font-semibold text-foreground">{title}</Text>
+    <Text className="text-sm text-muted">{summary}</Text>
     <Text className="text-xs text-muted">{routeURL(route)}</Text>
   </Pressable>;
 }
