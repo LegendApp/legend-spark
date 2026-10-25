@@ -1,0 +1,19 @@
+suite: release-gate
+appId: so.legend.kitchensink
+build:
+  macos: { artifact: dist/KitchenSink.dmg, install: true, cleanUser: true, verifySignature: true }
+  windows: { artifact: dist/KitchenSinkSetup.exe, install: true, cleanUser: true }
+targets:
+  - { os: macos-14, arch: arm64 }
+  - { os: macos-15, arch: arm64 }
+  - { os: macos-26, arch: arm64 }
+  - { os: macos-15, arch: x86_64 }
+  - { os: windows-11, arch: x64 }
+  - { os: windows-11, arch: arm64 }
+  - { os: windows-10, arch: x64 }
+include: [flows/**]
+blocking: { tags: [blocking], default: true }
+retries: 0
+budgets: budgets.yaml          # per reference machine
+coverage: { checks: checks/, exports: true, availability: true }
+report: { json: .artifacts/gate/report.json, junit: .artifacts/gate/junit.xml, html: .artifacts/gate/index.html }

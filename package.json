@@ -16,6 +16,9 @@
     "kitchen-sink": "bun run --filter @spark-examples/kitchen-sink dev",
     "kitchen-sink:prepare": "bun scripts/prepare-kitchen-sink.ts",
     "settings": "bun scripts/settings.ts",
+    "e2e:validate": "bun scripts/e2e/cli.ts validate",
+    "e2e:lint": "bun scripts/e2e/cli.ts lint",
+    "e2e:schema": "bun scripts/e2e/cli.ts schema",
     "test:native": "bun scripts/test-native.ts",
     "test:all": "bun run typecheck && bun run test && bun run test:sparkle && bun run test:updates && bun run test:integrations && bun run test:native && bun run test:expansion && bun run test:runtimes:all",
     "test:sparkle": "bun tests/sparkle.integration.ts",
@@ -110,7 +113,9 @@
     "@legendapp/spark-markdown": "0.0.1-next.7",
     "@legendapp/spark-html": "0.0.1-next.7",
     "react-native-enriched-markdown": "1.1.1",
-    "react-native-enriched-html": "1.1.1"
+    "react-native-enriched-html": "1.1.1",
+    "yaml": "2.9.1",
+    "ajv": "8.20.0"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

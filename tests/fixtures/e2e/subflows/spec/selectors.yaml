@@ -1,0 +1,9 @@
+- tapOn: "Save"                                 # visible text
+- tapOn: "/❤️ \\d+/"                             # regex
+- tapOn: { id: reaction-heart }                 # testID → AX identifier / UIA AutomationId
+- tapOn: { role: button, label: "Close" }       # a11y role + label
+- tapOn: { text: "Row 3", within: { id: sidebar } }
+- tapOn: { role: tab, index: 2, window: { title: "notes.md" } }
+- tapOn: { below: "Username", role: textField } # also above / leftOf / rightOf
+- tapOn: { point: "50%,20%", window: key }      # last resort
+- tapOn: { text: { macos: "Settings…", windows: "Options" } }

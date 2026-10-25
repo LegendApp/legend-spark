@@ -1,0 +1,83 @@
+# Command forms the spec examples do not show. Together with subflows/spec and flows/spec this uses
+# every command in every form it accepts (mapping, bare, value shorthand); a test enforces that.
+- launchSecondInstance
+- assertSingleInstance: { timeout: 2s }
+- stopApp: { when: { platform: macos } }
+- killApp: { when: { platform: windows } }
+- quitApp
+- crashApp: js
+- assertCrashRecovery: { timeout: 10s }
+- relaunchApp
+- openWindow: { via: shortcut }
+- closeWindow
+- minimizeWindow
+- zoomWindow
+- toggleFullscreen
+- moveToDisplay: 2
+- assertScale: { scale: 2, window: { index: 0 } }
+- snapWindow: rightHalf
+- saveWorkspace: writing
+- restoreWorkspace: writing
+- assertWindowsRestored
+- selectMenu: { path: "Edit > Copy" }
+- selectContextMenu: { path: Delete }
+- openDockMenu
+- openTrayMenu
+- pressKey: { key: F5 }
+- shortcut: { keys: "ctrl+shift+tab" }
+- inputText: hello
+- setKeyboardLayout: { layout: dvorak }
+- holdKey: { key: option }
+- releaseKey: { key: option }
+- assertFocused: Search
+- assertFocusOrder: { targets: [{ id: first }, { id: second }] }
+- doubleClickOn: "notes.md"
+- tripleClickOn: "First paragraph"
+- rightClickOn: "notes.md"
+- middleClickOn: "Docs"
+- forceClickOn: "notes.md"
+- hoverOn: Share
+- mouseButton: { button: forward }
+- assertNotVisible: "Loading…"
+- assertNotVisible: { id: spinner, window: main }
+- scroll
+- assertCursor: { cursor: iBeam, on: { id: editor } }
+- ejectVolume: { volume: USB }
+- assertDialog
+- setAppearance: { appearance: light }
+- setAppAppearance: { appearance: system }
+- setAccentColor: { color: graphite }
+- setTimeZone: { timeZone: America/New_York }
+- setSystemClock: { offset: "2026-01-01T09:00:00Z" }
+- setDisplays: { displays: [{ id: 1, scale: 1 }] }
+- unplugDisplay: { display: 2 }
+- setFocusMode: { mode: off }
+- clickNotification: { title: "New message" }
+- notificationAction: { action: Mark Read }
+- replyToNotification: { text: "on my way" }
+- assertDockBadge: { value: "" }
+- assertDockProgress: { value: 1 }
+- assertBounce: { kind: none }
+- clickDockIcon: { when: { platform: macos } }
+- clickTray
+- setClock: { mode: real }
+- advanceClock: { duration: 1.5s }
+- takeScreenshot: { name: sidebar, window: key }
+- assertScreenshot: editor-dark
+- startRecording: { name: editor-session }
+- stopRecording: editor-session
+- auditAccessibility
+- voiceOver: false
+- screenReaderNext: { when: { platform: macos } }
+- assertSpoken: { text: "Save, button" }
+- assertAnnouncement: { text: { macos: "Saved", windows: "Document saved" } }
+- assertKeyboardReachable
+- assertNoTruncation
+- assertMirrored: Back
+- assertLocalized
+- startTrace
+- stopTrace: scroll
+- assertEnergy: medium
+- serveAppcast: appcast/valid.xml
+- killProcess: sidecar
+- runScript: { file: scripts/make-fixtures.js, env: { COUNT: "3" } }

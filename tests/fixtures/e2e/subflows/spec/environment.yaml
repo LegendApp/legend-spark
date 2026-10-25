@@ -1,0 +1,15 @@
+- setAppearance: dark
+- setAppAppearance: dark                    # in-app override (driver); setAppearance changes the OS
+- setAccentColor: purple
+- setAccessibility: { reduceMotion: true, increaseContrast: true, reduceTransparency: true, textScale: 1.5 }
+- setLocale: { language: ar, region: EG, calendar: gregorian, clock: 24h }
+- setTimeZone: Asia/Tokyo
+- setSystemClock: "+3d"
+- setDisplays: [{ id: 1, scale: 2 }, { id: 2, scale: 1.5, refresh: 60, arrangement: rightOf }]
+- unplugDisplay: 2
+- sleepSystem: { for: 30s }
+- simulatePower: { source: battery, lowPower: true, thermal: serious }
+- setNetwork: { offline: true }             # latency, bandwidth, proxy
+- lockScreen: { for: 5s }
+- permission: { reset: camera }             # grant | revoke | reset
+- setFocusMode: doNotDisturb

@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Spark e2e check registry",
+  "description": "e2e/checks/<area>.yaml: one file per area. Check IDs are <prefix>-<NAME>-<NN>.",
+  "type": "object",
+  "properties": {
+    "area": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "the area name; must match the file name"
+    },
+    "prefix": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*$",
+      "description": "the check ID prefix, such as WIN"
+    },
+    "checks": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9]*-[A-Z0-9]+-\\d{2}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "macos",
+                "windows"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "spec": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "area",
+    "prefix",
+    "checks"
+  ],
+  "additionalProperties": false
+}
