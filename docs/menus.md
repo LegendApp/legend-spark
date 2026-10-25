@@ -47,10 +47,78 @@ await menu.update({ items: [] });
 await menu.remove();
 ```
 
-Top-level items are submenus. Contributions merge by stable IDs, never labels. Later owners override matching items; updating an owner moves it to the end of precedence, which lets a focused document publish its commands. Removing it restores earlier contributions and native items. Arrays replace the owner's complete contribution. Use `target: { id }` to bind an existing item under a different callback ID; the original target ID remains its anchor for subsequent contributions. `target: { menu: 'app' | 'file' | 'edit' | 'view' | 'window' | 'help' }` selects a native root; a missing root is created using the supplied label. `placement: { before: target }` or `{ after: target }` positions relative to a sibling. Missing item/placement targets reject `E_NOT_FOUND`, retaining the previous publication. Remove dependent contributions before a root they explicitly target.
+Top-level items are submenus. Contributions merge by stable IDs, never labels. Later owners override matching items; updating an owner moves it to the end of precedence, which lets a focused document publish its commands. Removing it restores earlier contributions and native items. Arrays replace the owner's complete contribution. Use `target: { id }` to bind an existing item under a different callback ID; the original target ID remains its anchor for subsequent contributions. `target: { menu: 'app' | 'file' | 'edit' | 'view' | 'window' | 'help' }` selects a native root. A native root keeps its own title, which the system localizes; the label names only a root Spark creates when it is missing, and a later owner's label then retitles it. `placement: { before: target }` or `{ after: target }` positions relative to a sibling. Missing item/placement targets reject `E_NOT_FOUND`, retaining the previous publication. Remove dependent contributions before a root they explicitly target.
 
 On macOS, `target: { role: 'copy' }` locates a native command regardless of localization. An action targeting a role dispatches to its JavaScript owner. A `type: 'role'` item keeps native responder-chain behavior; it does not emit a JavaScript action. Roles include document commands, editing, application visibility and window commands. The services role must target the existing native services submenu. Symbol/local-image icons are supported. Windows currently supports actions, checkboxes, separators, submenus and accelerators; native role items and images reject rather than being silently ignored. Sliders are reserved for toolbar popup menus.
 
 Native publication is acknowledged before creation/update resolves. Publication is serialized across owners; callbacks are scoped to a unique registration, filtered to enabled visible actions, and stopped immediately on removal. Removal joins pending work and permits retry after failure. Duplicate owner IDs reject `E_ALREADY_EXISTS`. There is no public native bridge, global clear-all function or separate unowned action listener.
 
-`useMenu({ id, items, onAction, onError?, onCleanupError? })` returns loading, ready (with `menu`) or error state. Keep the `items` array stable when its structure has not changed. Callback changes use the latest committed callback without republishing. Unmount disposes even a registration that finishes late; remount waits for the old hook lifetime to finish cleanup. Cleanup failures are reported through `onCleanupError(error, menu)` so the owner can retry; otherwise they go to `onError` or the console. The hook is exported alongside `createMenu` because Spark assumes React Native.
+`useMenu({ id, items, onAction?, onOpen?, onClose?, onError?, onCleanupError? })` returns loading, ready (with `menu`) or error state. Keep the `items` array stable when its structure has not changed. Callback changes use the latest committed callback without republishing. Unmount disposes even a registration that finishes late; remount waits for the old hook lifetime to finish cleanup. Cleanup failures are reported through `onCleanupError(error, menu)` so the owner can retry; otherwise they go to `onError` or the console. The hook is exported alongside `createMenu` because Spark assumes React Native.
+
+### macOS application-menu features
+
+Application-menu checkboxes accept `checked: true | false | 'mixed'`; mixed state renders
+AppKit's dash. Action, checkbox and role items accept `alternate: true`: AppKit folds the
+item into the command before it and shows it while the user holds the alternate's
+modifiers. Creation rejects `E_INVALID_ARGUMENT` unless, ignoring hidden items, the
+previous sibling is a non-alternate action, checkbox or role with the same shortcut key
+and different modifiers (for example `Cmd+O` / `Cmd+Alt+O`). Neither item may use
+`target` or `placement`, because AppKit folds only adjacent items. When neither has a
+shortcut, the alternate gets the Option modifier. Other menu surfaces reject `alternate`
+and `'mixed'` with `E_UNSUPPORTED_OPTION`.
+
+AppKit withholds a key equivalent, without any error, while another menu-bar item with a
+different action has it. A published shortcut therefore takes over from a host menu item:
+the template's View ▸ Show Sidebar uses `Ctrl+Cmd+S`, so a Spark item with that shortcut gets
+it and Show Sidebar shows none until the menu is removed. When another published item has the
+shortcut under a different action (a `type: 'role'` item, for example), publication rejects
+`E_BUSY` naming that item and keeps the previous publication. Published action and checkbox
+items share one action, so when two of them use the same shortcut AppKit shows it on both
+and the key runs at most one of them.
+
+A shortcut with Shift and a letter is published as AppKit's uppercase key equivalent (`Cmd+Shift+N`
+becomes `N` with Command and Shift), so it matches only the shifted press. A lowercase key
+equivalent with a Shift mask matches hardware input correctly, but a key event made with
+`+[NSEvent keyEventWithType:…]` (the test driver's, and automation's) is matched by its characters:
+it would run on Command-N and do nothing on Shift-Command-N.
+
+`createMenu` and `useMenu` accept `onOpen(event)` and `onClose(event)`. Their
+`MenuLifecycleEvent` contains `menuId`, the contributed submenu item's ID (including
+nested submenus), not the registration's owner ID. Events are scoped to the current
+registration and delivered only for enabled, visible submenus after publication.
+For a shared submenu, the latest contribution requesting lifecycle callbacks receives
+events; a later contribution without callbacks preserves that observer.
+Removal immediately stops events, including when native cleanup fails. Callbacks
+cannot synchronously change the native menu before it opens; publish dynamic items
+with `menu.update` before opening. Hook callback changes use the latest committed
+handler; adding or removing all lifecycle observation replaces the owned registration.
+
+On macOS, a root submenu with `target: { menu: 'help' }` also becomes AppKit's Help menu,
+so its search field finds the application's menu commands. The label may be localized;
+identification uses the semantic target. Removing the contribution restores the host's
+prior Help menu. On Windows the same contribution merges into the Help root like any
+other semantic root, without search.
+
+```ts
+const menu = await createMenu({
+  id: 'advanced',
+  items: [{
+    type: 'submenu', id: 'help', label: 'Help', target: { menu: 'help' },
+    items: [{ type: 'action', id: 'guide', label: 'User Guide', icon: { type: 'symbol', name: 'book' } }],
+  }],
+  onOpen: ({ menuId }) => console.log('Opened', menuId),
+  onClose: ({ menuId }) => console.log('Closed', menuId),
+});
+```
+
+`getMenuAvailability(feature?)` accepts the `MenuFeature` values `alternates`,
+`lifecycle`, `helpSearch`, `mixedState`, `icons` and `hiddenItems`. macOS supports all
+six when the native module is installed. Windows supports `hiddenItems`; the other five
+report `{ available: false, reason: 'host-restriction' }`. On Windows, alternates, mixed
+checks, icons and lifecycle callbacks reject `E_UNSUPPORTED_OPTION`; a Help-targeted
+submenu is accepted without search. Without a feature, the query reports base menu
+availability. A missing native module reports `missing-module` and creation rejects
+`E_MODULE_UNAVAILABLE`; other platforms report `unsupported-platform` and reject
+`E_UNSUPPORTED_PLATFORM`.
+
+Windows Jump Lists are `createTaskbarMenu` in [system integration](system.md).

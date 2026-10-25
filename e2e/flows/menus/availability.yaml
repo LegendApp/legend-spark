@@ -1,0 +1,39 @@
+appId: so.legend.spark.examples.kitchensink
+name: Menu feature availability and rejected requests
+intent: The menu audit screen lists each feature's availability for this platform, and its probe shows each unsupported or invalid request rejecting with the expected SparkError code.
+checks: [MENU-AVAIL-01, MENU-ALT-02, MENU-UNSUP-01]
+tags: [menus]
+platforms: [macos, windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://menus/audit" }
+- assertVisible: { id: menus-audit-root }
+- assertVisible: { text: Menu ready, within: { id: menus-audit-status } }
+- assertVisible: { text: "hiddenItems: available", within: { id: menus-audit-availability } }
+- runFlow:
+    when: { platform: macos }
+    commands:
+      - assertVisible: { text: "alternates: available", within: { id: menus-audit-availability } }
+      - assertVisible: { text: "lifecycle: available", within: { id: menus-audit-availability } }
+      - assertVisible: { text: "helpSearch: available", within: { id: menus-audit-availability } }
+      - assertVisible: { text: "mixedState: available", within: { id: menus-audit-availability } }
+      - assertVisible: { text: "icons: available", within: { id: menus-audit-availability } }
+      - tapOn: { id: menus-audit-probe }
+      - assertVisible: { text: "/alternate without a primary: E_INVALID_ARGUMENT/", within: { id: menus-audit-probe-result } }
+      - assertVisible: { text: "/alternate with the primary's modifiers: E_INVALID_ARGUMENT/", within: { id: menus-audit-probe-result } }
+      - assertVisible: { text: "/alternate with another key: E_INVALID_ARGUMENT/", within: { id: menus-audit-probe-result } }
+- runFlow:
+    when: { platform: windows }
+    commands:
+      - assertVisible: { text: "alternates: host-restriction", within: { id: menus-audit-availability } }
+      - assertVisible: { text: "lifecycle: host-restriction", within: { id: menus-audit-availability } }
+      - assertVisible: { text: "helpSearch: host-restriction", within: { id: menus-audit-availability } }
+      - assertVisible: { text: "mixedState: host-restriction", within: { id: menus-audit-availability } }
+      - assertVisible: { text: "icons: host-restriction", within: { id: menus-audit-availability } }
+      - tapOn: { id: menus-audit-probe }
+      - assertVisible: { text: "/alternates: E_UNSUPPORTED_OPTION/", within: { id: menus-audit-probe-result } }
+      - assertVisible: { text: "/mixedState: E_UNSUPPORTED_OPTION/", within: { id: menus-audit-probe-result } }
+      - assertVisible: { text: "/icons: E_UNSUPPORTED_OPTION/", within: { id: menus-audit-probe-result } }
+      - assertVisible: { text: "/lifecycle: E_UNSUPPORTED_OPTION/", within: { id: menus-audit-probe-result } }
+- assertVisible: { text: Menu ready, within: { id: menus-audit-status } }

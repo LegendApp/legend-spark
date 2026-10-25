@@ -30,19 +30,58 @@ static NSMenuItem *Find(NSMenu *menu, NSDictionary *target, BOOL recursive) {
   return nil;
 }
 static void Fail(NSString *code, NSString *message) { @throw [NSException exceptionWithName:code reason:message userInfo:nil]; }
+// AppKit treats an uppercase key equivalent as Shift plus the lowercase key.
+static NSString *KeyIdentity(NSString *key, NSEventModifierFlags modifiers) {
+  if (![key.lowercaseString isEqual:key]) modifiers |= NSEventModifierFlagShift;
+  return [NSString stringWithFormat:@"%lu:%@", (unsigned long)(modifiers & NSEventModifierFlagDeviceIndependentFlagsMask), key.lowercaseString];
+}
+static NSMenuItem *KeyHolder(NSMenu *menu, NSString *identity, NSMenuItem *except) {
+  for (NSMenuItem *item in menu.itemArray) {
+    if (item != except && item.keyEquivalent.length && [KeyIdentity(item.keyEquivalent, item.keyEquivalentModifierMask) isEqual:identity]) return item;
+    NSMenuItem *found = item.submenu ? KeyHolder(item.submenu, identity, except) : nil;
+    if (found) return found;
+  }
+  return nil;
+}
+
+// Wraps a submenu's existing delegate: every NSMenuDelegate call (menuNeedsUpdate:, lazy
+// population, highlighting) still reaches it, and menuWillOpen:/menuDidClose: also report
+// lifecycle. Delegate callbacks fire per submenu; NSMenu tracking notifications fire once per
+// tracking session, so they cannot identify which submenu opened.
+@interface SparkMenuLifecycleDelegate : NSObject <NSMenuDelegate>
+@property (weak) id<NSMenuDelegate> original;
+@property (copy) void (^lifecycle)(NSMenu *, NSString *);
+@end
+@implementation SparkMenuLifecycleDelegate
+- (BOOL)respondsToSelector:(SEL)selector { return [super respondsToSelector:selector] || [self.original respondsToSelector:selector]; }
+- (id)forwardingTargetForSelector:(SEL)selector { return [self.original respondsToSelector:selector] ? self.original : [super forwardingTargetForSelector:selector]; }
+- (void)menuWillOpen:(NSMenu *)menu {
+  if ([self.original respondsToSelector:_cmd]) [self.original menuWillOpen:menu];
+  if (menu.delegate == self) self.lifecycle(menu, @"open");
+}
+- (void)menuDidClose:(NSMenu *)menu {
+  if ([self.original respondsToSelector:_cmd]) [self.original menuDidClose:menu];
+  if (menu.delegate == self) self.lifecycle(menu, @"close");
+}
+@end
 
 @interface RNNativeMenu ()
 @property NSMutableArray<void (^)(void)> *undo;
 @property NSArray *published;
+@property BOOL observing;
+@property NSHashTable<NSMenuItem *> *configured;
+@property NSHashTable<NSMenuItem *> *created;
 - (void)restore;
 @end
 @implementation RNNativeMenu
 RCT_EXPORT_MODULE(NativeMenu)
 + (BOOL)requiresMainQueueSetup { return YES; }
-- (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; } return self; }
-- (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction"]; }
+- (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; _configured = [NSHashTable weakObjectsHashTable]; _created = [NSHashTable weakObjectsHashTable]; } return self; }
+- (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction", @"NativeMenuLifecycle"]; }
+- (void)startObserving { self.observing = YES; }
+- (void)stopObserving { self.observing = NO; }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeMenuSpecJSI>(params); }
-- (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; }
+- (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; [self.configured removeAllObjects]; [self.created removeAllObjects]; }
 - (void)identifyNativeMenus {
   NSMenu *main = NSApp.mainMenu;
   for (NSMenuItem *item in main.itemArray) {
@@ -68,12 +107,12 @@ RCT_EXPORT_MODULE(NativeMenu)
   NSMenu *menu = item.menu; NSInteger index = [menu indexOfItem:item];
   NSString *title = item.title, *key = item.keyEquivalent, *identifier = item.identifier;
   id target = item.target, represented = item.representedObject, role = objc_getAssociatedObject(item, &RoleKey);
-  SEL action = item.action; BOOL enabled = item.enabled, hidden = item.hidden;
+  SEL action = item.action; BOOL enabled = item.enabled, hidden = item.hidden, alternate = item.alternate;
   NSControlStateValue state = item.state; NSEventModifierFlags modifiers = item.keyEquivalentModifierMask;
   NSImage *image = item.image;
   [self.undo addObject:^{
     item.title = title; item.keyEquivalent = key; item.identifier = identifier; item.target = target; item.action = action;
-    item.representedObject = represented; item.enabled = enabled; item.hidden = hidden; item.state = state; item.keyEquivalentModifierMask = modifiers; item.image = image;
+    item.representedObject = represented; item.enabled = enabled; item.hidden = hidden; item.state = state; item.alternate = alternate; item.keyEquivalentModifierMask = modifiers; item.image = image;
     objc_setAssociatedObject(item, &RoleKey, role, OBJC_ASSOCIATION_COPY_NONATOMIC);
     if (item.menu == menu && index >= 0 && [menu indexOfItem:item] != index) { [menu removeItem:item]; [menu insertItem:item atIndex:MIN(index, menu.numberOfItems)]; }
   }];
@@ -83,13 +122,55 @@ RCT_EXPORT_MODULE(NativeMenu)
   if (config[@"enabled"]) item.enabled = [config[@"enabled"] boolValue];
   if (config[@"hidden"]) item.hidden = [config[@"hidden"] boolValue];
   if (config[@"checked"]) item.state = [config[@"checked"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+  if ([config[@"mixed"] boolValue]) item.state = NSControlStateValueMixed;
   NSDictionary *shortcut = config[@"shortcut"];
-  if (shortcut) { item.keyEquivalent = shortcut[@"key"]; item.keyEquivalentModifierMask = [shortcut[@"modifiers"] unsignedIntegerValue]; }
+  if (shortcut) {
+    NSEventModifierFlags modifiers = [shortcut[@"modifiers"] unsignedIntegerValue];
+    // Shift+letter uses AppKit's uppercase form: a key event made with +[NSEvent keyEventWithType:...] (the test
+    // driver's, automation's) matches a lowercase key equivalent by its characters and ignores Shift (#450).
+    NSString *key = shortcut[@"key"], *upper = key.uppercaseString;
+    item.keyEquivalent = (modifiers & NSEventModifierFlagShift) && upper.length == 1 ? upper : key;
+    item.keyEquivalentModifierMask = modifiers; [self claim:config for:item];
+  }
+  // A keyed alternate differs from its primary's modifiers; a keyless pair
+  // differs by Option, the mask AppKit compares when folding alternates without key equivalents.
+  if (config[@"alternate"]) {
+    item.alternate = [config[@"alternate"] boolValue];
+    if (item.alternate && !item.keyEquivalent.length) item.keyEquivalentModifierMask = NSEventModifierFlagOption;
+  }
   if (config[@"systemImageName"] || config[@"imagePath"]) {
     NSImage *image = config[@"systemImageName"] ? [NSImage imageWithSystemSymbolName:config[@"systemImageName"] accessibilityDescription:item.title] : [[NSImage alloc] initWithContentsOfFile:config[@"imagePath"]];
     if (!image) Fail(@"E_INVALID_ARGUMENT", @"Menu image could not be loaded");
     item.image = image;
   }
+}
+// AppKit withholds a key equivalent while another main-menu item with a different action has it
+// (the template's View > Show Sidebar holds Control-Command-S). A host item yields it until the
+// menu is removed; another published item makes the publication reject E_BUSY.
+- (void)claim:(NSDictionary *)config for:(NSMenuItem *)item {
+  NSDictionary *shortcut = config[@"shortcut"];
+  if (item.keyEquivalent.length || !NSApp.mainMenu) return;
+  NSString *name = config[@"id"] ?: config[@"role"];
+  while (!item.keyEquivalent.length) {
+    NSMenuItem *holder = KeyHolder(NSApp.mainMenu, KeyIdentity(shortcut[@"key"], [shortcut[@"modifiers"] unsignedIntegerValue]), item);
+    if (!holder) Fail(@"E_NATIVE", [NSString stringWithFormat:@"AppKit did not apply the shortcut of menu item %@", name]);
+    if ([self.configured containsObject:holder]) Fail(@"E_BUSY", [NSString stringWithFormat:@"Menu item %@ cannot use its shortcut: menu item %@ already has it", name, holder.identifier ?: holder.title]);
+    [self save:holder]; holder.keyEquivalent = @"";
+  }
+}
+- (void)observeMenu:(NSMenu *)menu config:(NSDictionary *)config {
+  id<NSMenuDelegate> previous = menu.delegate;
+  SparkMenuLifecycleDelegate *delegate = [SparkMenuLifecycleDelegate new];
+  delegate.original = [previous isKindOfClass:SparkMenuLifecycleDelegate.class] ? ((SparkMenuLifecycleDelegate *)previous).original : previous;
+  __weak RNNativeMenu *weakSelf = self;
+  NSString *ownerId = config[@"_sparkOwner"], *itemId = config[@"id"];
+  delegate.lifecycle = ^(NSMenu *openedMenu, NSString *type) {
+    RNNativeMenu *module = weakSelf;
+    if (module.observing) [module sendEventWithName:@"NativeMenuLifecycle" body:@{ @"ownerId": ownerId, @"itemId": itemId, @"type": type }];
+  };
+  menu.delegate = delegate;
+  // NSMenu holds its delegate weakly; the restoration block retains both owners.
+  [self.undo addObject:^{ if (menu.delegate == delegate) menu.delegate = previous; }];
 }
 - (void)install:(NSArray *)configs into:(NSMenu *)menu root:(BOOL)root {
   for (NSDictionary *config in configs) {
@@ -108,11 +189,23 @@ RCT_EXPORT_MODULE(NativeMenu)
       if (root && target[@"menu"]) objc_setAssociatedObject(item, &LocationKey, target[@"menu"], OBJC_ASSOCIATION_COPY_NONATOMIC);
       [menu insertItem:item atIndex:[self index:config[@"placement"] inMenu:menu]];
       [self.undo addObject:^{ if (item.menu) [item.menu removeItem:item]; }];
+      [self.created addObject:item];
     }
+    [self.configured addObject:item];
     if (config[@"items"]) {
       if (existing && !item.submenu) Fail(@"E_INVALID_ARGUMENT", @"Submenu target is not a submenu");
       if (!item.submenu) item.submenu = [[NSMenu alloc] initWithTitle:item.title];
-      [self apply:config to:item];
+      if (root && [target[@"menu"] isEqual:@"help"] && NSApp.helpMenu != item.submenu) {
+        NSMenu *previousHelp = NSApp.helpMenu, *helpMenu = item.submenu;
+        NSApp.helpMenu = helpMenu;
+        [self.undo addObject:^{ if (NSApp.helpMenu == helpMenu) NSApp.helpMenu = previousHelp; }];
+      }
+      if ([config[@"_sparkLifecycle"] boolValue]) [self observeMenu:item.submenu config:config];
+      // A native root located by target keeps its title, which the system localizes (#449);
+      // the label names only a root Spark creates.
+      NSMutableDictionary *applied = config.mutableCopy;
+      if (root && target[@"menu"] && ![self.created containsObject:item]) [applied removeObjectForKey:@"title"];
+      [self apply:applied to:item];
       [self install:config[@"items"] into:item.submenu root:NO];
     } else {
       if (item.submenu && ![config[@"role"] isEqual:@"services"]) Fail(@"E_INVALID_ARGUMENT", @"An action cannot replace a submenu; target it with a submenu item");
@@ -140,6 +233,21 @@ RCT_EXPORT_MODULE(NativeMenu)
     }
   }
 }
+- (void)validateAlternates:(NSMenu *)menu {
+  NSMenuItem *primary = nil;
+  for (NSMenuItem *item in menu.itemArray) {
+    if (item.submenu) [self validateAlternates:item.submenu];
+    if (item.hidden) continue;
+    if (item.alternate && [self.configured containsObject:item]) {
+      if (!primary || primary.separatorItem || primary.submenu || primary.alternate)
+        Fail(@"E_INVALID_ARGUMENT", @"An alternate must directly follow a visible non-alternate command");
+      if (![primary.keyEquivalent.lowercaseString isEqual:item.keyEquivalent.lowercaseString] ||
+          (item.keyEquivalent.length && [KeyIdentity(primary.keyEquivalent, primary.keyEquivalentModifierMask) isEqual:KeyIdentity(item.keyEquivalent, item.keyEquivalentModifierMask)]))
+        Fail(@"E_INVALID_ARGUMENT", @"An alternate must use its primary's shortcut key with different modifiers");
+    }
+    primary = item;
+  }
+}
 - (void)publish:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   RCTExecuteOnMainQueue(^{
     NSError *error = nil; id value = [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&error];
@@ -149,7 +257,7 @@ RCT_EXPORT_MODULE(NativeMenu)
     [self identifyNativeMenus];
     NSArray *previous = self.published;
     [self restore];
-    @try { [self install:value into:NSApp.mainMenu root:YES]; self.published = value; resolve(nil); }
+    @try { [self install:value into:NSApp.mainMenu root:YES]; [self validateAlternates:NSApp.mainMenu]; self.published = value; resolve(nil); }
     @catch (NSException *failure) {
       [self restore];
       @try { [self install:previous into:NSApp.mainMenu root:YES]; }
