@@ -1,0 +1,25 @@
+appId: so.legend.spark.examples.kitchensink
+name: Native About panel with overrides
+intent: >
+  "About with overrides" orders front a native About panel showing Spark Kitchen Sink,
+  "Version 1.2.3 (456)", the credits and the copyright, and resolves null. "Standard About panel"
+  shows the same panel with the bundle's own name and version.
+checks: [DLG-ABOUT-01]
+# Non-blocking until the black-box backend tracked in #50 lands.
+tags: [dialogs]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://dialogs/panels" }
+- extendedWaitUntil: { visible: { id: dialogs-panels-root }, timeout: 10s }
+- tapOn: { id: dialogs-panels-about-overrides }
+- assertText: { id: dialogs-panels-about-overrides-result, equals: "null" }
+- assertVisible: { text: Spark Kitchen Sink, window: key }
+- assertVisible: { text: Version 1.2.3 (456), window: key }
+- assertVisible: { text: Built with Legend Spark., window: key }
+- assertVisible: { text: © 2026 Legend, window: key }
+- closeWindow: { window: key }
+- tapOn: { id: dialogs-panels-about }
+- assertText: { id: dialogs-panels-about-result, equals: "null" }
+- assertVisible: { text: "/^Version \\S+/", window: key }
+- assertNotVisible: { text: Built with Legend Spark., window: key }
+- closeWindow: { window: key }

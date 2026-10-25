@@ -4,7 +4,8 @@ import { describe, expect, test } from "vitest";
 import { readSdkSurface, type SdkSurface } from "../scripts/api-surface.ts";
 import { checkCoverage, formatCoverage, type CoverageReport } from "../scripts/e2e/coverage.ts";
 import { collect } from "../scripts/e2e/files.ts";
-import { checkRegistry, formatDiagnostic } from "../scripts/e2e/format/parser.ts";
+import { checkFlow, checkRegistry, formatDiagnostic } from "../scripts/e2e/format/parser.ts";
+import { plan } from "../scripts/e2e/gate/plan.ts";
 import { outcome, run } from "./subprocess.ts";
 
 const FIXTURES = "tests/fixtures/e2e-coverage";
@@ -172,4 +173,24 @@ describe("cli", () => {
     const result = await cli("e2e/does-not-exist");
     expect(result.status, outcome(result)).toBe(2);
   }, cliTimeoutMs);
+});
+
+test("dialog acceptance flows do not block the gate until the black-box backend is available", () => {
+  const flows = collect(path.resolve(import.meta.dirname, "../e2e/flows/dialogs"));
+  expect(flows).toHaveLength(6);
+  for (const [file] of flows) {
+    const flow = checkFlow(readFileSync(file, "utf8"), file);
+    expect(flow.diagnostics).toEqual([]);
+    expect(flow.value!.header.manual, file).toBeUndefined();
+  }
+});
+
+test("the release gate keeps other flows blocking while dialog flows are non-blocking", () => {
+  for (const host of [{ os: "macos-15", arch: "arm64" }, { os: "windows-11", arch: "x64" }] as const) {
+    const gate = plan(path.resolve(import.meta.dirname, "../e2e"), host);
+    const dialogs = gate.flows.filter(flow => flow.path.startsWith("flows/dialogs/"));
+    expect(dialogs).toHaveLength(host.os === "macos-15" ? 5 : 2);
+    expect(dialogs.every(flow => !flow.blocking && !flow.manual)).toBe(true);
+    expect(gate.flows.filter(flow => !flow.path.startsWith("flows/dialogs/")).every(flow => flow.blocking)).toBe(true);
+  }
 });

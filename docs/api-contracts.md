@@ -217,10 +217,15 @@ openFileDialog(options?: {
   filters?: readonly FileFilter[]; // { name?: string; extensions } — Windows labels each group; macOS flattens.
   windowId?: string;
   title?: string;
-}): Promise<{ canceled: true } | { canceled: false; paths: string[] }>;
+  accessory?: readonly DialogAccessoryControl[]; // Data-driven checkboxes and pop-ups (macOS); values return with the result.
+}): Promise<{ canceled: true } | { canceled: false; paths: string[]; accessory?: DialogAccessoryValues }>;
 saveFileDialog(options?: SaveFileDialogOptions): Promise<SaveFileDialogResult>;
-showMessage(options: MessageDialogOptions): Promise<MessageDialogResult>;
+showMessage(options: MessageDialogOptions): Promise<MessageDialogResult>; // checkbox state returns as `checked`; persistence is the caller's.
 confirm(message: string, options?: ConfirmOptions): Promise<boolean>;
+showPrompt(options: PromptOptions): Promise<{ canceled: true } | { canceled: false; value: string }>;
+showAboutPanel(options?: AboutPanelOptions): Promise<void>;
+getFileDialogAvailability(feature?: "accessory"): Availability;
+getMessageDialogAvailability(feature?: "checkbox" | "prompt" | "aboutPanel"): Availability;
 
 // /files
 readText(path, options?): Promise<string>;

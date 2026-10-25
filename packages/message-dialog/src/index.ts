@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { SparkError, parseNativeResult, invokeNative, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import Native from "./NativeDesktopMessageDialog";
 export interface MessageDialogButton { id: string; label: string }
 export interface MessageDialogOptions {
@@ -10,6 +11,7 @@ export interface MessageDialogOptions {
   defaultButtonId?: string;
   cancelButtonId?: string;
   windowId?: string;
+  /** A "Don't ask again" style checkbox. Its final state returns as `checked`; persisting it is the caller's choice. */
   checkbox?: { label: string; checked?: boolean };
 }
 export interface MessageDialogResult {
@@ -18,33 +20,127 @@ export interface MessageDialogResult {
   /** The checkbox's final state; present only when options.checkbox was supplied. */
   checked?: boolean;
 }
-export interface ConfirmOptions { title?: string; windowId?: string }
-export function getMessageDialogAvailability(): Availability {
+export interface ConfirmOptions {
+  title?: string;
+  windowId?: string;
+  /** Defaults to "Continue"; pass a localized label for localized apps. */
+  confirmLabel?: string;
+  /** Defaults to "Cancel"; pass a localized label for localized apps. */
+  cancelLabel?: string;
+}
+export interface PromptOptions {
+  title: string;
+  message?: string;
+  placeholder?: string;
+  /** Initial text, selected when the dialog opens. */
+  defaultValue?: string;
+  /** Masks the text and keeps it out of the clipboard (NSSecureTextField). */
+  secure?: boolean;
+  /** Defaults to "OK"; pass a localized label for localized apps. */
+  confirmLabel?: string;
+  /** Defaults to "Cancel"; pass a localized label for localized apps. */
+  cancelLabel?: string;
+  windowId?: string;
+}
+/** Cancel, Escape and host dismissal all resolve `{ canceled: true }`; an empty confirmed value is `""`. */
+export type PromptResult = { canceled: true } | { canceled: false; value: string };
+/** Overrides for the native About panel. Omitted fields use the app bundle's values. */
+export interface AboutPanelOptions {
+  name?: string;
+  /** The marketing version, shown as "Version <version>". */
+  version?: string;
+  /** The build, shown in parentheses after the version. */
+  build?: string;
+  /** Plain text shown in the scrolling credits area. */
+  credits?: string;
+  copyright?: string;
+  /** Absolute path of an image file (PNG, ICNS, …) shown instead of the app icon. */
+  iconPath?: string;
+}
+/** Features beyond plain message dialogs, for `getMessageDialogAvailability(feature)`. */
+export type MessageDialogFeature = "checkbox" | "prompt" | "aboutPanel";
+const FEATURES: readonly MessageDialogFeature[] = ["checkbox", "prompt", "aboutPanel"];
+
+/** Without a feature, reports message dialogs. Windows supports the checkbox; prompts and the About panel are macOS-only. */
+export function getMessageDialogAvailability(feature?: MessageDialogFeature): Availability {
+  if (feature !== undefined && !FEATURES.includes(feature)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown message dialog feature");
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
+  if (Platform.OS === "windows" && (feature === "prompt" || feature === "aboutPanel")) return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };
 }
+function requireAvailable(feature?: MessageDialogFeature) {
+  const availability = getMessageDialogAvailability(feature);
+  if (!availability.available) throw new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", `${feature === "aboutPanel" ? "The About panel" : feature === "prompt" ? "Text prompts" : "Message dialogs"} require ${feature ? "macOS" : "a desktop host"} with NativeDesktopMessageDialog installed`);
+}
+const validString = (value: unknown): value is string => typeof value === "string" && !!value.trim() && !value.includes("\0");
+function knownKeys(options: object, allowed: readonly string[], what: string) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", `Expected ${what} options`);
+  for (const key of Object.keys(options)) if (!allowed.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported ${what} option: ${key}`);
+}
+function optionalString(options: Record<string, unknown>, keys: readonly string[], allowEmpty = false) {
+  for (const key of keys) {
+    const value = options[key];
+    if (value !== undefined && (typeof value !== "string" || value.includes("\0") || (!allowEmpty && !value.trim()))) throw new SparkError("E_INVALID_ARGUMENT", `${key} must be a ${allowEmpty ? "" : "non-empty "}string without NUL characters`);
+  }
+}
+function validWindowId(windowId: unknown) {
+  if (windowId !== undefined && (typeof windowId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(windowId))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid owner window ID");
+}
+
+type NativeAlertResult = { button: number; checked: boolean; value?: string };
+async function showAlert(wire: Record<string, unknown>, buttonCount: number, input: boolean): Promise<NativeAlertResult> {
+  return parseNativeResult(await invokeNative(() => Native!.call("show", JSON.stringify(wire))), (value): value is NativeAlertResult => {
+    if (!value || typeof value !== "object") return false;
+    const result = value as Record<string, unknown>;
+    return Number.isInteger(result.button) && (result.button as number) >= -1 && (result.button as number) < buttonCount && typeof result.checked === "boolean" && (input ? typeof result.value === "string" : !("value" in result));
+  });
+}
+
 export async function showMessage(options: MessageDialogOptions): Promise<MessageDialogResult> {
-  if (!options || typeof options !== "object") throw new SparkError("E_INVALID_ARGUMENT", "Expected message dialog options");
-  for (const key of Object.keys(options)) if (!["title", "message", "kind", "buttons", "defaultButtonId", "cancelButtonId", "windowId", "checkbox"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported dialog option: ${key}`);
+  knownKeys(options, ["title", "message", "kind", "buttons", "defaultButtonId", "cancelButtonId", "windowId", "checkbox"], "dialog");
   const buttons = options.buttons ?? [{ id: "ok", label: "OK" }];
-  const validString = (value: unknown): value is string => typeof value === "string" && !!value && !value.includes("\0");
   if (!validString(options.title) || !Array.isArray(buttons) || !buttons.length || buttons.length > 4 || buttons.some(value => !value || !validString(value.id) || !validString(value.label))) throw new SparkError("E_INVALID_ARGUMENT", "Dialog needs a title and 1–4 buttons with IDs and labels");
   const ids = buttons.map(button => button.id);
   if (new Set(ids).size !== ids.length) throw new SparkError("E_INVALID_ARGUMENT", "Dialog button IDs must be unique");
   for (const id of [options.defaultButtonId, options.cancelButtonId]) if (id !== undefined && !ids.includes(id)) throw new SparkError("E_INVALID_ARGUMENT", "Dialog button ID must identify a button");
   if (options.kind !== undefined && !["info", "warning", "error"].includes(options.kind)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid dialog kind");
-  if (options.windowId !== undefined && (typeof options.windowId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(options.windowId))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid owner window ID");
+  validWindowId(options.windowId);
   if (options.message !== undefined && typeof options.message !== "string") throw new SparkError("E_INVALID_ARGUMENT", "message must be a string");
-  if (options.checkbox !== undefined && (!options.checkbox || !validString(options.checkbox.label) || (options.checkbox.checked !== undefined && typeof options.checkbox.checked !== "boolean"))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid checkbox options");
-  const availability = getMessageDialogAvailability();
-  if (!availability.available) throw new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", "Message dialogs require a desktop host with NativeDesktopMessageDialog installed");
+  if (options.checkbox !== undefined && (!options.checkbox || typeof options.checkbox !== "object" || Object.keys(options.checkbox).some(key => key !== "label" && key !== "checked") || !validString(options.checkbox.label) || (options.checkbox.checked !== undefined && typeof options.checkbox.checked !== "boolean"))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid checkbox options");
+  requireAvailable(options.checkbox ? "checkbox" : undefined);
   const { defaultButtonId, cancelButtonId, ...rest } = options;
-  const result = parseNativeResult(await invokeNative(() => Native!.call("show", JSON.stringify({ ...rest, buttons: buttons.map(button => button.label), defaultButton: defaultButtonId === undefined ? 0 : ids.indexOf(defaultButtonId), cancelButton: cancelButtonId === undefined ? undefined : ids.indexOf(cancelButtonId) }))), (value): value is { button: number; checked: boolean } => !!value && typeof value === "object" && "button" in value && Number.isInteger(value.button) && (value.button as number) >= -1 && (value.button as number) < buttons.length && "checked" in value && typeof value.checked === "boolean");
-  return { buttonId: result.button === -1 ? null : ids[result.button], ...(options.checkbox ? { checked: result.checked } : {}) };
+  const result = await showAlert({ ...rest, buttons: buttons.map(button => button.label), defaultButton: defaultButtonId === undefined ? 0 : ids.indexOf(defaultButtonId), cancelButton: cancelButtonId === undefined ? undefined : ids.indexOf(cancelButtonId) }, buttons.length, false);
+  return { buttonId: result.button === -1 ? null : ids[result.button]!, ...(options.checkbox ? { checked: result.checked } : {}) };
 }
+
 export async function confirm(message: string, options: ConfirmOptions = {}): Promise<boolean> {
-  if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected confirmation options");
-  for (const key of Object.keys(options)) if (!["title", "windowId"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported confirmation option: ${key}`);
-  const result = await showMessage({ title: options.title ?? "Confirm", message, windowId: options.windowId, buttons: [{ id: "cancel", label: "Cancel" }, { id: "continue", label: "Continue" }], defaultButtonId: "continue", cancelButtonId: "cancel" });
+  knownKeys(options, ["title", "windowId", "confirmLabel", "cancelLabel"], "confirmation");
+  const result = await showMessage({ title: options.title ?? "Confirm", message, windowId: options.windowId, buttons: [{ id: "cancel", label: options.cancelLabel ?? "Cancel" }, { id: "continue", label: options.confirmLabel ?? "Continue" }], defaultButtonId: "continue", cancelButtonId: "cancel" });
   return result.buttonId === "continue";
+}
+
+/** A message dialog with one text field. Return confirms; Escape cancels. */
+export async function showPrompt(options: PromptOptions): Promise<PromptResult> {
+  knownKeys(options, ["title", "message", "placeholder", "defaultValue", "secure", "confirmLabel", "cancelLabel", "windowId"], "prompt");
+  if (!validString(options.title)) throw new SparkError("E_INVALID_ARGUMENT", "Prompt needs a title");
+  optionalString(options as unknown as Record<string, unknown>, ["placeholder", "confirmLabel", "cancelLabel"]);
+  optionalString(options as unknown as Record<string, unknown>, ["message", "defaultValue"], true);
+  if (options.secure !== undefined && typeof options.secure !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "secure must be boolean");
+  validWindowId(options.windowId);
+  requireAvailable("prompt");
+  const result = await showAlert({
+    title: options.title, message: options.message, windowId: options.windowId,
+    buttons: [options.confirmLabel ?? "OK", options.cancelLabel ?? "Cancel"], defaultButton: 0, cancelButton: 1,
+    input: { placeholder: options.placeholder, defaultValue: options.defaultValue ?? "", secure: options.secure ?? false },
+  }, 2, true);
+  return result.button === 0 ? { canceled: false, value: result.value! } : { canceled: true };
+}
+
+/** Shows a native About panel on macOS. Calls update and reuse one panel, including after it is closed. Omitted fields use bundle values. It is not modal; the promise resolves once it is shown. */
+export async function showAboutPanel(options: AboutPanelOptions = {}): Promise<void> {
+  knownKeys(options, ["name", "version", "build", "credits", "copyright", "iconPath"], "About panel");
+  optionalString(options as unknown as Record<string, unknown>, ["name", "version", "build", "credits", "copyright", "iconPath"]);
+  const wire = { ...options, iconPath: options.iconPath === undefined ? undefined : nativePath(options.iconPath, Platform.OS) };
+  requireAvailable("aboutPanel");
+  parseNativeResult(await invokeNative(() => Native!.call("about", JSON.stringify(wire))), (value): value is null => value === null);
 }
