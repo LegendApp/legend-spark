@@ -65,6 +65,7 @@ module.exports = function withSparkDesktop(config) {
     require("./keyboard-events.cjs").installKeyboardEventsPatch(mod.modRequest.projectRoot);
     require("./rtl-scroll-view.cjs").installRTLScrollViewPatch(mod.modRequest.projectRoot);
     require("./rtl-text-alignment.cjs").installRTLTextAlignmentPatch(mod.modRequest.projectRoot);
+    require("./rtl-text-input-alignment.cjs").installRTLTextInputAlignmentPatch(mod.modRequest.projectRoot);
     // The beta template passes the resolved package to use_react_native!, but
     // post_install otherwise resets Xcode script paths to ../node_modules.
     mod.modResults.contents = mod.modResults.contents.replace(

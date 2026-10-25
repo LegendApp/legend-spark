@@ -114,6 +114,18 @@ version and exact source, is idempotent, and replaces the file atomically. Exist
 need a native rebuild. `tests/rtl-text-alignment-native.test.ts` compiles the patched and the
 upstream code and lays text out with TextKit.
 
+## RN macOS RTL TextInput alignment patch
+
+A `react-native-macos@0.81.7` TextInput has no layout direction on macOS: its text attributes
+carry none, and the `semanticContentAttribute` that makes UIKit's natural alignment follow it
+is iOS-only. So a TextInput with natural `textAlign` drew its text and placeholder from the
+left in an RTL layout. `rtl-text-input-alignment.cjs` aligns them, single-line and multiline,
+to the leading edge of the input's layout direction, and realigns them when that changes. An
+explicit `textAlign` is unchanged, as upstream: unlike Text's, it does not swap in RTL. Like
+the other patches, it checks the version and exact source, is idempotent, and replaces the file
+atomically. Existing runtimes need a native rebuild. `tests/rtl-text-input-alignment-native.test.ts`
+compiles the patch's helpers and checks text and placeholders in `NSTextField` and `NSTextView`.
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.
