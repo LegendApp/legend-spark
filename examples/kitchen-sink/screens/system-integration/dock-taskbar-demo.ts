@@ -92,7 +92,7 @@ export function useDockTaskbarDemo(t: DockTaskbarMessages) {
           const newWindow = { type: "action", id: "new-window", label: t.menu.newWindow } as const;
           const mute = { type: "checkbox", id: "mute", label: t.menu.mute, checked: true } as const;
           const created = Platform.OS === "windows"
-            ? createTaskbarMenu({ items: [newWindow, mute], recentDocuments: true, onAction })
+            ? createTaskbarMenu({ items: [newWindow, mute], onAction })
             : createDockMenu({ items: [
               newWindow, mute, { type: "separator" },
               { type: "submenu", id: "status", label: t.menu.status, items: [{ type: "action", id: "available", label: t.menu.available }, { type: "action", id: "away", label: t.menu.away }] },

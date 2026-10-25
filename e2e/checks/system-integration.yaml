@@ -2,7 +2,7 @@ area: system-integration
 prefix: SYS
 checks:
   SYS-DOCKAVAIL-01:
-    title: "getSystemAvailability reports the system module, app badge, app progress, attention and the Dock menu available on macOS, and the taskbar menu and thumbnail toolbar unsupported-platform"
+    title: "getSystemAvailability reports the system module, app badge, app progress, attention and the Dock menu available on macOS, and the taskbar menu unsupported-platform"
     platforms: [macos]
     blocking: true
     spec: "#123 SYS.api-dock"
@@ -39,7 +39,7 @@ checks:
     covers:
       - ./system#createDockMenu
   SYS-TASKBAR-01:
-    title: "On Windows the taskbar menu is available and the Dock menu unsupported-platform; badge counts, taskbar progress and a Jump List with tasks and the Recent category succeed"
+    title: "On Windows the taskbar menu is available and the Dock menu and app progress unsupported-platform; badge text and a Jump List with tasks succeed, and badge counts and progress reject SparkError:E_UNSUPPORTED_PLATFORM"
     platforms: [windows]
     blocking: true
     spec: "#123 SYS.api-dock; Windows verification in #302"

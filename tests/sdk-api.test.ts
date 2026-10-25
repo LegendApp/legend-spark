@@ -745,20 +745,20 @@ test("system feature availability is truthful per platform", () => {
   expect(system.getSystemAvailability()).toEqual({ available: true });
   expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: true, taskbarMenu: false });
   platform.OS = "windows";
-  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: false, taskbarMenu: true });
+  expect(report()).toEqual({ appBadge: true, appProgress: false, attention: true, dockMenu: false, taskbarMenu: true });
   platform.OS = "web";
   expect(system.getSystemAvailability("appBadge")).toEqual({ available: false, reason: "unsupported-platform" });
   expect(() => system.getSystemAvailability("dock" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
 });
-test("Jump Lists add the Recent category only when asked", async () => {
+test("Windows takes badge text but rejects badge counts, progress and Recent Jump List options before native code", async () => {
   platform.OS = "windows";
-  const menu = await system.createTaskbarMenu({ items: [{ type: "action", id: "new", label: "New window" }], onAction: () => {}, recentDocuments: true });
-  expect(calls.at(-1)?.args).toMatchObject({ recent: true }); await menu.remove();
-  const plain = await system.createTaskbarMenu({ items: [], onAction: () => {} });
-  expect(calls.at(-1)?.args).not.toHaveProperty("recent"); await plain.remove();
-  await expect(system.createTaskbarMenu({ items: [], onAction: () => {}, recentDocuments: "yes" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
-  platform.OS = "macos";
-  await expect(system.createDockMenu({ items: [], onAction: () => {}, recentDocuments: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await system.setAppBadge("New"); await system.setAppBadge("");
+  expect(calls.map(call => call.args)).toEqual([{ label: "New" }, { label: "" }]);
+  calls.length = 0;
+  for (const run of [() => system.setAppBadge(3), () => system.setAppBadge(0), () => system.setAppProgress({ state: "normal", value: 0.5 }), () => system.setAppProgress(null)])
+    await expect(run()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(system.createTaskbarMenu({ items: [], onAction: () => {}, recentDocuments: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
 });
 
 test("application menu updates snapshot inputs, serialize and retain last successful owners", async () => {

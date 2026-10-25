@@ -1,4 +1,4 @@
-# #123 Dock progress, taskbar, Jump Lists: verification
+# #123 Dock badge and progress: verification
 
 I opened and checked every image.
 
@@ -6,11 +6,13 @@ I opened and checked every image.
 
 From `bun run ks:capture system-integration/dock` against a Kitchen Sink dev build of this branch (`ks-lock native bun run rebuild:macos`). The driver captures the app window only; a driven app has no Dock icon, so badge and progress never reach the Dock.
 
-| Image | Flags | What it shows |
+The approved goldens are the captures:
+
+| Golden | Flags | What it shows |
 |---|---|---|
-| system-integration-dock-light.png | `--appearance light` | Availability: system, appBadge, appProgress, attention and dockMenu `{"available":true}`; taskbarMenu `unsupported-platform`. Badge, progress and attention triggers; results read `—` until run. |
-| system-integration-dock-dark.png | `--appearance dark` | The same in dark. |
-| system-integration-dock-light-ar.png | `--appearance light --locale ar` | Arabic labels, laid out right to left. JSON readouts stay untranslated. |
+| [light, English](../../golden/macos/light/en/system-integration-dock.png) | `--appearance light` | Availability: system, appBadge, appProgress, attention and dockMenu `{"available":true}`; taskbarMenu `unsupported-platform`. Badge, progress and attention triggers; results read `—` until run. |
+| [dark, English](../../golden/macos/dark/en/system-integration-dock.png) | `--appearance dark` | The same in dark. |
+| [light, Arabic](../../golden/macos/light/ar/system-integration-dock.png) | `--appearance light --locale ar` | Arabic labels, laid out right to left. JSON readouts stay untranslated. |
 
 ## Dock tile progress, rendered offscreen
 

@@ -12,14 +12,9 @@ type SupportedTaskbarLeaf = Extract<MenuItem, { type: "action" | "checkbox" }> e
   ? Item extends unknown ? Omit<Item, "target" | "placement" | "icon" | "shortcut" | "hidden" | "disabled"> & { disabled?: false } : never
   : never;
 export type TaskbarMenuItem = SupportedTaskbarLeaf;
-type LauncherMenuOptions = { items: readonly MenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void; recentDocuments?: boolean };
+type LauncherMenuOptions = { items: readonly MenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void };
 export interface DockMenuOptions { items: readonly DockMenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
-export interface TaskbarMenuOptions {
-  items: readonly TaskbarMenuItem[];
-  onAction: (event: { type: "action"; itemId: string }) => void;
-  /** Adds the Jump List's Recent category: files noted with `noteRecentDocument` whose type is registered to the app. */
-  recentDocuments?: boolean;
-}
+export interface TaskbarMenuOptions { items: readonly TaskbarMenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
 /** Determinate progress has a completed fraction from 0 to 1; paused and error tint the bar. */
 export type AppProgress = { state: "indeterminate" } | { state: "normal" | "paused" | "error"; value: number };
 export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu";
@@ -31,7 +26,7 @@ export interface PreventSleepOptions { reason: string; kind?: "display" | "syste
 let sequence = 0;
 const token = () => `system-${Date.now()}-${++sequence}`;
 const FEATURES: Record<SystemFeature, readonly string[]> = {
-  appBadge: ["macos", "windows"], appProgress: ["macos", "windows"], attention: ["macos", "windows"],
+  appBadge: ["macos", "windows"], appProgress: ["macos"], attention: ["macos", "windows"],
   dockMenu: ["macos"], taskbarMenu: ["windows"],
 };
 /** Without a feature, whether the system module is usable at all. */
@@ -63,20 +58,22 @@ export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
   await command("login", { enabled });
 }
 /**
- * Dock badge on macOS, taskbar overlay icon on Windows. A count is formatted natively (macOS uses the
- * user's locale); an empty string or a count of 0 clears it.
+ * Dock badge on macOS, taskbar overlay icon on Windows; an empty string clears it. A count (macOS only)
+ * is formatted with the user's locale, and 0 clears it.
  */
 export async function setAppBadge(value: string | number): Promise<void> {
   if (typeof value === "number") {
     if (!Number.isSafeInteger(value) || value < 0) throw new SparkError("E_INVALID_ARGUMENT", "Expected a badge count that is a non-negative integer");
+    if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Badge counts require macOS");
     await command("badge", { count: value });
     return;
   }
   if (typeof value !== "string" || value.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "Expected badge text without NUL");
   await command("badge", { label: value });
 }
-/** Progress on the Dock tile (macOS) or taskbar button (Windows); null clears it. */
+/** Progress on the Dock tile (macOS only); null clears it. */
 export async function setAppProgress(progress: AppProgress | null): Promise<void> {
+  if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "App progress requires macOS");
   if (progress === null) { await command("progress", { state: "none" }); return; }
   const state = progress?.state;
   if (state === "indeterminate") { options(progress, ["state"]); await command("progress", { state }); return; }
@@ -102,9 +99,8 @@ export async function preventSleep(value: PreventSleepOptions): Promise<AsyncReg
 }
 async function createLauncherMenu(value: LauncherMenuOptions, platform: "macos" | "windows"): Promise<AsyncRegistration> {
   if (Platform.OS !== platform) throw new SparkError("E_UNSUPPORTED_PLATFORM", `${platform === "macos" ? "Dock" : "Taskbar"} menus require ${platform}`);
-  options(value, platform === "windows" ? ["items", "onAction", "recentDocuments"] : ["items", "onAction"]);
+  options(value, ["items", "onAction"]);
   if (typeof value.onAction !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onAction callback");
-  if (value.recentDocuments !== undefined && typeof value.recentDocuments !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected recentDocuments boolean");
   // Jump Lists cannot render native submenus, shortcuts, icons or disabled tasks.
   const items = menuItems(value.items, { types: platform === "macos" ? ["action", "checkbox", "separator", "submenu"] : ["action", "checkbox"] }, platform);
   const ids = selectableMenuIds(items), owner = token(), onAction = value.onAction;
@@ -112,7 +108,7 @@ async function createLauncherMenu(value: LauncherMenuOptions, platform: "macos" 
   const subscription = onDesktopEvent(event => {
     if (ready && !stopped && event.type === "dockAction" && event.owner === owner && typeof event.id === "string" && ids.has(event.id)) onAction({ type: "action", itemId: event.id });
   }, { types: ["dockAction"], target: { field: "owner", value: owner } });
-  try { await command("dockMenu", { items, owner, ...(value.recentDocuments ? { recent: true } : {}) }); ready = true; } catch (error) { subscription.remove(); throw error; }
+  try { await command("dockMenu", { items, owner }); ready = true; } catch (error) { subscription.remove(); throw error; }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, () => command("clearDockMenu", { owner }));
 }
 export function createDockMenu(options: DockMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "macos"); }
