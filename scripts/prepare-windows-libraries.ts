@@ -69,6 +69,9 @@ export async function packWindowsLibraries(output: string) {
       headers(path.join(stage, "cpp"));
     }
     if (adapter === "sqlite") {
+      // Spark uses the bundled SQLite backend. The opt-in libsql and Turso
+      // binaries would push the archive past GitHub's 100 MB file limit.
+      for (const dir of ["android/src/main/jniLibs", "android/src/main/tursoLibs", "ios/libsql_experimental.xcframework", "ios/turso_sdk_kit.xcframework"]) rmSync(path.join(stage, dir), { recursive: true });
       const api = path.join(stage, "cpp/OPSqlite.cpp");
       let apiSource = readFileSync(api, "utf8").replace("location.rfind('/', 0) == 0", "std::filesystem::u8path(location).is_absolute()");
       apiSource = '#include <filesystem>\n' + apiSource;
