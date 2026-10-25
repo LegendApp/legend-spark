@@ -35,7 +35,8 @@ export function useDockTaskbarDemo(t: DockTaskbarMessages) {
   const [results, setResults] = useState<Partial<Record<DemoId, string>>>({});
   const [lastAction, setLastAction] = useState<string>();
   const attention = useRef<AsyncRegistration>(undefined);
-  const launcher = useRef<AsyncRegistration>(undefined);
+  // The launcher menu, pending until creation settles, so Remove and unmount can own it before it arrives.
+  const launcher = useRef<Promise<AsyncRegistration>>(undefined);
   // Settles the pending attention delay as cancelled.
   const pending = useRef<() => void>(undefined);
   // Bumped by every attention request, Stop and unmount; a request that finds it changed is stale.
@@ -86,23 +87,30 @@ export function useDockTaskbarDemo(t: DockTaskbarMessages) {
         return current ? "removed" : cancelled ? "cancelled" : "none";
       }
       case "launcher-install": {
-        if (launcher.current) return "installed";
-        const onAction = ({ itemId }: { itemId: string }) => setLastAction(itemId);
-        const newWindow = { type: "action", id: "new-window", label: t.menu.newWindow } as const;
-        const mute = { type: "checkbox", id: "mute", label: t.menu.mute, checked: true } as const;
-        launcher.current = Platform.OS === "windows"
-          ? await createTaskbarMenu({ items: [newWindow, mute], recentDocuments: true, onAction })
-          : await createDockMenu({ items: [
-            newWindow, mute, { type: "separator" },
-            { type: "submenu", id: "status", label: t.menu.status, items: [{ type: "action", id: "available", label: t.menu.available }, { type: "action", id: "away", label: t.menu.away }] },
-          ], onAction });
+        if (!launcher.current) {
+          const onAction = ({ itemId }: { itemId: string }) => setLastAction(itemId);
+          const newWindow = { type: "action", id: "new-window", label: t.menu.newWindow } as const;
+          const mute = { type: "checkbox", id: "mute", label: t.menu.mute, checked: true } as const;
+          const created = Platform.OS === "windows"
+            ? createTaskbarMenu({ items: [newWindow, mute], recentDocuments: true, onAction })
+            : createDockMenu({ items: [
+              newWindow, mute, { type: "separator" },
+              { type: "submenu", id: "status", label: t.menu.status, items: [{ type: "action", id: "available", label: t.menu.available }, { type: "action", id: "away", label: t.menu.away }] },
+            ], onAction });
+          launcher.current = created;
+          created.catch(() => { if (launcher.current === created) launcher.current = undefined; });
+        }
+        await launcher.current;
         return "installed";
       }
       case "launcher-remove": {
         const current = launcher.current;
-        await current?.remove();
         launcher.current = undefined;
-        return current ? "removed" : "none";
+        const registration = await current;
+        if (!registration) return "none";
+        // A failed removal keeps the registration, so Remove can retry it.
+        try { await registration.remove(); } catch (error) { launcher.current ??= current; throw error; }
+        return "removed";
       }
     }
     return "ok";
@@ -118,7 +126,7 @@ export function useDockTaskbarDemo(t: DockTaskbarMessages) {
     cancelAttention();
     const report = (error: unknown) => console.warn("Dock & taskbar cleanup failed", error);
     attention.current?.remove().catch(report); attention.current = undefined;
-    launcher.current?.remove().catch(report); launcher.current = undefined;
+    launcher.current?.then(registration => registration.remove()).catch(report); launcher.current = undefined;
     if (badgeSet.current) setAppBadge("").catch(report);
     if (progressSet.current) setAppProgress(null).catch(report);
   }, [cancelAttention]);
