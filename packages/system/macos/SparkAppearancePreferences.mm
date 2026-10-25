@@ -17,7 +17,7 @@ NSDictionary *SparkAppearancePreferences(NSString **error) {
   NSWorkspace *workspace = NSWorkspace.sharedWorkspace;
   return @{
     // System Settings > Appearance, not the app's own appearance: AppleInterfaceStyle is set only while dark.
-    @"appearance": [[defaults stringForKey:@"AppleInterfaceStyle"] caseInsensitiveCompare:@"Dark"] == NSOrderedSame ? @"dark" : @"light",
+    @"appearance": [[defaults stringForKey:@"AppleInterfaceStyle"] isEqualToString:@"Dark"] ? @"dark" : @"light",
     @"automaticAppearance": @([defaults boolForKey:@"AppleInterfaceStyleSwitchesAutomatically"]),
     @"accentColor": accent,
     @"highlightColor": highlight,

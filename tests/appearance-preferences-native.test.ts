@@ -24,6 +24,9 @@ test.skipIf(process.platform !== "darwin")("appearance preferences read the user
       increaseContrast: false, reduceTransparency: false, differentiateWithoutColor: false, reduceMotion: false });
     expect(typeof pinned.invertColors).toBe("boolean");
     expect(typeof pinned.keyboardNavigation).toBe("boolean");
+    // Light mode leaves AppleInterfaceStyle unset rather than "Light".
+    const [absent] = await read(["--absent-interface-style", ...PINNED]);
+    expect(absent).toMatchObject({ appearance: "light", accentColor: pinned.accentColor });
     const [changed] = await read(CHANGED);
     expect(changed).toMatchObject({ appearance: "dark", automaticAppearance: true, increaseContrast: true, reduceTransparency: true, differentiateWithoutColor: true, reduceMotion: true });
     // Red accent and orange highlight; the exact shades follow the contrast setting.
