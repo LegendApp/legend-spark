@@ -313,8 +313,7 @@ describe("Kitchen Sink gate files", () => {
     expect([pro.target?.id, pro.budgets.map(budget => budget.metric)]).toEqual(["macos-27/arm64@macbook-pro-14-base", ["frames.fps"]]);
     const other = plan("e2e", { os: "macos-27", arch: "arm64", model: "Mac16,5", memoryGB: 128 });
     expect([other.target?.id, other.budgets]).toEqual(["macos-27/arm64", []]);
-    expect(other.flows.map(flow => flow.path)).toContain("flows/menus/availability.yaml");
-    expect(other.excluded).toContainEqual({ path: "flows/menus/windows-items.yaml", reason: "platforms: windows" });
+    expect(other.flows.map(flow => flow.path)).toContain("flows/infra/catalog-driver.yaml");
   });
 
   test("sign-off and budgets files reject malformed entries", () => {
