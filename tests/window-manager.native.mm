@@ -60,6 +60,8 @@ void SparkEmit(NSDictionary *event) { [events addObject:event]; }
 NSDictionary *SparkStartupTiming() { return @{}; }
 NSDictionary *SparkLifecycleConfiguration() { return @{}; }
 extern "C" void SparkRebindWindowDelegate(NSWindow *, NSString *, id<NSWindowDelegate>) {}
+// The harness strips imports, SparkTestDriver.h included; these apps are never driven.
+static BOOL SparkTestDriverActive(void) { return NO; }
 // ACTUAL_IMPLEMENTATION
 extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *, NSDictionary *) {}
 extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *, NSView *, void (^)(void)) { return NO; }

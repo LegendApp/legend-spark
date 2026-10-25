@@ -28,6 +28,7 @@ const server = net.createServer(socket => {
       const reply = { id: message.id, ok: true };
       if (message.command === "waitFor" && message.testID === "missing") Object.assign(reply, { ok: false, error: { code: "E_TIMEOUT", message: "No view with testID missing" } });
       else if (message.command === "waitFor") Object.assign(reply, { window: "spark.main", frame: { x: 0, y: 0, width: 10, height: 20 } });
+      else if (message.command === "openFile" && message.path !== "/fixtures/notes.md") Object.assign(reply, { ok: false, error: { code: "E_NOT_FOUND", message: "No file at " + message.path } });
       else if (message.command === "setAppAppearance") reply.changed = message.appearance === "dark";
       else if (message.command === "capture") { fs.writeFileSync(path.join(dir, message.name + ".png"), "png", { mode: 0o600 }); Object.assign(reply, { file: message.name + ".png", width: 2000, height: 1400, scale: 2 }); }
       send(reply);
@@ -52,6 +53,8 @@ test("launches with a private run directory and one-time token, then drives the 
     expect(JSON.parse(readFileSync(path.join(driver.directory, "launch.json"), "utf8"))).toEqual({ argv: ["--flag"], extra: "yes" });
     await driver.ping();
     await driver.navigate("spark-ks://windows/frame");
+    await driver.openFile("/fixtures/notes.md");
+    await expect(driver.openFile("/fixtures/missing.md")).rejects.toThrow("E_NOT_FOUND: No file at /fixtures/missing.md");
     expect(await driver.waitFor("windows-frame-root")).toEqual({ window: "spark.main", frame: { x: 0, y: 0, width: 10, height: 20 } });
     const missing = await driver.waitFor("missing", 100).catch(error => error);
     expect(missing).toBeInstanceOf(DriverError);

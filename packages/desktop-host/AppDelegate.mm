@@ -94,7 +94,7 @@
   SparkApplyWindowOptions(self.window, options);
   SparkRestoreWindow(self.window, @"main", options);
   NSString *autosave = policy[@"autosaveName"];
-  if (autosave.length) { [self.window setFrameAutosaveName:autosave]; [self.window setFrameUsingName:autosave]; }
+  if (autosave.length && !SparkTestDriverActive()) { [self.window setFrameAutosaveName:autosave]; [self.window setFrameUsingName:autosave]; }
   if (policy[@"toolbarStyle"]) {
     self.window.toolbar = [[NSToolbar alloc] initWithIdentifier:@"main"];
     self.window.toolbar.displayMode = NSToolbarDisplayModeIconOnly;

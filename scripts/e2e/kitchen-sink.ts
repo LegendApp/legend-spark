@@ -1,6 +1,6 @@
 // The Kitchen Sink under test, launched in driver mode (docs/test-driver.md). Shared by `ks:capture` and the
 // runner's driver backend: which app to launch, the JavaScript a dev build needs, and the launch itself.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -9,15 +9,25 @@ import path from "node:path";
 import { binary, run } from "../../packages/cli/src/commands.ts";
 import type { ProcessLog } from "../../packages/cli/src/process.ts";
 import { entryFile, prepareConfig, readJson, stateFile } from "../../packages/cli/src/project.ts";
-import { launchDriver, type Driver } from "./driver.ts";
+import { clearAppState, type AppIdentity } from "./app-state.ts";
+import { DRIVER_ENV, launchDriver, type Driver } from "./driver.ts";
+import { readManifest } from "./gate/plan.ts";
 
 export const KITCHEN_SINK = path.resolve(import.meta.dirname, "../../examples/kitchen-sink");
 export const LOCALE = /^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$/;
 
+const JS_LOCATION = "-RCT_jsLocation", BUNDLE_URL = "SPARK_BUNDLE_URL";
 const plist = (app: string, key: string) =>
   execFileSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).trim();
+/** An optional Info.plist string: undefined when the key is absent. */
+const plistValue = (app: string, key: string) => {
+  const result = spawnSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" });
+  if (result.status === 0) return result.stdout.trim();
+  if (result.stderr.includes("No value at that key path")) return undefined;
+  throw new Error(`plutil could not read ${key} from ${app}: ${result.stderr.trim()}`);
+};
 
-type Resolved = { app: string; executable: string; bundleId: string; embedded: boolean };
+type Resolved = { app: string; executable: string; embedded: boolean } & AppIdentity;
 
 /**
  * An app bundle in driver mode. A release build (`Contents/Resources/main.jsbundle`) runs its embedded JavaScript.
@@ -40,8 +50,12 @@ export class KitchenSinkApp {
       app = readJson(receipt).app as string;
     }
     if (!existsSync(path.join(app, "Contents/Info.plist"))) throw new Error(`${app} is not a macOS app bundle`);
+    const bundleId = plist(app, "CFBundleIdentifier");
     return {
-      app, executable: path.join(app, "Contents/MacOS", plist(app, "CFBundleExecutable")), bundleId: plist(app, "CFBundleIdentifier"),
+      app, executable: path.join(app, "Contents/MacOS", plist(app, "CFBundleExecutable")), bundleId,
+      // The host falls back to the bundle identifier the same way (SparkContext in SparkDesktop.mm).
+      projectId: plistValue(app, "SparkProjectIdentifier") ?? bundleId,
+      sandboxed: /<key>com\.apple\.security\.app-sandbox<\/key>\s*<true\/>/.test(execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })),
       embedded: existsSync(path.join(app, "Contents/Resources/main.jsbundle")),
     };
   }
@@ -76,19 +90,33 @@ export class KitchenSinkApp {
     return resolved;
   }
 
-  /** Launches the app in driver mode. `locale` sets the app's language and region formats through launch arguments. */
-  launch(options: { locale?: string; log: ProcessLog }): Promise<Driver> {
+  /** Deletes the app's persisted state (`clearAppState`), allowing only the gate manifest's app. Returns what existed. */
+  async clearState(): Promise<string[]> {
+    if (!this.resolved) throw new Error("KitchenSinkApp.open() must run before clearState()");
+    return clearAppState(this.resolved, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId);
+  }
+
+  /** What `launch` sets itself; a flow's own arguments and environment may not repeat it. `locale` only applies with a locale. */
+  readonly reserved = { arguments: [JS_LOCATION], env: [DRIVER_ENV, BUNDLE_URL], locale: ["-AppleLanguages", "-AppleLocale"] } as const;
+
+  /**
+   * Launches the app in driver mode with the caller's `arguments` (after its own) and `env`. `locale` sets the app's
+   * language and region formats through launch arguments.
+   */
+  launch(options: { locale?: string; arguments?: readonly string[]; env?: Readonly<Record<string, string>>; log: ProcessLog }): Promise<Driver> {
     if (options.locale !== undefined && !LOCALE.test(options.locale)) throw new Error(`${options.locale} is not a language identifier such as ar or en-US`);
-    const locale = options.locale ? ["-AppleLanguages", `(${options.locale})`, "-AppleLocale", options.locale] : [];
+    const [languages, region] = this.reserved.locale;
+    const locale = options.locale ? [languages, `(${options.locale})`, region, options.locale] : [];
     const resolved = this.resolved;
     if (!resolved || (!resolved.embedded && !this.server)) throw new Error("KitchenSinkApp.open() must run before launch()");
-    if (resolved.embedded) return launchDriver({ executable: resolved.executable, args: locale, log: options.log });
+    const extra = options.arguments ?? [];
+    if (resolved.embedded) return launchDriver({ executable: resolved.executable, args: [...locale, ...extra], env: options.env, log: options.log });
     const port = (this.server!.address() as AddressInfo).port;
     return launchDriver({
       executable: resolved.executable,
       // RCT_jsLocation points React Native's packager connection at the same server as the bundle URL.
-      args: ["-RCT_jsLocation", `127.0.0.1:${port}`, ...locale],
-      env: { SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=false&minify=false` },
+      args: [JS_LOCATION, `127.0.0.1:${port}`, ...locale, ...extra],
+      env: { ...options.env, [BUNDLE_URL]: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=false&minify=false` },
       log: options.log,
     });
   }

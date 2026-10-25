@@ -1,7 +1,7 @@
 // The Spark in-app driver (docs/test-driver.md) as a runner backend: white-box, in-process, macOS
 // (docs/e2e-flows.md#the-driver-backend). Commands it cannot serve are missing from `commands`, so the runner fails
 // them as unsupported; OS input and the accessibility tree belong to the black-box backend (#50).
-import { copyFileSync } from "node:fs";
+import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { DriverError, type Capture as DriverCapture, type DriverWindow, type Frame } from "../driver.ts";
@@ -11,6 +11,7 @@ import { Failure, type Artifact, type Atom, type AtomKey, type Backend, type Cap
 export type DriverClient = {
   readonly running: boolean;
   navigate(url: string): Promise<void>;
+  openFile(file: string): Promise<void>;
   waitFor(testID: string, timeoutMs?: number): Promise<{ window: string; frame: Frame }>;
   setAppAppearance(appearance: "light" | "dark", timeoutMs?: number): Promise<{ changed: boolean }>;
   capture(window: DriverWindow, name: string): Promise<DriverCapture>;
@@ -20,11 +21,16 @@ export type DriverClient = {
 /** The app under test (`KitchenSinkApp` in scripts/e2e/kitchen-sink.ts): prepared per flow, launched in driver mode. */
 export type DriverApp = {
   open(): Promise<{ app: string; bundleId: string }>;
-  launch(options: { locale?: string; log: ProcessLog }): Promise<DriverClient>;
+  /** Launch arguments and environment variables the launch sets itself, so a flow may not; `locale` only when the matrix sets one. */
+  readonly reserved: { readonly arguments: readonly string[]; readonly env: readonly string[]; readonly locale: readonly string[] };
+  /** Deletes the app's persisted state (docs/e2e-flows.md#clearstate) while it is not running; returns what existed. */
+  clearState(): Promise<string[]>;
+  launch(options: { locale?: string; arguments: readonly string[]; env: Readonly<Record<string, string>>; log: ProcessLog }): Promise<DriverClient>;
   close(): Promise<void>;
 };
 
-const LAUNCH_KEYS = new Set(["openUrl", "stopApp"]);
+const LAUNCH_KEYS = new Set(["clearState", "arguments", "env", "openFile", "openUrl", "stopApp"]);
+const FRESH_KEYS = ["clearState", "arguments", "env"];
 /** The first render includes loading JavaScript, so the matrix appearance waits longer than an in-flow change. */
 const LAUNCH_APPEARANCE_MS = 30000;
 
@@ -43,6 +49,7 @@ export class DriverBackend implements Backend {
   private session?: Session;
   private driver?: DriverClient;
   private logs: string[] = [];
+  private launches = 0;
   private captures = 0;
 
   constructor(private readonly app: DriverApp) {}
@@ -50,6 +57,7 @@ export class DriverBackend implements Backend {
   async start(session: Session) {
     this.session = session;
     this.logs = [];
+    this.launches = 0;
     const { app, bundleId } = await this.app.open();
     if (session.flow.header.appId === bundleId) return;
     await this.app.close(); // The runner stops only backends that started.
@@ -70,19 +78,39 @@ export class DriverBackend implements Backend {
     throw new Failure("invalid", "the app is not running; start the flow with launchApp");
   }
 
-  /** Launches in driver mode (restarting a running app unless `stopApp: false`) and delivers `openUrl` with `navigate`. */
+  /**
+   * Launches in driver mode (restarting a running app unless `stopApp: false`), after deleting the app's state for
+   * `clearState: true`, with the flow's `arguments` and `env`. Then delivers `openUrl` with `navigate` and `openFile`
+   * with `openFile`.
+   */
   private async launchApp(args: Record<string, unknown>) {
     const unsupported = Object.keys(args).filter(key => !LAUNCH_KEYS.has(key));
     if (unsupported.length) throw new Failure("unsupported", `launchApp ${unsupported.join(", ")} is not supported by backend driver`);
-    if (args.stopApp !== false || !this.driver?.running) {
+    const { matrix, dir } = this.session!;
+    const locale = matrix.locale as string | undefined;
+    const argv = (args.arguments ?? []) as string[], env = (args.env ?? {}) as Record<string, string>, file = args.openFile as string | undefined;
+    const relaunch = args.stopApp !== false || !this.driver?.running;
+    const fresh = FRESH_KEYS.filter(key => args[key] !== undefined);
+    if (!relaunch && fresh.length) throw new Failure("invalid", `launchApp ${fresh.join(", ")} need a new launch, but stopApp: false keeps the running app`);
+    const reserved = this.app.reserved, flags = new Set([...reserved.arguments, ...(locale === undefined ? [] : reserved.locale)]);
+    const taken = [...argv.filter(arg => flags.has(arg)), ...Object.keys(env).filter(name => reserved.env.includes(name))];
+    if (taken.length) throw new Failure("invalid", `launchApp ${taken.join(", ")} ${taken.length === 1 ? "is" : "are"} reserved by backend driver`);
+    if (file !== undefined && !(path.isAbsolute(file) && existsSync(file))) throw new Failure("invalid", `launchApp openFile ${file} is not an absolute path to an existing file`);
+    if (relaunch) {
       await this.quit();
-      const { matrix, dir } = this.session!;
-      const log = path.join(dir, `app-${this.logs.length + 1}.log`);
+      const launch = ++this.launches;
+      if (args.clearState === true) {
+        const cleared = path.join(dir, `clear-state-${launch}.log`);
+        writeFileSync(cleared, (await this.app.clearState()).map(item => `${item}\n`).join(""));
+        this.logs.push(cleared);
+      }
+      const log = path.join(dir, `app-${launch}.log`);
       this.logs.push(log);
-      this.driver = await this.app.launch({ locale: matrix.locale as string | undefined, log: processLog(log) });
+      this.driver = await this.app.launch({ locale, arguments: argv, env, log: processLog(log) });
       if (matrix.appearance !== undefined) await this.driver.setAppAppearance(matrix.appearance as "light" | "dark", LAUNCH_APPEARANCE_MS);
     }
     if (args.openUrl !== undefined) await this.driver!.navigate(String(args.openUrl));
+    if (file !== undefined) await this.driver!.openFile(file);
   }
 
   /** Quits the app through its normal termination path, if it runs, and ends the session. */

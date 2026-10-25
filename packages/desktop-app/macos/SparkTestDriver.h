@@ -13,3 +13,10 @@ FOUNDATION_EXPORT void SparkTestDriverDidMount(void);
 // YES once the runner's session has ended: that termination is teardown, not a user quit,
 // so the host terminates without running the app's quit guards.
 FOUNDATION_EXPORT BOOL SparkTestDriverEnding(void);
+
+// Driver commands owned by optional modules, which the driver itself cannot link. Handlers run on the main thread
+// and must call `reply` exactly once with {"ok": true, ...} or
+// {"ok": false, "error": {"code", "message"}}. Built-in commands cannot be replaced.
+typedef void (^SparkTestDriverReply)(NSDictionary *reply);
+typedef void (^SparkTestDriverHandler)(NSDictionary *request, SparkTestDriverReply reply);
+FOUNDATION_EXPORT void SparkTestDriverRegisterCommand(NSString *name, SparkTestDriverHandler handler);

@@ -16,6 +16,7 @@ export class FakeDriver implements DriverClient {
   constructor(private readonly log: string[], private readonly views: Record<string, number>) {}
 
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
+  async openFile(file: string) { this.log.push(`openFile ${file}`); }
   async waitFor(testID: string, timeoutMs?: number) {
     this.log.push(`waitFor ${testID} ${timeoutMs}`);
     this.waits++;
@@ -39,9 +40,13 @@ export class FakeApp implements DriverApp {
   readonly drivers: FakeDriver[] = [];
   constructor(private readonly views: Record<string, number> = {}, private readonly bundleId = "so.legend.spark.examples.kitchensink") {}
 
+  readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
+
   async open() { this.log.push("open"); return { app: "/Apps/KitchenSink.app", bundleId: this.bundleId }; }
-  async launch(options: { locale?: string; log: ProcessLog }) {
-    this.log.push(`launch locale=${options.locale ?? "-"} log=${path.basename(options.log.file)}`);
+  async clearState() { this.log.push("clearState"); return ["defaults:so.legend.spark.examples.kitchensink"]; }
+  async launch(options: { locale?: string; arguments: readonly string[]; env: Readonly<Record<string, string>>; log: ProcessLog }) {
+    const extra = [...(options.arguments.length ? [`args=${options.arguments.join(" ")}`] : []), ...(Object.keys(options.env).length ? [`env=${JSON.stringify(options.env)}`] : [])];
+    this.log.push([`launch locale=${options.locale ?? "-"}`, ...extra, `log=${path.basename(options.log.file)}`].join(" "));
     writeFileSync(options.log.file, "app log");
     const driver = new FakeDriver(this.log, this.views);
     this.drivers.push(driver);

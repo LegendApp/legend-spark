@@ -326,7 +326,7 @@ fails with `invalid`.
 
 | Flow | Driver |
 |---|---|
-| `launchApp` | Quits a running app, then launches in driver mode. With `stopApp: false` and the app running, it only delivers `openUrl`. `openUrl` uses `navigate` (the OS deep-link path, once the first render settles). Other keys (`clearState`, `arguments`, `env`, `openFile`, `appId`, `from`) are `unsupported`. |
+| `launchApp` | Quits a running app, deletes its state for `clearState: true` ([clearState](#clearstate)), then launches in driver mode with the flow's `arguments` (after the driver's own) and `env`. Then it delivers `openUrl` with `navigate` and `openFile` with `openFile`, both through `application:openURLs:` once the first render settles. With `stopApp: false` and the app running, it only delivers `openUrl` and `openFile`; `clearState`, `arguments` and `env` there are `invalid`. `openFile` must be an absolute path to an existing file (`invalid` otherwise). The driver reserves `SPARK_TEST_DRIVER_DIR` and `SPARK_BUNDLE_URL` in `env`, `-RCT_jsLocation` in `arguments`, and `-AppleLanguages`/`-AppleLocale` when the matrix sets `locale`; a flow that sets one is `invalid`. `appId` and `from` are `unsupported`. |
 | `stopApp`, end of flow | `quit`: the app's normal termination path |
 | `id` selectors (visibility checks, mask selectors) | `waitFor` with no wait, polled by the runner; at most the first visible match in any window. Other selector keys and `within` are `unsupported`. |
 | matrix `appearance` | `setAppAppearance` after each launch (the app override; the OS setting is untouched) |
@@ -335,12 +335,54 @@ fails with `invalid`.
 | `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window. Element frames are points from the window's top-left, the capture's origin, so masks line up. The `window` key is `unsupported` (the driver cannot list windows). |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
 
+#### clearState
+
+`launchApp: { clearState: true }` (`scripts/e2e/app-state.ts`) deletes what a macOS Spark app
+persists, after the app has quit and before it launches. Every location below was found in
+the Spark, React Native and React Native WebView code; `<bundle id>` is the app's
+`CFBundleIdentifier` and `<namespace>` is `SparkNamespace()`, `spark.desktop.` plus the SHA-256
+of `SparkProjectIdentifier` (the bundle identifier when that is absent). `$TMPDIR` is the app's
+`NSTemporaryDirectory()` (`getconf DARWIN_USER_TEMP_DIR`).
+
+| Deleted | What lives there |
+|---|---|
+| `defaults delete <bundle id>` | Everything in `NSUserDefaults`: main and child window frames (`NSWindow Frame <namespace>.main`, `<namespace>.bounds.<id>`), the Spark recent-documents list, window-manager options, Sparkle's skipped versions and settings, React Native dev settings |
+| `~/Library/Application Support/<namespace>` | `settings`, file-system `data`, SQLite databases |
+| `~/Library/Application Support/<bundle id>` | React Native AsyncStorage |
+| `~/Library/Caches/<namespace>`, `~/Library/Caches/<bundle id>` | file-system `cache`; `NSURLCache`, Sparkle downloads, WebKit caches |
+| `~/Library/HTTPStorages/<bundle id>`, `<bundle id>.binarycookies` there and in `~/Library/Cookies` | `NSURLSession` cookies and HSTS |
+| `~/Library/WebKit/<bundle id>` | WebView website data (`WKWebsiteDataStore.defaultDataStore`) |
+| `~/Library/Saved Application State/<bundle id>.savedState` | AppKit window restoration |
+| `$TMPDIR/<namespace>`, `$TMPDIR/<namespace>.setup`, `.lock`, `.sock` | file-system `temp`; the single-instance lock and socket |
+| `$TMPDIR/legend-codex-workspace/codex-home-<bundle id>` | the codex package's `CODEX_HOME` (a linked `auth.json` is unlinked, never followed) |
+
+Each run writes what existed to `clear-state-<launch>.log` in the flow's backend directory.
+
+Not deleted:
+
+- **Keychain** (`@legendapp/spark/secure-storage`, service `<namespace>`). Only the app is in
+  the items' access list, so deleting them with `security` from the runner can raise a Keychain
+  prompt, and driver runs never show UI. A flow that needs empty secure storage removes its keys in the app.
+- **AppKit's recent documents** (`com.apple.sharedfilelist`): macOS denies access to it.
+- **Delivered notifications**: the notification center owns them.
+
+It refuses, before deleting anything, when the bundle identifier is not reverse-DNS (or is
+`com.apple.*`), is not the gate manifest's `appId`, the project identifier is empty, the app is
+sandboxed (its state is in `~/Library/Containers/<bundle id>`, which needs a permission that
+would prompt), or any process of the app is running (`lsappinfo`). `defaults delete` goes
+through `cfprefsd`, so a quit app cannot write a cached domain back. Nothing is globbed.
+`e2e/flows/infra/launch-state.yaml` checks it end to end: a setting (Application Support) and
+a recent document (the defaults domain) saved by one launch are found by the next and gone after
+`clearState`. Window frames never persist in driver mode ([docs/test-driver.md](test-driver.md#focus-and-window-state)),
+with or without `clearState`.
+
 Everything else is `unsupported`, never skipped: black-box commands (input, menus,
 windows, OS state) need [#50](https://github.com/LegendApp/legend-spark/issues/50), and
 the other driver commands (motion and virtual clock, `assertStartup` and other
 performance commands, `assertState`) are not in the driver protocol yet.
 `tests/e2e-driver-backend.test.ts` covers the mapping with a fake driver
-(`tests/e2e-driver-fake.ts`); `e2e/flows/infra/catalog-driver.yaml` runs it end to end.
+(`tests/e2e-driver-fake.ts`) and `tests/e2e-app-state.test.ts` covers clearState;
+`e2e/flows/infra/catalog-driver.yaml` and `e2e/flows/infra/launch-state.yaml` run it end to end.
 
 ## Visual goldens
 

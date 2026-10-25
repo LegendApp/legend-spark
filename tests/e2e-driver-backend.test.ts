@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -32,6 +32,32 @@ describe("command mapping", () => {
     const { result, app } = await run('- launchApp\n- launchApp: { openUrl: "spark-ks://a/b", stopApp: false }\n- launchApp: { stopApp: true }\n- stopApp');
     expect(result.status).toBe("passed");
     expect(app.log).toEqual(["open", "launch locale=- log=app-1.log", "navigate spark-ks://a/b", "quit", "close", "launch locale=- log=app-2.log", "quit", "close", "app close"]);
+  });
+
+  test("clearState deletes the app's state after the running app quits and before the next launch", async () => {
+    const { result, app, dir } = await run("- launchApp: { clearState: true }\n- launchApp: { clearState: true }\n- launchApp: { clearState: false }");
+    expect(result.status).toBe("passed");
+    const logs = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter(file => path.basename(file).startsWith("clear-state-")).sort();
+    expect(logs.map(file => path.basename(file))).toEqual(["clear-state-1.log", "clear-state-2.log"]);
+    expect(readFileSync(path.join(dir, logs[0]!), "utf8")).toBe("defaults:so.legend.spark.examples.kitchensink\n");
+    expect(app.log).toEqual([
+      "open", "clearState", "launch locale=- log=app-1.log", "quit", "close", "clearState", "launch locale=- log=app-2.log", "quit", "close",
+      "launch locale=- log=app-3.log", "quit", "close", "app close",
+    ]);
+  });
+
+  test("arguments follow the driver's own and env is passed through, per launch", async () => {
+    const { result, app } = await run('- launchApp: { arguments: ["--spark-safe-mode", "-AppleLanguages", "(fr)"], env: { KS_MODE: "a b" } }\n- launchApp');
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.startsWith("launch"))).toEqual(['launch locale=- args=--spark-safe-mode -AppleLanguages (fr) env={"KS_MODE":"a b"} log=app-1.log', "launch locale=- log=app-2.log"]);
+  });
+
+  test("openFile is delivered after openUrl, once the app runs", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "e2e-driver-file-")), file = path.join(dir, "notes.md");
+    writeFileSync(file, "# Notes");
+    const { result, app } = await run(`- launchApp: { openUrl: "spark-ks://a/b", openFile: "${file}" }\n- launchApp: { openFile: "${file}", stopApp: false }`);
+    expect(result.status).toBe("passed");
+    expect(app.log).toEqual(["open", "launch locale=- log=app-1.log", "navigate spark-ks://a/b", `openFile ${file}`, `openFile ${file}`, "quit", "close", "app close"]);
   });
 
   test("id selectors query waitFor in-process without waiting, and the runner polls", async () => {
@@ -79,11 +105,24 @@ describe("unsupported and invalid", () => {
     ["- assertStartup: { coldMs: { max: 900 } }", "assertStartup is not supported by backend driver"],
     ["- assertVisible: Save", "backend driver cannot select by text"],
     ["- assertVisible: { id: row, within: { id: list } }", "backend driver cannot select within an element"],
-    ["- launchApp: { clearState: true }", "launchApp clearState is not supported by backend driver"],
+    ["- launchApp: { appId: com.example.other, from: dock }", "launchApp appId, from is not supported by backend driver"],
   ])("%s fails as unsupported", async (command, message) => {
     const views = { list: 1, row: 1 };
     const { result } = await run(`- launchApp\n${command}`, new FakeApp(views));
     expect(result.failure).toMatchObject({ kind: "unsupported", message });
+  });
+
+  test.each([
+    ['- launchApp: { arguments: ["-RCT_jsLocation", "example.com:80"] }', "", "launchApp -RCT_jsLocation is reserved by backend driver"],
+    ['- launchApp: { env: { SPARK_BUNDLE_URL: "http://example.com", SPARK_TEST_DRIVER_DIR: /tmp } }', "", "launchApp SPARK_BUNDLE_URL, SPARK_TEST_DRIVER_DIR are reserved by backend driver"],
+    ['- launchApp: { arguments: ["-AppleLanguages", "(fr)"] }', "matrix:\n  locale: [ar]\n", "launchApp -AppleLanguages is reserved by backend driver"],
+    ["- launchApp: { openFile: notes.md }", "", "launchApp openFile notes.md is not an absolute path to an existing file"],
+    ["- launchApp: { openFile: /nonexistent/notes.md }", "", "launchApp openFile /nonexistent/notes.md is not an absolute path to an existing file"],
+    ["- launchApp\n- launchApp: { stopApp: false, clearState: true, env: { A: b } }", "", "launchApp clearState, env need a new launch, but stopApp: false keeps the running app"],
+  ])("%s is invalid before anything launches", async (commands, header, message) => {
+    const { result, app } = await run(commands, new FakeApp(), header);
+    expect(result.failure).toMatchObject({ kind: "invalid", message });
+    expect(app.log.filter(line => line.startsWith("launch") || line === "clearState")).toEqual(commands.startsWith("- launchApp\n") ? ["launch locale=- log=app-1.log"] : []);
   });
 
   test("a matrix dimension the driver does not apply is unsupported", async () => {
