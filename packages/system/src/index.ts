@@ -17,9 +17,28 @@ export interface DockMenuOptions { items: readonly DockMenuItem[]; onAction: (ev
 export interface TaskbarMenuOptions { items: readonly TaskbarMenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
 /** Determinate progress has a completed fraction from 0 to 1; paused and error tint the bar. */
 export type AppProgress = { state: "indeterminate" } | { state: "normal" | "paused" | "error"; value: number };
-export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu";
+export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu" | "appearancePreferences";
 export interface SystemInfo { osVersion: string; architecture: string; locale: string; dark: boolean; idleSeconds: number; onBattery: boolean; batteryLevel: number | null }
-export type SystemEvent = { type: "sleep" | "wake" | "lock" | "unlock" | "powerChanged" | "appearanceChanged" | "displaysChanged" };
+/** The user's appearance and accessibility display settings (macOS). Colors are sRGB `#rrggbb`. */
+export interface AppearancePreferences {
+  /** System Settings > Appearance. The app can still render otherwise: see getSystemInfo().dark for its effective appearance. */
+  appearance: "light" | "dark";
+  /** Appearance is Auto: it follows the time of day. */
+  automaticAppearance: boolean;
+  /** The accent color controls use, in the app's effective appearance. */
+  accentColor: string;
+  /** The text selection (highlight) color, in the app's effective appearance. */
+  highlightColor: string;
+  increaseContrast: boolean;
+  reduceTransparency: boolean;
+  reduceMotion: boolean;
+  differentiateWithoutColor: boolean;
+  invertColors: boolean;
+  /** Keyboard navigation (System Settings > Keyboard), which moves focus between all controls. It has no change event. */
+  keyboardNavigation: boolean;
+}
+/** Invalidations: query getSystemInfo() or getAppearancePreferences() again for current values. `systemColorsChanged` and `accessibilityDisplayChanged` are macOS-only. */
+export type SystemEvent = { type: "sleep" | "wake" | "lock" | "unlock" | "powerChanged" | "appearanceChanged" | "displaysChanged" | "systemColorsChanged" | "accessibilityDisplayChanged" };
 export type LoginItemStatus = "enabled" | "disabled" | "requiresApproval" | "notFound" | "unavailable";
 export interface AttentionOptions { kind?: "informational" | "critical" }
 export interface PreventSleepOptions { reason: string; kind?: "display" | "system" }
@@ -28,6 +47,8 @@ const token = () => `system-${Date.now()}-${++sequence}`;
 const FEATURES: Record<SystemFeature, readonly string[]> = {
   appBadge: ["macos", "windows"], appProgress: ["macos"], attention: ["macos", "windows"],
   dockMenu: ["macos"], taskbarMenu: ["windows"],
+  // Windows appearance preferences are #342.
+  appearancePreferences: ["macos"],
 };
 /** Without a feature, whether the system module is usable at all. */
 export function getSystemAvailability(feature?: SystemFeature): Availability {
@@ -52,6 +73,20 @@ function isInfo(value: unknown): value is SystemInfo {
   return [info.osVersion, info.architecture, info.locale].every(value => typeof value === "string" && value.length > 0) && typeof info.dark === "boolean" && typeof info.onBattery === "boolean" && Number.isFinite(info.idleSeconds) && info.idleSeconds >= 0 && (info.batteryLevel === null || (typeof info.batteryLevel === "number" && Number.isFinite(info.batteryLevel) && info.batteryLevel >= 0 && info.batteryLevel <= 1));
 }
 export function getSystemInfo(): Promise<SystemInfo> { return call("info", {}, isInfo); }
+const HEX = /^#[0-9a-f]{6}$/;
+const PREFERENCE_FLAGS = ["automaticAppearance", "increaseContrast", "reduceTransparency", "reduceMotion", "differentiateWithoutColor", "invertColors", "keyboardNavigation"] as const;
+function isPreferences(value: unknown): value is AppearancePreferences {
+  if (!value || typeof value !== "object") return false;
+  const preferences = value as AppearancePreferences;
+  return (preferences.appearance === "light" || preferences.appearance === "dark") && HEX.test(preferences.accentColor) && HEX.test(preferences.highlightColor)
+    && PREFERENCE_FLAGS.every(key => typeof preferences[key] === "boolean");
+}
+/** The user's appearance and accessibility display settings (macOS). `systemColorsChanged`, `accessibilityDisplayChanged` and `appearanceChanged` invalidate them. */
+export async function getAppearancePreferences(): Promise<AppearancePreferences> {
+  const available = getSystemAvailability("appearancePreferences");
+  if (!available.available) throw new SparkError(available.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", "Appearance preferences are unavailable");
+  return call("preferences", {}, isPreferences);
+}
 export function getLoginItemStatus(): Promise<LoginItemStatus> { return call("loginStatus", {}, (value): value is LoginItemStatus => typeof value === "string" && ["enabled", "disabled", "requiresApproval", "notFound", "unavailable"].includes(value)); }
 export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
   if (typeof enabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected enabled boolean");
@@ -115,7 +150,7 @@ export function createDockMenu(options: DockMenuOptions): Promise<AsyncRegistrat
 export function createTaskbarMenu(options: TaskbarMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "windows"); }
 export async function onSystemEvent(handler: (event: SystemEvent) => void): Promise<AsyncRegistration> {
   if (typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected system event handler");
-  const types: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "powerChanged", "appearanceChanged", "displaysChanged"];
+  const types: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "powerChanged", "appearanceChanged", "displaysChanged", "systemColorsChanged", "accessibilityDisplayChanged"];
   const id = token(); let stopped = false;
   const subscription = onDesktopEvent(event => { if (!stopped && types.includes(event.type as SystemEvent["type"])) handler({ type: event.type as SystemEvent["type"] }); }, { types });
   try { await command("observe", { id }); } catch (error) { subscription.remove(); throw error; }

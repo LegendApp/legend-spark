@@ -487,6 +487,7 @@
   ],
   "./system": [
     "AppProgress",
+    "AppearancePreferences",
     "AsyncRegistration",
     "AttentionOptions",
     "DockMenuItem",
@@ -500,6 +501,7 @@
     "TaskbarMenuOptions",
     "createDockMenu",
     "createTaskbarMenu",
+    "getAppearancePreferences",
     "getLoginItemStatus",
     "getSystemAvailability",
     "getSystemInfo",

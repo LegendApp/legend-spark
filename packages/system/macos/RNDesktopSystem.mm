@@ -1,6 +1,7 @@
 #import "RNDesktopSystem.h"
 #import <RNDesktopApp/SparkDesktop.h>
 #import "SparkDockTile.h"
+#import "SparkAppearancePreferences.h"
 #import <ServiceManagement/ServiceManagement.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <IOKit/ps/IOPowerSources.h>
@@ -43,7 +44,9 @@ RCT_EXPORT_MODULE(NativeDesktopSystem)
     @[NSDistributedNotificationCenter.defaultCenter, @"com.apple.screenIsLocked", @"lock"],
     @[NSDistributedNotificationCenter.defaultCenter, @"com.apple.screenIsUnlocked", @"unlock"],
     @[NSDistributedNotificationCenter.defaultCenter, @"AppleInterfaceThemeChangedNotification", @"appearanceChanged"],
-    @[NSNotificationCenter.defaultCenter, NSApplicationDidChangeScreenParametersNotification, @"displaysChanged"]
+    @[NSNotificationCenter.defaultCenter, NSApplicationDidChangeScreenParametersNotification, @"displaysChanged"],
+    @[NSNotificationCenter.defaultCenter, NSSystemColorsDidChangeNotification, @"systemColorsChanged"],
+    @[NSWorkspace.sharedWorkspace.notificationCenter, NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification, @"accessibilityDisplayChanged"]
   ];
   for (NSArray *definition in definitions) {
     NSNotificationCenter *center = definition[0]; NSString *type = definition[2];
@@ -89,6 +92,11 @@ RCT_EXPORT_MODULE(NativeDesktopSystem)
         @"dark": @([[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]] isEqual:NSAppearanceNameDarkAqua]),
         @"idleSeconds": @(CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateCombinedSessionState, kCGAnyInputEventType)) }];
       resolve(SparkJSON(value)); return;
+    }
+    if ([method isEqual:@"preferences"]) {
+      NSString *error; NSDictionary *preferences = SparkAppearancePreferences(&error);
+      if (preferences) resolve(SparkJSON(preferences)); else reject(@"E_NATIVE", error, nil);
+      return;
     }
     if ([method isEqual:@"observe"]) { [self.subscriptions addObject:args[@"id"]]; [self observe]; }
     else if ([method isEqual:@"unobserve"]) { [self.subscriptions removeObject:args[@"id"]]; if (!self.subscriptions.count) [self stopObserving]; }
