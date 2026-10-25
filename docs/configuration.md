@@ -35,6 +35,11 @@ limits. AppKit content background materials are explicitly
 `window.macos.titleBar.trafficLights`. Private flat native transport fields are not
 accepted in public configuration.
 
+`macos.testDriverInRelease: true` compiles the in-app test driver into release builds too; Debug
+builds always have it. It is off by default, and `spark build` then fails a release build that contains
+driver code. Turn it on only for apps that the release gate drives and that are never distributed, such as
+the Kitchen Sink ([test driver](test-driver.md#builds)).
+
 Spark owns project identity, initial window settings, document associations,
 update signing, helper bundles and desktop lifecycle policy. Expo owns its plugins
 and mobile/web settings: put those under `expo`, or `expoByPlatform.<target>`.

@@ -1,4 +1,5 @@
 #import "SparkDesktop.h"
+#import "SparkTestDriver.h"
 #import <objc/runtime.h>
 static char optionsKey;
 NSDictionary *SparkWindowConfiguration(void) {
@@ -74,7 +75,8 @@ void SparkApplyWindowOptions(NSWindow *window, NSDictionary *patch) {
 }
 void SparkRestoreWindow(NSWindow *window, NSString *key, NSDictionary *options) {
   [window center];
-  if ([options[@"restoreFrame"] boolValue]) {
+  // Driver mode neither reads nor saves the frame, so every driven launch starts at the configured size whatever earlier launches saved.
+  if ([options[@"restoreFrame"] boolValue] && !SparkTestDriverActive()) {
     NSString *name = [NSString stringWithFormat:@"%@.%@", SparkNamespace(), key];
     [window setFrameUsingName:name]; [window setFrameAutosaveName:name];
     // Restored dimensions respect current constraints, rather than overriding them.

@@ -1,0 +1,5 @@
+area: zoom
+prefix: WIN
+checks:
+  WIN-OPEN-01:
+    title: Registered again in another area

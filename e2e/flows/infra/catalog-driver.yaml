@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Catalog and a deep-linked screen through the in-app driver
+intent: >
+  The Kitchen Sink launches in driver mode to the catalog: infra-shell-root and its All screens row
+  (infra-shell-catalog) render, and the window matches the approved catalog golden with the build
+  subtitle (dev or release, project ID) masked. Opening spark-ks://native-controls/glass in the
+  running app routes to Native controls > Glass, whose root (native-controls-glass-root)
+  renders, and the window is captured. Runs in light and dark, in English.
+checks: [INFRA-DRIVER-01, INFRA-DRIVER-02]
+tags: [infra]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en]
+---
+- launchApp
+- assertVisible: { id: infra-shell-root }
+- assertVisible: { id: infra-shell-catalog }
+- assertScreenshot: { golden: infra-shell-catalog, mask: [{ id: infra-shell-subtitle }] }
+- launchApp: { openUrl: "spark-ks://native-controls/glass", stopApp: false }
+- assertVisible: { id: native-controls-glass-root }
+- takeScreenshot: native-controls-glass

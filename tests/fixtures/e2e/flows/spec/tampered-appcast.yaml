@@ -1,0 +1,9 @@
+appId: so.legend.kitchensink
+name: Tampered appcast is rejected
+checks: [UPD-SIG-02]
+---
+- serveAppcast: { fixture: appcast/tampered-signature.xml }
+- launchApp
+- selectMenu: "Kitchen Sink > Check for Updates…"
+- assertDialog: { text: "/couldn.t be verified/" }
+- assertFile: { path: "${APP_PATH}", unchanged: true }

@@ -3,6 +3,7 @@
 #import "SparkWindowGeometry.h"
 #import <objc/runtime.h>
 #import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkTestDriver.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <React/RCTSurfaceHostingView.h>
 
@@ -247,7 +248,9 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if ([args[@"modal"] boolValue] && parent.attachedSheet) { reject(@"E_BUSY", @"Parent already has a sheet", nil); return; }
       window.minSize = NSMakeSize(100, 100); window.maxSize = NSMakeSize(20000, 20000);
       if (!ApplyCommon(window, args, reject)) return;
-      NSDictionary *saved = [args[@"restoreBounds"] boolValue] ? [NSUserDefaults.standardUserDefaults dictionaryForKey:[NSString stringWithFormat:@"%@.bounds.%@", SparkNamespace(), key]] : nil;
+      // Driver mode neither reads nor saves bounds: every driven launch opens windows at their configured size.
+      BOOL restoreBounds = [args[@"restoreBounds"] boolValue] && !SparkTestDriverActive();
+      NSDictionary *saved = restoreBounds ? [NSUserDefaults.standardUserDefaults dictionaryForKey:[NSString stringWithFormat:@"%@.bounds.%@", SparkNamespace(), key]] : nil;
       if (![saved[@"version"] isEqual:@1]) saved = nil;
       BOOL restoredShell = [objc_getAssociatedObject(window, NSSelectorFromString(@"sparkRestoredShell")) boolValue];
       if (!saved && restoredShell) {
@@ -267,7 +270,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
         frame = SparkAppKitFrame(bounds, screen.frame);
         if (!args[@"position"]) frame = [window constrainFrameRect:frame toScreen:screen];
       }
-      [window setFrame:frame display:NO]; delegate.restoreBounds = [args[@"restoreBounds"] boolValue];
+      [window setFrame:frame display:NO]; delegate.restoreBounds = restoreBounds;
       if (parent && ![args[@"modal"] boolValue]) [parent addChildWindow:window ordered:NSWindowAbove];
       objc_setAssociatedObject(window, @selector(call:args:resolve:reject:), [args copy], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
       if (![args[@"show"] isEqual:@NO]) {

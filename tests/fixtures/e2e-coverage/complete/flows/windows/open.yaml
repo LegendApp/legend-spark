@@ -1,0 +1,7 @@
+appId: so.legend.kitchensink
+name: Open a second window
+checks: [WIN-OPEN-01, WIN-AVAIL-01]
+---
+- launchApp
+- openWindow
+- assertWindow: { count: 2 }

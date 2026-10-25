@@ -99,6 +99,10 @@ const testIdentity = `spark.native-tests.${crypto.randomUUID()}`;
 const configFile = path.join(root, existsSync(path.join(root, "desktop.config.json")) ? "desktop.config.json" : "app.json");
 const originalConfig = readFileSync(configFile, "utf8");
 const originalApp = readFileSync(path.join(root, "App.tsx"), "utf8");
+const originalIndex = readFileSync(path.join(root, "index.ts"), "utf8");
+// The app controller's menus, windows, shortcuts and links would keep their packages in the reduced app.
+const reducedIndex = originalIndex.replace(/^(?:.*\/\/.*\n)?.*startAppController\(\);\n/m, "");
+if (reducedIndex === originalIndex) throw new Error("Kitchen Sink index.ts no longer starts the app controller; update the reduced app");
 try {
   await waitFor(async () => fetch(`http://127.0.0.1:${port}/status`).then(response => response.ok ? true : undefined, () => undefined), 60000, "Metro startup");
   const first = await execute(go.app, "go-project-a", `${testIdentity}.a`, ["--spark-isolation-expect", "absent"]);
@@ -109,6 +113,7 @@ try {
   await run(root, managerCommand(packageManager(root), ["install"]));
   writeFileSync(path.join(root, "test-driver.ts"), 'export type TestDriver = { call(method: string, args: string): Promise<string> };\nexport const testDriver: TestDriver | undefined = undefined;\n');
   writeFileSync(path.join(root, "App.tsx"), reducedApp);
+  writeFileSync(path.join(root, "index.ts"), reducedIndex);
   const preview = await build(root, "preview");
   for (const name of ["native-menu", "context-menu", "desktop-windows", "desktop-shortcuts", "desktop-links", "file-dialog", "secure-storage", "notifications", "tray", "updates", "processes", "global-shortcuts", "system", "message-dialog", "drag-drop"]) {
     if (preview.runtime.modules[name === "desktop" ? "@legendapp/spark" : `@legendapp/spark-${name}`]) throw new Error(`Unused native package survived pruning: ${name}`);
@@ -132,6 +137,7 @@ try {
   await execute(preview.app, "reduced", "ignored-in-preview", [], false);
   console.log("PASS [reduced] unused SDK modules, WebView and SQLite removed from binary; retained APIs run");
   writeFileSync(path.join(root, "App.tsx"), originalApp);
+  writeFileSync(path.join(root, "index.ts"), originalIndex);
   pkg = readJson(packageFile);
   pkg.dependencies["@legendapp/spark-sdk-test-driver"] = pkg.overrides["@legendapp/spark-sdk-test-driver"];
   writeJson(packageFile, pkg); await run(root, managerCommand(packageManager(root), ["install"]));
@@ -155,5 +161,6 @@ try {
 } finally {
   appProcess?.kill(); metro.kill(); await metro.exited;
   writeFileSync(path.join(root, "App.tsx"), originalApp);
+  writeFileSync(path.join(root, "index.ts"), originalIndex);
   writeFileSync(configFile, originalConfig); prepareConfig(root);
 }

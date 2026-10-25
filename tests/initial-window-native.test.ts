@@ -6,7 +6,8 @@ import path from "node:path";
 test.skipIf(process.platform !== "darwin")("initial AppKit window options size the outer frame and retain its top edge", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-initial-window-"));
   try {
-    const source = readFileSync("packages/desktop-app/macos/SparkWindow.mm", "utf8").replace('#import "SparkDesktop.h"', `#import <AppKit/AppKit.h>
+    const source = readFileSync("packages/desktop-app/macos/SparkWindow.mm", "utf8").replace('#import "SparkTestDriver.h"', "").replace('#import "SparkDesktop.h"', `#import <AppKit/AppKit.h>
+BOOL SparkTestDriverActive(void) { return NO; }
 NSDictionary *SparkContext(void) { return @{}; }
 NSDictionary *SparkArgs(NSString *json) { return @{}; }
 NSString *SparkNamespace(void) { return @"test"; }`);

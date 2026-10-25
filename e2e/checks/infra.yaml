@@ -1,0 +1,35 @@
+area: infra
+prefix: INFRA
+checks:
+  INFRA-DRIVER-01:
+    title: The in-app driver backend launches the Kitchen Sink without focus, finds the catalog root by testID and matches the catalog golden
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md The driver backend; #226"
+  INFRA-DRIVER-02:
+    title: A spark-ks:// URL opened in the running app arrives as a links "url" event and routes to the screen, whose root renders and is captured
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md The driver backend; #226"
+    covers:
+      - ./links#addEventListener
+  INFRA-DRIVER-03:
+    title: launchApp clearState deletes the app's persisted state before launch (a Spark setting and a recent document in its defaults domain are gone), and a plain relaunch keeps it
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md clearState; #246"
+  INFRA-DRIVER-04:
+    title: launchApp arguments reach the app's launch arguments
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md The driver backend; #246"
+  INFRA-DRIVER-05:
+    title: "launchApp openFile delivers the file to the running app through application:openURLs: as a file open request"
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md The driver backend; #246"
+  INFRA-DRIVER-06:
+    title: A driven launch never restores or saves window frames, so the main window opens at its configured size after an earlier launch resized it
+    platforms: [macos]
+    blocking: true
+    spec: "docs/test-driver.md Focus and window state; #246"

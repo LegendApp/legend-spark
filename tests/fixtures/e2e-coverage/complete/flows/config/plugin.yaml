@@ -1,0 +1,6 @@
+appId: so.legend.kitchensink
+name: Config plugin settings
+checks: [CFG-PLUGIN-01]
+---
+- launchApp
+- assertVisible: { id: config-applied }

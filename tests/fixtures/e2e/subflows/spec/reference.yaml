@@ -1,0 +1,134 @@
+# Every table row and inline example from the spec's command reference. Where the spec uses notation
+# (`a | b`, `{...}`, `[...]`), one concrete value is filled in.
+# Lifecycle
+- launchApp: { clearState: true, arguments: [--safe-mode], env: { MODE: test }, openFile: "${DOC}", openUrl: "spark-ks://route/x", from: finder }
+- launchSecondInstance: { openFile: "${DOC}" }
+- assertSingleInstance
+- quitApp: { via: menu }
+- killApp
+- crashApp: { kind: native }
+- assertCrashRecovery
+- relaunchApp: { preserveState: true }
+- assertAppState: { running: true, active: true, hidden: false, dockIconVisible: true }
+- assertStartup: { coldMs: { max: 800 }, firstPaintMs: { max: 400 } }
+# Windows / multiwindow
+- assertWindow: { count: 2, key: { title: notes.md }, frame: { w: 900, h: 600 }, fullscreen: false, level: floating, edited: true, onDisplay: 1 }
+- openWindow
+- closeWindow: { window: { index: 1 }, via: button }
+- focusWindow: { title: notes.md }
+- resizeWindow: { to: { w: 400, h: 300 }, edge: bottomRight, live: true }
+- moveWindow: { to: { x: 120, y: 80 } }
+- minimizeWindow: { window: key }
+- zoomWindow: { window: key }
+- toggleFullscreen: { window: key }
+- moveToDisplay: { display: 2 }
+- assertScale: 1.5
+- snapWindow: { layout: leftHalf }
+- tearOff: { tab: notes.md, to: "75%,50%" }
+- mergeInto: { tab: notes.md, from: { index: 1 }, to: { index: 0 } }
+- saveWorkspace: { name: writing }
+- restoreWorkspace: { name: writing }
+- assertWindowsRestored: { matchGolden: true }
+- assertGroupMoves: { parent: key, children: [{ type: inspector }] }
+- focusWindow: { type: inspector }
+- focusWindow: { id: main-window }
+- closeWindow: { window: main }
+# Menus
+- selectMenu: "File > Export > PDF…"
+- assertMenuItem: { path: "View > Show Sidebar", enabled: true, checked: true, shortcut: "cmd+ctrl+s" }
+- assertMenuAlternate: { path: "File > Close", modifier: option, becomes: "Close All" }
+- openContextMenu: { on: { id: row-3 }, via: rightClick }
+- selectContextMenu: "Move To > Archive"
+- openDockMenu: { select: "New Window" }
+- openTrayMenu: { select: "New Window" }
+- searchHelpMenu: { query: "sidebar", expectItem: "View > Show Sidebar" }
+# Keyboard & text
+- shortcut: "cmd+shift+s"
+- pressKey: Escape
+- inputText: { text: "héllo 👋🏽", into: { id: title } }
+- typeText: { text: "héllo 👋🏽", into: { id: title } }
+- imeCompose: { layout: japanese-romaji, keys: "nihongo", commit: "日本語" }
+- setKeyboardLayout: azerty
+- holdKey: cmd
+- assertVisible: { id: shortcut-overlay }
+- releaseKey: cmd
+- assertFocused: { id: search }
+- assertFocusOrder: [{ id: a }, { id: b }, { id: c }]
+- selectText: { in: { id: editor }, range: [4, 9] }
+- assertSelection: { in: { id: editor }, range: [4, 9] }
+- assertText: { id: editor, equals: "...", lineEndings: crlf }
+- assertUndo: { steps: 3, then: { equals: "" } }
+# Pointer / trackpad
+- tapOn: { id: row-1 }
+- doubleClickOn: { id: row-1 }
+- tripleClickOn: { id: row-1 }
+- rightClickOn: { id: row-1 }
+- middleClickOn: { id: row-1 }
+- hoverOn: { id: row-1, duration: 800ms }
+- forceClickOn: { id: row-1 }
+- mouseButton: back
+- scroll: { direction: down, amount: 3, precise: true, momentum: true }
+- swipe: { fingers: 2, direction: left }
+- pinch: { scale: 2.0 }
+- rotate: { degrees: 45 }
+- assertCursor: resizeLeftRight
+- assertTooltip: { on: { id: save-button }, text: "Save", within: 1.5s }
+# Notifications / Dock / taskbar / tray
+- assertNotification: { title: "New message", body: "Hello", actions: [Reply, Mark Read] }
+- clickNotification
+- notificationAction: Reply
+- replyToNotification: "ok"
+- assertDockBadge: "3"
+- assertDockProgress: 0.5
+- assertBounce: critical
+- clickDockIcon
+- clickTray: { button: left }
+- assertTrayIcon: { template: true, frame: 2 }
+- assertTaskbar: { progress: 0.5, overlay: badge-3 }
+# Visual
+- takeScreenshot: before
+- assertScreenshot: { golden: editor, window: key, threshold: 0.1%, mask: [{ id: clock }] }
+- startRecording
+- stopRecording: { name: editor-session }
+- assertNoFlicker: { during: { tapOn: { id: toggle-sidebar } } }
+- assertPixelDiff: { a: before, b: after, max: 0 }
+# Accessibility
+- assertA11y: { id: save-button, label: Save, role: button, value: "", hint: "Saves the document" }
+- auditAccessibility: { scope: window, maxErrors: 0 }
+- voiceOver: { enable: true }
+- screenReaderNext
+- assertSpoken: "/Save, button/"
+- assertAnnouncement: "Document saved"
+- assertCustomActions: { id: row-3, actions: [Delete, Archive] }
+- assertKeyboardReachable: { scope: window }
+# i18n
+- assertNoTruncation: { scope: window }
+- assertMirrored: { id: toolbar }
+- assertFormatted: { id: price, equals: "١٬٢٣٤٫٥٠ ج.م." }
+- assertLocalized: { scope: app, includeNative: true }
+# Performance
+- measure: { name: open-doc, run: [{ shortcut: cmd+o }, { assertVisible: { id: editor } }], budget: 200ms }
+- assertMemory: { window: key, maxMB: 120 }
+- assertIdleCpu: { for: 30s, maxPercent: 0.5 }
+- assertNoLeaks: { since: flowStart, repeat: 100, run: [{ shortcut: cmd+n }, { shortcut: cmd+w }] }
+- startTrace: { name: scroll }
+- stopTrace: { name: scroll }
+- assertEnergy: { maxImpact: low }
+# Network / processes / updates fixtures
+- mockNetwork: { route: "https://api.x/*", fixture: fixtures/net/ok.json, latency: 200ms }
+- assertRequest: { url: "https://api.x/items", method: GET, count: 1 }
+- serveAppcast: { fixture: appcast/tampered-signature.xml }
+- assertProcess: { name: sidecar, running: true }
+- killProcess: { name: sidecar }
+# State introspection
+- assertState: { path: "documents.open.length", equals: 2 }
+# Control flow
+- runFlow: { file: subflows/reset-state.yaml, env: { USER: test } }
+- repeat: { times: 3, commands: [{ pressKey: Tab }] }
+- repeat: { while: { visible: { id: spinner } }, commands: [{ pressKey: Escape }] }
+- extendedWaitUntil: { visible: { id: editor }, timeout: 10s }
+- extendedWaitUntil: { notVisible: "Loading…", timeout: 10000 }
+- tapOn: { id: sidebar-toggle, when: { platform: macos, visible: { id: sidebar-toggle } } }
+- runScript: scripts/make-fixtures.js
+# Migration (legend-apps agent-device steps)
+- stopApp

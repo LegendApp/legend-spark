@@ -1,0 +1,5 @@
+appId: so.legend.kitchensink
+name: Not a valid flow
+checks: [UI-CTRL-01]
+---
+- tapOnn: Save
