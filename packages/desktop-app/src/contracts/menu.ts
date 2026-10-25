@@ -67,7 +67,7 @@ export function menuItems(input: readonly MenuInputItem[], support: MenuSupport,
         if ("alternate" in item && item.alternate !== undefined) {
           if (!support.alternates) throw new SparkError("E_UNSUPPORTED_OPTION", "This menu surface does not support alternate items");
           if (typeof item.alternate !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Menu alternate must be boolean");
-          if (item.alternate) result.alternate = true;
+          result.alternate = item.alternate;
         }
         if (item.type === "checkbox" || item.type === "radio") {
           if (item.type === "checkbox" && item.checked === "mixed") {

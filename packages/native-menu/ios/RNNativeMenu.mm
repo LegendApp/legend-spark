@@ -132,7 +132,7 @@ RCT_EXPORT_MODULE(NativeMenu)
     item.keyEquivalent = (modifiers & NSEventModifierFlagShift) && upper.length == 1 ? upper : key;
     item.keyEquivalentModifierMask = modifiers; [self claim:config for:item];
   }
-  // JavaScript guarantees a keyed alternate differs from its primary's modifiers; a keyless pair
+  // A keyed alternate differs from its primary's modifiers; a keyless pair
   // differs by Option, the mask AppKit compares when folding alternates without key equivalents.
   if (config[@"alternate"]) {
     item.alternate = [config[@"alternate"] boolValue];
@@ -150,12 +150,13 @@ RCT_EXPORT_MODULE(NativeMenu)
 - (void)claim:(NSDictionary *)config for:(NSMenuItem *)item {
   NSDictionary *shortcut = config[@"shortcut"];
   if (item.keyEquivalent.length || !NSApp.mainMenu) return;
-  NSMenuItem *holder = KeyHolder(NSApp.mainMenu, KeyIdentity(shortcut[@"key"], [shortcut[@"modifiers"] unsignedIntegerValue]), item);
   NSString *name = config[@"id"] ?: config[@"role"];
-  if (!holder) Fail(@"E_NATIVE", [NSString stringWithFormat:@"AppKit did not apply the shortcut of menu item %@", name]);
-  if ([self.configured containsObject:holder]) Fail(@"E_BUSY", [NSString stringWithFormat:@"Menu item %@ cannot use its shortcut: menu item %@ already has it", name, holder.identifier ?: holder.title]);
-  [self save:holder]; holder.keyEquivalent = @"";
-  if (!item.keyEquivalent.length) Fail(@"E_NATIVE", [NSString stringWithFormat:@"AppKit did not apply the shortcut of menu item %@", name]);
+  while (!item.keyEquivalent.length) {
+    NSMenuItem *holder = KeyHolder(NSApp.mainMenu, KeyIdentity(shortcut[@"key"], [shortcut[@"modifiers"] unsignedIntegerValue]), item);
+    if (!holder) Fail(@"E_NATIVE", [NSString stringWithFormat:@"AppKit did not apply the shortcut of menu item %@", name]);
+    if ([self.configured containsObject:holder]) Fail(@"E_BUSY", [NSString stringWithFormat:@"Menu item %@ cannot use its shortcut: menu item %@ already has it", name, holder.identifier ?: holder.title]);
+    [self save:holder]; holder.keyEquivalent = @"";
+  }
 }
 - (void)observeMenu:(NSMenu *)menu config:(NSDictionary *)config {
   id<NSMenuDelegate> previous = menu.delegate;
@@ -232,6 +233,21 @@ RCT_EXPORT_MODULE(NativeMenu)
     }
   }
 }
+- (void)validateAlternates:(NSMenu *)menu {
+  NSMenuItem *primary = nil;
+  for (NSMenuItem *item in menu.itemArray) {
+    if (item.submenu) [self validateAlternates:item.submenu];
+    if (item.hidden) continue;
+    if (item.alternate && [self.configured containsObject:item]) {
+      if (!primary || primary.separatorItem || primary.submenu || primary.alternate)
+        Fail(@"E_INVALID_ARGUMENT", @"An alternate must directly follow a visible non-alternate command");
+      if (![primary.keyEquivalent.lowercaseString isEqual:item.keyEquivalent.lowercaseString] ||
+          (item.keyEquivalent.length && [KeyIdentity(primary.keyEquivalent, primary.keyEquivalentModifierMask) isEqual:KeyIdentity(item.keyEquivalent, item.keyEquivalentModifierMask)]))
+        Fail(@"E_INVALID_ARGUMENT", @"An alternate must use its primary's shortcut key with different modifiers");
+    }
+    primary = item;
+  }
+}
 - (void)publish:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   RCTExecuteOnMainQueue(^{
     NSError *error = nil; id value = [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&error];
@@ -241,7 +257,7 @@ RCT_EXPORT_MODULE(NativeMenu)
     [self identifyNativeMenus];
     NSArray *previous = self.published;
     [self restore];
-    @try { [self install:value into:NSApp.mainMenu root:YES]; self.published = value; resolve(nil); }
+    @try { [self install:value into:NSApp.mainMenu root:YES]; [self validateAlternates:NSApp.mainMenu]; self.published = value; resolve(nil); }
     @catch (NSException *failure) {
       [self restore];
       @try { [self install:previous into:NSApp.mainMenu root:YES]; }

@@ -30,6 +30,22 @@ test("macOS snapshots alternates, mixed state, hidden items and SF Symbols witho
   await menu.remove();
 });
 
+test("an explicit alternate false survives a second owner's override and removal restores the first owner's declaration", async () => {
+  const { createMenu } = await api();
+  const base = await createMenu({ id: "base", items: root([
+    { type: "action", id: "open", label: "Open", shortcut: "Cmd+O" },
+    { type: "action", id: "alternate", label: "Open All", alternate: true, shortcut: "Cmd+Alt+O" },
+  ]) });
+  const overlay = await createMenu({ id: "overlay", items: root([
+    { type: "action", id: "alternate", label: "Ordinary", alternate: false },
+  ]) });
+  expect(wire()[1].items[0]).toMatchObject({ id: "alternate", alternate: false });
+  await overlay.remove();
+  expect(wire()).toHaveLength(1);
+  expect(wire()[0].items[1]).toMatchObject({ id: "alternate", alternate: true });
+  await base.remove();
+});
+
 test("Help search registers a semantic root independently of its translated label", async () => {
   const { createMenu } = await api();
   const menu = await createMenu({ id: "help", items: [{ type: "submenu", id: "help", label: "مساعدة", target: { menu: "help" }, items: [] }] });

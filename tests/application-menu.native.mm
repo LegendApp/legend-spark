@@ -67,6 +67,35 @@ int main() { @autoreleasepool {
   tools = Find(main, @{ @"id": @"tools" }, NO);
   Check([tools.submenu.itemArray.firstObject.title isEqual:@"Run"], @"Overlay removal did not restore base");
   Check(!Publish(module, @[]), @"Base removal failed"); Check(main.numberOfItems == 2, @"Created root leaked");
+  NSDictionary *primaryCommand = @{ @"id": @"primary-command", @"title": @"Primary command", @"shortcut": @{ @"key": @"p", @"modifiers": @(NSEventModifierFlagCommand) }, @"_sparkOwner": @"pair-owner" };
+  NSDictionary *alternateCommand = @{ @"id": @"alternate-command", @"title": @"Alternate command", @"alternate": @YES, @"shortcut": @{ @"key": @"p", @"modifiers": @(NSEventModifierFlagCommand | NSEventModifierFlagOption) }, @"_sparkOwner": @"pair-owner" };
+  NSDictionary *pair = @{ @"id": @"pair", @"title": @"Pair", @"items": @[primaryCommand, alternateCommand], @"_sparkOwner": @"pair-owner" };
+  Check(!Publish(module, @[pair]), @"Alternate pair failed to publish");
+  NSDictionary *ordinaryOverride = @{ @"id": @"pair", @"title": @"Pair", @"items": @[@{ @"id": @"alternate-command", @"title": @"Ordinary override", @"alternate": @NO, @"_sparkOwner": @"overlay-owner" }], @"_sparkOwner": @"overlay-owner" };
+  Check(!Publish(module, @[pair, ordinaryOverride]), @"Explicit false overlay failed");
+  Check(!Find(main, @{ @"id": @"alternate-command" }, YES).alternate, @"Explicit false did not reset the earlier owner's alternate");
+  Check(!Publish(module, @[pair]), @"Explicit false overlay removal failed");
+  Check(Find(main, @{ @"id": @"alternate-command" }, YES).alternate, @"Overlay removal did not restore the earlier alternate");
+  NSArray *invalidChanges = @[
+    @{ @"id": @"inserted", @"title": @"Inserted", @"placement": @{ @"after": @{ @"id": @"primary-command" } }, @"_sparkOwner": @"overlay-owner" },
+    @{ @"id": @"hide-primary", @"title": @"Hidden primary", @"target": @{ @"id": @"primary-command" }, @"hidden": @YES, @"_sparkOwner": @"overlay-owner" },
+    @{ @"id": @"primary-command", @"title": @"Replaced primary", @"shortcut": @{ @"key": @"r", @"modifiers": @(NSEventModifierFlagCommand) }, @"_sparkOwner": @"overlay-owner" },
+    @{ @"id": @"alternate-command", @"title": @"Duplicate modifiers", @"shortcut": @{ @"key": @"p", @"modifiers": @(NSEventModifierFlagCommand) }, @"_sparkOwner": @"overlay-owner" },
+    @{ @"id": @"alternate-command", @"title": @"Moved alternate", @"placement": @{ @"before": @{ @"id": @"primary-command" } }, @"_sparkOwner": @"overlay-owner" }
+  ];
+  for (NSDictionary *change in invalidChanges) {
+    NSMutableDictionary *overlay = pair.mutableCopy; overlay[@"items"] = @[change]; overlay[@"_sparkOwner"] = @"overlay-owner";
+    Check([Publish(module, @[pair, overlay]) isEqual:@"E_INVALID_ARGUMENT"], @"An overlay that broke the final alternate pair was accepted");
+    NSMenuItem *restoredPrimary = Find(main, @{ @"id": @"primary-command" }, YES), *restoredAlternate = Find(main, @{ @"id": @"alternate-command" }, YES);
+    Check(restoredPrimary.menu.numberOfItems == 2 && !restoredPrimary.hidden && [restoredPrimary.keyEquivalent isEqual:@"p"] && restoredAlternate.alternate && [restoredPrimary.menu indexOfItem:restoredAlternate] == 1, @"Rejected alternate overlay did not restore the prior pair");
+    CapturedEvent = nil; [module selected:restoredPrimary];
+    Check([CapturedEvent[@"ownerId"] isEqual:@"pair-owner"], @"Alternate rollback lost the original action owner");
+  }
+  NSMutableDictionary *placedPair = pair.mutableCopy;
+  placedPair[@"items"] = @[primaryCommand, alternateCommand, invalidChanges[0]];
+  Check([Publish(module, @[placedPair]) isEqual:@"E_INVALID_ARGUMENT"], @"Declaration order hid an invalid final placement");
+  Check(Find(main, @{ @"id": @"primary-command" }, YES).menu.numberOfItems == 2, @"Rejected single-owner placement did not restore the pair");
+  Check(!Publish(module, @[]), @"Alternate pair cleanup failed");
   OriginalMenuDelegate *originalDelegate = [OriginalMenuDelegate new];
   edit.submenu.delegate = originalDelegate;
   BOOL originalAlternate = copy.alternate, originalHidden = copy.hidden;
@@ -75,9 +104,9 @@ int main() { @autoreleasepool {
   NSEventModifierFlags originalModifiers = copy.keyEquivalentModifierMask;
   NSDictionary *features = @{ @"id": @"features", @"title": @"Features", @"target": @{ @"menu": @"edit" }, @"_sparkOwner": @"features-owner", @"_sparkLifecycle": @YES, @"items": @[
     @{ @"id": @"copy-state", @"title": @"Copy state", @"target": @{ @"role": @"copy" }, @"alternate": @YES, @"mixed": @YES, @"hidden": @YES, @"systemImageName": @"star", @"_sparkOwner": @"features-owner" },
-    @{ @"id": @"primary", @"title": @"Primary", @"_sparkOwner": @"features-owner" },
     @{ @"id": @"keyed", @"title": @"Keyed", @"shortcut": @{ @"key": @"k", @"modifiers": @(NSEventModifierFlagCommand) }, @"_sparkOwner": @"features-owner" },
     @{ @"id": @"alternate", @"title": @"Alternate", @"alternate": @YES, @"shortcut": @{ @"key": @"k", @"modifiers": @(NSEventModifierFlagCommand | NSEventModifierFlagShift) }, @"_sparkOwner": @"features-owner" },
+    @{ @"id": @"primary", @"title": @"Primary", @"_sparkOwner": @"features-owner" },
     @{ @"id": @"keyless-alternate", @"title": @"Keyless alternate", @"alternate": @YES, @"_sparkOwner": @"features-owner" },
     @{ @"id": @"mixed", @"title": @"Mixed", @"checked": @NO, @"mixed": @YES, @"systemImageName": @"star", @"_sparkOwner": @"features-owner" },
     @{ @"id": @"hidden", @"title": @"Hidden", @"hidden": @YES, @"_sparkOwner": @"features-owner" }
@@ -164,6 +193,8 @@ int main() { @autoreleasepool {
   // template's View > Show Sidebar holds Control-Command-S (#446). A published shortcut takes it over.
   NSEventModifierFlags controlCommand = NSEventModifierFlagControl | NSEventModifierFlagCommand;
   NSMenuItem *viewItem = [[NSMenuItem alloc] initWithTitle:@"View" action:nil keyEquivalent:@""]; viewItem.submenu = [NSMenu new]; [main addItem:viewItem];
+  NSMenuItem *hiddenSidebar = [viewItem.submenu addItemWithTitle:@"Hidden Sidebar" action:@selector(toggleSidebar:) keyEquivalent:@"s"];
+  hiddenSidebar.keyEquivalentModifierMask = controlCommand; hiddenSidebar.hidden = YES;
   NSMenuItem *sidebar = [viewItem.submenu addItemWithTitle:@"Show Sidebar" action:@selector(toggleSidebar:) keyEquivalent:@"s"];
   sidebar.keyEquivalentModifierMask = controlCommand;
   NSDictionary *shortcut = @{ @"key": @"s", @"modifiers": @(controlCommand) };
@@ -177,6 +208,7 @@ int main() { @autoreleasepool {
   Check([main performKeyEquivalent:press] && [CapturedEvent[@"itemId"] isEqual:@"save-workspace"], @"Control-Command-S did not run the published item");
   Check(!Publish(module, @[]), @"Shortcut takeover removal failed");
   Check([sidebar.keyEquivalent isEqual:@"s"] && sidebar.keyEquivalentModifierMask == controlCommand, @"Removal did not give Show Sidebar its shortcut back");
+  Check([hiddenSidebar.keyEquivalent isEqual:@"s"] && hiddenSidebar.hidden, @"Removal did not restore the hidden shortcut holder");
   // Two published items with different actions cannot share a shortcut: AppKit would withhold one.
   NSDictionary *clash = @{ @"id": @"clash", @"title": @"Clash", @"_sparkOwner": @"clash-owner", @"items": @[
     @{ @"id": @"shrink", @"role": @"minimize", @"shortcut": @{ @"key": @"j", @"modifiers": @(controlCommand) }, @"_sparkOwner": @"clash-owner" },
