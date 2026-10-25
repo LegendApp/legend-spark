@@ -268,3 +268,24 @@ match the requested Spark version, it stops and prints the exact
 Publishing: releases now refuse to publish a creator that was not built from
 that release's artifacts or whose version differs from `@legendapp/spark`, so a
 broken creator like next.5's cannot ship again. Existing apps are unaffected.
+
+## 0.0.1-next.8
+
+Breaking: no. No app source migration is required from next.7.
+
+Creating apps: `create-spark` now works under Yarn 4 Plug'n'Play
+(`yarn dlx @legendapp/create-spark MyApp --next`).
+
+expo-desktop: Spark now pins the SDK 54 expo-desktop packages to their latest
+patches (expo-desktop 1.0.6, config-plugins 1.3.2, prebuild-config 1.1.3,
+metro-config 54.81.3). Fixes include relaunching while an old instance runs,
+reusing a running Metro, and blank windows in iOS+macOS Debug apps. expo-desktop
+now reads the macOS version and build number from `expo.macos`; Spark sets these
+automatically from the app's version (and `macos.buildNumber`, else
+`ios.buildNumber`, else "1"), so no app change is needed. Rebuild custom
+runtimes (`spark build --dev`). Do not upgrade expo-desktop packages to SDK 55
+tags.
+
+Publishing: each release now publishes straight to its channel (stable ->
+latest, preview -> next). Existing apps are unaffected.
+
