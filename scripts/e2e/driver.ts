@@ -1,6 +1,6 @@
 // Client for the Spark in-app test driver (docs/test-driver.md).
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync, watch, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -31,11 +31,7 @@ export async function launchDriver(options: LaunchOptions): Promise<Driver> {
     stdout: options.log ?? "inherit", stderr: options.log ?? "inherit",
   });
   try {
-    await socketReady(socket, app, options.startTimeoutMs ?? 30000);
-    const connection = await new Promise<net.Socket>((resolve, reject) => {
-      const client = net.createConnection(socket, () => { client.off("error", reject); resolve(client); });
-      client.once("error", reject);
-    });
+    const connection = await connectWhenListening(socket, app, options.startTimeoutMs ?? 30000);
     const driver = new Driver(connection, app, directory);
     await driver.request({ token }, 10000);
     return driver;
@@ -46,16 +42,22 @@ export async function launchDriver(options: LaunchOptions): Promise<Driver> {
   }
 }
 
-function socketReady(socket: string, app: ManagedProcess, timeoutMs: number) {
-  return new Promise<void>((resolve, reject) => {
-    const watcher = watch(path.dirname(socket));
-    const timer = setTimeout(() => finish(new Error(`The app did not start its driver within ${timeoutMs} ms`)), timeoutMs);
-    function finish(error?: Error) { watcher.close(); clearTimeout(timer); error ? reject(error) : resolve(); }
-    watcher.on("change", () => { if (existsSync(socket)) finish(); });
-    watcher.on("error", finish);
-    app.exited.then(code => finish(new Error(`The app exited (${code}) before its driver started`)));
-    if (existsSync(socket)) finish();
-  });
+// Retries the connection: the socket file appears when the app binds, before it listens.
+async function connectWhenListening(socket: string, app: ManagedProcess, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (app.exitCode !== null) throw new Error(`The app exited (${app.exitCode}) before its driver started`);
+    try {
+      return await new Promise<net.Socket>((resolve, reject) => {
+        const client = net.createConnection(socket, () => { client.off("error", reject); resolve(client); });
+        client.once("error", reject);
+      });
+    } catch (error) {
+      if (!["ENOENT", "ECONNREFUSED"].includes((error as NodeJS.ErrnoException).code!)) throw error;
+    }
+    if (Date.now() >= deadline) throw new Error(`The app did not start its driver within ${timeoutMs} ms`);
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
 }
 
 /** One authenticated session; requests run one at a time. Quitting or disconnecting quits the app. */
