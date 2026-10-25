@@ -77,7 +77,7 @@ const MIDDLE_SHRINK = 1000;
 function Crumb({ children, onPress, shrink }: { children: ReactNode; onPress?: () => void; shrink: number }) {
   const style = { flexShrink: shrink, minWidth: shrink === MIDDLE_SHRINK ? 32 : 0 };
   return onPress
-    ? <Pressable accessibilityRole="link" onPress={onPress} style={style}><Text numberOfLines={1} className="text-sm text-muted">{children}</Text></Pressable>
+    ? <Pressable accessibilityRole="link" onPress={onPress} style={style}><Text numberOfLines={1} style={{ flexShrink: 1 }} className="text-sm text-muted">{children}</Text></Pressable>
     : <Text numberOfLines={1} style={style} className="text-sm font-semibold text-foreground" accessibilityRole="header">{children}</Text>;
 }
 
