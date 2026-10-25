@@ -27,7 +27,8 @@ import { Html } from "@legendapp/spark/html";
 
 `Markdown` accepts the upstream `markdownStyle` for text and block formatting;
 `style` styles its container. It supports headings, lists, links, code, and
-images, with task checkboxes kept read-only. `Html` accepts the upstream
+images, with task checkboxes kept read-only. Pass `flavor="github"` to render
+GitHub Flavored Markdown tables. `Html` accepts the upstream
 `htmlStyle`; supported elements and styling depend on the host backend. On
 macOS it renders headings, lists, links, and code, but images are placeholders
 rather than loaded images, and custom `htmlStyle` is not applied. Syntax
