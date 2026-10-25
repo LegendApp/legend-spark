@@ -93,3 +93,9 @@ void SparkSetDockProgress(NSDockTile *tile, NSDictionary *progress) {
   view.value = [progress[@"value"] doubleValue];
   [tile display];
 }
+
+void SparkSetDockBadge(NSDockTile *tile, NSDictionary *badge) {
+  NSNumber *count = badge[@"count"];
+  NSString *label = count ? (count.integerValue ? [NSNumberFormatter localizedStringFromNumber:count numberStyle:NSNumberFormatterDecimalStyle] : nil) : badge[@"label"];
+  tile.badgeLabel = label.length ? label : nil;
+}

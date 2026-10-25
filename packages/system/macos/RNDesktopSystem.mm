@@ -104,11 +104,7 @@ RCT_EXPORT_MODULE(NativeDesktopSystem)
       BOOL success = [args[@"enabled"] boolValue] ? [SMAppService.mainAppService registerAndReturnError:&error] : [SMAppService.mainAppService unregisterAndReturnError:&error];
       if (!success) { SparkReject(reject, error); return; }
     }
-    else if ([method isEqual:@"badge"]) {
-      NSNumber *count = args[@"count"];
-      NSString *label = count ? (count.integerValue ? [NSNumberFormatter localizedStringFromNumber:count numberStyle:NSNumberFormatterDecimalStyle] : nil) : args[@"label"];
-      NSApp.dockTile.badgeLabel = label.length ? label : nil;
-    }
+    else if ([method isEqual:@"badge"]) SparkSetDockBadge(NSApp.dockTile, args);
     else if ([method isEqual:@"progress"]) SparkSetDockProgress(NSApp.dockTile, [args[@"state"] isEqual:@"none"] ? nil : args);
     else if ([method isEqual:@"attention"]) { NSInteger token = [NSApp requestUserAttention:[args[@"critical"] boolValue] ? NSCriticalRequest : NSInformationalRequest]; [self.attention addObject:@(token)]; resolve(SparkJSON(@(token))); return; }
     else if ([method isEqual:@"cancelAttention"]) { if ([self.attention containsObject:args[@"id"]]) [NSApp cancelUserAttentionRequest:[args[@"id"] integerValue]]; [self.attention removeObject:args[@"id"]]; }

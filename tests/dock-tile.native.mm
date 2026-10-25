@@ -57,6 +57,8 @@ static BOOL Near(double a, double b, double tolerance) { return fabs(a - b) <= t
 
 int main(int argc, char **argv) { @autoreleasepool {
   if (argc < 2) { fprintf(stderr, "usage: test <icon.png> [render directory]\n"); return 2; }
+  // Pin the locale the badge count formats with.
+  [NSUserDefaults.standardUserDefaults setVolatileDomain:@{ @"AppleLocale": @"en_US" } forName:NSArgumentDomain];
   [NSApplication sharedApplication];
   // Never a Dock icon (an unbundled process has none by default; this makes it explicit), so nothing reaches the Dock.
   [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
@@ -153,6 +155,19 @@ int main(int argc, char **argv) { @autoreleasepool {
       CHECK([[strip representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:file atomically:YES]);
     }
   }
+
+  // Counts use the user's locale with no cap; 0 and an empty label clear the badge.
+  SparkSetDockBadge(tile, @{ @"count": @1250 });
+  CHECK([tile.badgeLabel isEqual:@"1,250"]);
+  SparkSetDockBadge(tile, @{ @"count": @100000 });
+  CHECK([tile.badgeLabel isEqual:@"100,000"]);
+  SparkSetDockBadge(tile, @{ @"count": @0 });
+  CHECK(tile.badgeLabel == nil);
+  SparkSetDockBadge(tile, @{ @"label": @"New" });
+  CHECK([tile.badgeLabel isEqual:@"New"]);
+  SparkSetDockBadge(tile, @{ @"label": @"" });
+  CHECK(tile.badgeLabel == nil);
+
   if (failures) { fprintf(stderr, "%d Dock tile checks failed\n", failures); return 1; }
   puts("Dock tile native tests passed");
   return 0;

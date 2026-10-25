@@ -18,4 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Shows `progress` ({ state, value }) on `tile`, reusing its progress view, or restores the tile's
 /// previous content view for nil. The view follows the system appearance and accent color while installed.
 FOUNDATION_EXPORT void SparkSetDockProgress(NSDockTile *tile, NSDictionary *_Nullable progress);
+/// Shows `badge` ({ count } or { label }) on `tile`: a count in the user's locale, or the label as given.
+/// A count of 0 or an empty label clears it.
+FOUNDATION_EXPORT void SparkSetDockBadge(NSDockTile *tile, NSDictionary *badge);
 NS_ASSUME_NONNULL_END
