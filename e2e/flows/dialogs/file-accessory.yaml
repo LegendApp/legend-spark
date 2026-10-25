@@ -7,6 +7,7 @@ intent: >
   "Include metadata" checkbox; choosing JSON, unchecking the box and saving returns the path with
   both values. Canceling a save returns {"canceled":true} without accessory values.
 checks: [DLG-ACCESSORY-01, DLG-ACCESSORY-02]
+manual: true # Requires the black-box backend tracked in #50; manual sign-off until it lands.
 tags: [dialogs]
 platforms: [macos]
 ---

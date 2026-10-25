@@ -21,11 +21,25 @@ test("accessory controls reach the bridge normalized and their values return wit
   reply = () => ({ paths: ["/tmp/a.txt"], accessory: { metadata: false, format: "txt" } });
   const opened = await files.openFileDialog({ accessory });
   expect(opened).toEqual({ canceled: false, paths: ["/tmp/a.txt"], accessory: { format: "txt", metadata: false } });
-  expect(Object.keys(!opened.canceled && opened.accessory || {})).toEqual(["format", "metadata"]);
   reply = () => null;
   expect(await files.openFileDialog({ accessory })).toEqual({ canceled: true });
   reply = () => ["/tmp/a.txt"];
   expect(await files.openFileDialog()).toEqual({ canceled: false, paths: ["/tmp/a.txt"] });
+});
+
+test("accessory values are keyed by ID, including numeric IDs declared out of enumeration order", async () => {
+  const controls = [
+    { type: "checkbox", id: "2", label: "Include metadata" },
+    { type: "popup", id: "1", label: "Format:", options: [{ value: "txt", label: "Plain text" }] },
+  ] as const;
+  const values = { "2": true, "1": "txt" };
+  reply = () => ({ paths: ["/tmp/a.txt"], accessory: values });
+  const opened = await files.openFileDialog({ accessory: controls });
+  expect(opened).toEqual({ canceled: false, paths: ["/tmp/a.txt"], accessory: values });
+  if (opened.canceled) throw new Error("Expected an accepted selection");
+  expect(controls.map(control => opened.accessory![control.id])).toEqual([true, "txt"]);
+  reply = () => ({ path: "/tmp/a.txt", accessory: values });
+  expect(await files.saveFileDialog({ accessory: controls })).toEqual({ canceled: false, path: "/tmp/a.txt", accessory: values });
 });
 
 test("accessory results that do not match the requested controls are malformed", async () => {
@@ -74,6 +88,24 @@ test("the suppression checkbox state returns with the selected button", async ()
   expect(await messages.showMessage({ title: "Empty the Trash?", buttons: [{ id: "cancel", label: "Cancel" }, { id: "empty", label: "Empty Trash" }], checkbox: { label: "Don't ask again" } })).toEqual({ buttonId: "empty", checked: true });
   expect(calls[0]).toMatchObject({ method: "show", args: { checkbox: { label: "Don't ask again" }, buttons: ["Cancel", "Empty Trash"] } });
   for (const checkbox of [{ label: "" }, { label: "X", checked: 1 }, { label: "X", extra: true }]) await expect(messages.showMessage({ title: "T", checkbox: checkbox as never })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+});
+
+test("confirm forwards localized labels and maps the chosen button", async () => {
+  for (const button of [0, 1, -1]) {
+    reply = () => ({ button, checked: false });
+    expect(await messages.confirm("Continue?", { confirmLabel: "Continuer", cancelLabel: "Annuler" })).toBe(button === 1);
+    expect(calls.at(-1)!.args).toMatchObject({ buttons: ["Annuler", "Continuer"], defaultButton: 1, cancelButton: 0 });
+  }
+});
+
+test("whitespace-only dialog labels reject before reaching native", async () => {
+  await expect(messages.showMessage({ title: "T", buttons: [{ id: "ok", label: " \t " }] })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(messages.showMessage({ title: "T", checkbox: { label: " \t " } })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  for (const key of ["confirmLabel", "cancelLabel"] as const) {
+    await expect(messages.confirm("Continue?", { [key]: " \t " })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+    await expect(messages.showPrompt({ title: "T", [key]: " \t " })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  }
+  expect(calls).toHaveLength(0);
 });
 
 test("prompts return the confirmed value or a distinct cancellation", async () => {

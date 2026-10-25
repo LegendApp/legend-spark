@@ -169,7 +169,7 @@ A prompt is a message dialog with one text field (`secure: true` uses NSSecureTe
 
 ### Accessory controls
 
-Open and save panels accept `accessory`: 1–8 checkboxes and labeled pop-ups shown below the file browser. Values return with an accepted result, keyed by control ID in control order; each ID is also the control's accessibility identifier. The controls are data, not React views: panels run in a modal session where React content would not render or receive events reliably, and data keeps the result typed.
+Open and save panels accept `accessory`: 1–8 checkboxes and labeled pop-ups shown below the file browser. Values return with an accepted result, keyed by control ID; each ID is also the control's accessibility identifier. The controls are data, not React views: panels run in a modal session where React content would not render or receive events reliably, and data keeps the result typed.
 
 ```ts
 const result = await saveFileDialog({ defaultName: "Notes", accessory: [
@@ -179,9 +179,13 @@ const result = await saveFileDialog({ defaultName: "Notes", accessory: [
 // { canceled: false, path, accessory: { format: "md", metadata: true } }
 ```
 
+Accessory values have no guaranteed key enumeration order. To process them in display order, iterate the supplied controls and look up each value by ID.
+
 Labels are shown as given (include a colon if the locale uses one). A pop-up selects its first option unless `value` names another. The format value does not change the file name's extension; the app applies it. macOS only; Windows rejects `accessory` with E_UNSUPPORTED_OPTION.
 
 ### About panel
+
+Reuse stable options across calls. AppKit reuses a panel with identical options; changing options hides and retains the previous panel until the app exits, including across JavaScript reloads.
 
 `showAboutPanel(options?)` orders front the standard macOS About panel. `name`, `version` ("Version …"), `build` (in parentheses), `credits` (plain text), `copyright` and `iconPath` (an absolute image path) override the bundle's values; omitted fields keep them. It is not modal and resolves once shown. A missing icon file rejects E_NOT_FOUND and an unreadable one E_INVALID_DATA. The menu `about` role keeps showing the bundle's values; use an action item that calls `showAboutPanel` to show overrides.
 

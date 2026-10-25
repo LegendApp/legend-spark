@@ -72,7 +72,7 @@ function requireAvailable(feature?: MessageDialogFeature) {
   const availability = getMessageDialogAvailability(feature);
   if (!availability.available) throw new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", `${feature === "aboutPanel" ? "The About panel" : feature === "prompt" ? "Text prompts" : "Message dialogs"} require ${feature ? "macOS" : "a desktop host"} with NativeDesktopMessageDialog installed`);
 }
-const validString = (value: unknown): value is string => typeof value === "string" && !!value && !value.includes("\0");
+const validString = (value: unknown): value is string => typeof value === "string" && !!value.trim() && !value.includes("\0");
 function knownKeys(options: object, allowed: readonly string[], what: string) {
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", `Expected ${what} options`);
   for (const key of Object.keys(options)) if (!allowed.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported ${what} option: ${key}`);
@@ -80,7 +80,7 @@ function knownKeys(options: object, allowed: readonly string[], what: string) {
 function optionalString(options: Record<string, unknown>, keys: readonly string[], allowEmpty = false) {
   for (const key of keys) {
     const value = options[key];
-    if (value !== undefined && (typeof value !== "string" || value.includes("\0") || (!allowEmpty && !value))) throw new SparkError("E_INVALID_ARGUMENT", `${key} must be a ${allowEmpty ? "" : "non-empty "}string without NUL characters`);
+    if (value !== undefined && (typeof value !== "string" || value.includes("\0") || (!allowEmpty && !value.trim()))) throw new SparkError("E_INVALID_ARGUMENT", `${key} must be a ${allowEmpty ? "" : "non-empty "}string without NUL characters`);
   }
 }
 function validWindowId(windowId: unknown) {
@@ -136,7 +136,7 @@ export async function showPrompt(options: PromptOptions): Promise<PromptResult> 
   return result.button === 0 ? { canceled: false, value: result.value! } : { canceled: true };
 }
 
-/** Shows the standard About panel (macOS `orderFrontStandardAboutPanelWithOptions:`). It is not modal; the promise resolves once it is shown. */
+/** Shows the standard About panel (macOS `orderFrontStandardAboutPanelWithOptions:`). It is not modal; the promise resolves once it is shown. AppKit reuses identical options; changed options hide and retain the previous panel until app exit. Reuse stable options across calls. */
 export async function showAboutPanel(options: AboutPanelOptions = {}): Promise<void> {
   knownKeys(options, ["name", "version", "build", "credits", "copyright", "iconPath"], "About panel");
   optionalString(options as unknown as Record<string, unknown>, ["name", "version", "build", "credits", "copyright", "iconPath"]);

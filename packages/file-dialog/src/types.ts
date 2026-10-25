@@ -13,7 +13,7 @@ export type DialogAccessoryControl =
   | { type: "checkbox"; id: string; label: string; checked?: boolean }
   /** A labeled pop-up button; `value` selects an option (default: the first). */
   | { type: "popup"; id: string; label: string; options: readonly DialogAccessoryOption[]; value?: string };
-/** Checkbox IDs map to booleans, pop-up IDs to the selected option's value, in control order. */
+/** Checkbox IDs map to booleans, pop-up IDs to the selected option's value. Key enumeration order is unspecified; iterate the supplied controls for display order. */
 export type DialogAccessoryValues = Readonly<Record<string, boolean | string>>;
 /** Features beyond the base open/save panels, for `getFileDialogAvailability(feature)`. */
 export type FileDialogFeature = "accessory";
