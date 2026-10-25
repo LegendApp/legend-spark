@@ -255,10 +255,12 @@ CLI. It does not create a second app, pack SDK archives, or compile native code.
 Edit the screens and CSS directly for Fast Refresh. `bun run kitchen-sink` from the
 repository root is a shortcut for this app's `dev` command.
 
-The app registers the `spark-ks://` URL scheme, so it needs a custom development
-runtime. Run `bun run rebuild:macos` or `bun run rebuild:windows` from the app
-directory once with the native toolchain installed (`spark build --dev`), and again
-only after native changes.
+This source checkout needs a registered local Spark Runner; hosted Runner downloads
+use release metadata embedded in the published CLI. The app registers the
+`spark-ks://` URL scheme, so its Runner is a custom development runtime. Run
+`bun run rebuild:macos` or `bun run rebuild:windows` from the app directory once
+with the native toolchain installed (`spark build --dev`), and again only after
+native changes.
 See the [Kitchen Sink guide](examples/kitchen-sink/README.md) for registration and
 startup options.
 

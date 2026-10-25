@@ -101,10 +101,12 @@ See [the in-app test driver](../../docs/test-driver.md) for options and what a c
 
 ## Install or rebuild the native runtime
 
-JavaScript dependencies do not include a native executable. The `spark-ks://`
-URL scheme and the macOS localizations need an app-specific runtime, so the
-shared Spark Runner cannot serve this app. Build one **once** with the platform's
-native toolchain installed, and again after native changes:
+This source example needs a registered local Runner; hosted downloads require
+release metadata embedded in the published CLI. JavaScript dependencies do not
+include a native executable. The `spark-ks://` URL scheme and the macOS
+localizations need an app-specific runtime, so the shared Spark Runner cannot
+serve this app. Build one **once** with the platform's native toolchain installed,
+and again after native changes:
 
 ```sh
 bun run rebuild:macos
