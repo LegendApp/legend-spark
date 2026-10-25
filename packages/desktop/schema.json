@@ -188,6 +188,10 @@
         "infoPlist": {
           "type": "object"
         },
+        "testDriverInRelease": {
+          "type": "boolean",
+          "description": "Compile the in-app test driver into release builds too; Debug builds always have it. For apps the release gate drives: keep it off for apps you distribute (docs/test-driver.md#builds)."
+        },
         "lifecycle": {
           "type": "object",
           "additionalProperties": false,

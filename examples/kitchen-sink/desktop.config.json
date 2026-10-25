@@ -17,7 +17,8 @@
         "en",
         "ar"
       ]
-    }
+    },
+    "testDriverInRelease": true
   },
   "platforms": [
     "macos",

@@ -12,6 +12,12 @@ export interface MacOSConfiguration {
   buildNumber?: string;
   infoPlist?: Record<string, JsonValue>;
   entitlements?: Record<string, JsonValue>;
+  /**
+   * Compile the in-app test driver into release builds too; Debug builds always have it. Default false: release builds
+   * contain no driver code, which the CLI checks after each release build. For apps the release gate drives, such as
+   * the Kitchen Sink; never for apps you distribute (docs/test-driver.md#builds).
+   */
+  testDriverInRelease?: boolean;
   lifecycle?: MacOSLifecycle;
 }
 export interface SigningConfiguration {
