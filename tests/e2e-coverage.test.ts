@@ -19,6 +19,12 @@ const coverage = (fixture: string, surface = SURFACE) =>
 const coveredBy = (report: CoverageReport) => Object.fromEntries(report.surface.map(item => [item.id, item.coveredBy]));
 const problems = (report: CoverageReport) => report.problems.map(problem => `${problem.area} ${formatDiagnostic(problem).replace(`${FIXTURES}/broken/`, "")}`);
 
+test("registered update checks are listed by flows", () => {
+  const files = collect("e2e").map(([file, kind]) => ({ file, kind, source: readFileSync(file, "utf8") }));
+  const report = checkCoverage(files, {});
+  expect(report.problems.filter(problem => problem.area === "updates" && problem.rule === "no-flow")).toEqual([]);
+});
+
 describe("coverage engine", () => {
   test("complete coverage passes", () => {
     const report = coverage("complete");

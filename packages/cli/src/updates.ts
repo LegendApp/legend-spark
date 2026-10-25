@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { readAppConfig, writeUpdates } from "./project.ts";
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { sparkHome } from "./local.ts";
@@ -41,7 +41,7 @@ export async function initializeUpdates(root: string, feedURL: string, execute: 
   const publicKey = (await execute(root, [path.join(bin, "generate_keys"), "--account", account(config.expo), "-p"], { capture: true })).trim();
   updateConfiguration({ extra: { spark: { updates: { feedURL, publicKey } } } });
   if (config.expo.extra?.spark?.updates?.publicKey && config.expo.extra.spark.updates.publicKey !== publicKey) throw new Error("This Mac's update key differs from the configured public key. Import the existing Sparkle key instead of replacing it.");
-  writeUpdates(root, { feedURL, publicKey });
+  writeUpdates(root, { ...config.expo.extra?.spark?.updates, feedURL, publicKey });
   console.log("Updates configured. The private key stays in Keychain. Import @legendapp/spark/updates and run spark package to generate a signed feed.");
 }
 export function verifyUpdateSignature(archive: string, signature: string, publicKey: string) {
@@ -52,7 +52,7 @@ type UpdateDependencies = { run: Runner; tools: typeof sparkleTools; keyFile?: s
 const buildNumberPattern = /^[0-9]+(?:\.[0-9]+){0,2}$/;
 function buildNumberParts(version: string) { return version.split(".").map(part => part.replace(/^0+(?=\d)/, "")); }
 function canonicalBuildNumber(version: string) { return buildNumberParts(version).concat(["0", "0"]).slice(0, 3).join("."); }
-function compareBuildNumbers(left: string, right: string) {
+export function compareBuildNumbers(left: string, right: string) {
   const a = buildNumberParts(left), b = buildNumberParts(right);
   for (let index = 0; index < 3; index++) {
     const x = a[index] ?? "0", y = b[index] ?? "0";
@@ -97,25 +97,31 @@ export async function prepareUpdate(root: string, archive: string, buildVersion:
   const staging = path.join(root, ".spark", `update-feed-${crypto.randomUUID()}`);
   mkdirSync(staging, { recursive: true });
   try {
-    if (existsSync(directory)) cpSync(directory, staging, { recursive: true });
+    // Sparkle only uses deltas of the newest item, so generate_appcast gets no old deltas or
+    // references to them; it signs the feed again and creates deltas for this build only.
+    if (existsSync(directory)) cpSync(directory, staging, { recursive: true, filter: source => !source.endsWith(".delta") });
     const name = `${path.basename(archive, ".zip")}-build-${buildVersion}.zip`;
     cpSync(archive, path.join(staging, name));
     const url = new URL(updates.feedURL);
     const feed = path.join(staging, path.basename(url.pathname));
-    await dependencies.run(root, [path.join(bin, "generate_appcast"), ...keyArgs, "--download-url-prefix", new URL(".", url).href, "--maximum-deltas", "0", "--maximum-versions", "0", "-o", feed, staging], { capture: true });
+    if (existsSync(feed)) writeFileSync(feed, readFileSync(feed, "utf8").replace(/\s*<sparkle:deltas>[\s\S]*?<\/sparkle:deltas>/g, ""));
+    await dependencies.run(root, [path.join(bin, "generate_appcast"), ...keyArgs, "--download-url-prefix", new URL(".", url).href, "--maximum-deltas", String(updates.maximumDeltas ?? 0), "--maximum-versions", "0", "-o", feed, staging], { capture: true });
     if (!existsSync(feed) || !readFileSync(feed, "utf8").includes(`sparkle:edSignature="${signature}"`)) throw new Error("Generated appcast did not include the signed update archive");
     // Verify the signed feed using the same key; Sparkle verifies it in the app.
     await dependencies.run(root, [path.join(bin, "sign_update"), ...keyArgs, "--verify", feed], { capture: true });
     records[buildVersion] = { sha256: hash, archive: name };
     writeJson(path.join(staging, "releases.json"), records);
     mkdirSync(directory, { recursive: true });
-    // Publish archives before the feed, so a feed never points at incomplete bytes.
+    // Publish archives and deltas before the feed, so a feed never points at incomplete bytes.
     cpSync(path.join(staging, name), path.join(directory, name));
+    const deltas = readdirSync(staging).filter(file => file.endsWith(".delta"));
+    for (const delta of deltas) cpSync(path.join(staging, delta), path.join(directory, delta));
     cpSync(path.join(staging, "releases.json"), recordsFile);
     const target = path.join(directory, path.basename(feed));
     const temporary = `${target}.${process.pid}.tmp`;
     cpSync(feed, temporary); renameSync(temporary, target);
-    console.log(`Signed update ready: ${target}\nUpload the ZIP and appcast to ${new URL(".", url).href}`);
-    return { feed: target, archive: path.join(directory, name) };
+    for (const file of readdirSync(directory)) if (file.endsWith(".delta") && !deltas.includes(file)) rmSync(path.join(directory, file));
+    console.log(`Signed update ready: ${target}\nUpload the ZIP${deltas.length ? `, ${deltas.join(", ")}` : ""} and then the appcast to ${new URL(".", url).href}`);
+    return { feed: target, archive: path.join(directory, name), deltas: deltas.map(delta => path.join(directory, delta)) };
   } finally { rmSync(staging, { recursive: true, force: true }); }
 }
