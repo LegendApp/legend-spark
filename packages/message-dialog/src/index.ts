@@ -136,7 +136,7 @@ export async function showPrompt(options: PromptOptions): Promise<PromptResult> 
   return result.button === 0 ? { canceled: false, value: result.value! } : { canceled: true };
 }
 
-/** Shows the standard About panel (macOS `orderFrontStandardAboutPanelWithOptions:`). It is not modal; the promise resolves once it is shown. AppKit reuses identical options; changed options hide and retain the previous panel until app exit. Reuse stable options across calls. */
+/** Shows the standard About panel (macOS `orderFrontStandardAboutPanelWithOptions:`). It is not modal; the promise resolves once it is shown. AppKit can retain hidden panels when options change, until app exit. Avoid changing About metadata on every call. */
 export async function showAboutPanel(options: AboutPanelOptions = {}): Promise<void> {
   knownKeys(options, ["name", "version", "build", "credits", "copyright", "iconPath"], "About panel");
   optionalString(options as unknown as Record<string, unknown>, ["name", "version", "build", "credits", "copyright", "iconPath"]);
