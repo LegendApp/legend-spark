@@ -1,5 +1,6 @@
 #import "RNDesktopSystem.h"
 #import <RNDesktopApp/SparkDesktop.h>
+#import "SparkDockTile.h"
 #import <ServiceManagement/ServiceManagement.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <IOKit/ps/IOPowerSources.h>
@@ -103,7 +104,8 @@ RCT_EXPORT_MODULE(NativeDesktopSystem)
       BOOL success = [args[@"enabled"] boolValue] ? [SMAppService.mainAppService registerAndReturnError:&error] : [SMAppService.mainAppService unregisterAndReturnError:&error];
       if (!success) { SparkReject(reject, error); return; }
     }
-    else if ([method isEqual:@"badge"]) NSApp.dockTile.badgeLabel = args[@"label"];
+    else if ([method isEqual:@"badge"]) SparkSetDockBadge(NSApp.dockTile, args);
+    else if ([method isEqual:@"progress"]) SparkSetDockProgress(NSApp.dockTile, [args[@"state"] isEqual:@"none"] ? nil : args);
     else if ([method isEqual:@"attention"]) { NSInteger token = [NSApp requestUserAttention:[args[@"critical"] boolValue] ? NSCriticalRequest : NSInformationalRequest]; [self.attention addObject:@(token)]; resolve(SparkJSON(@(token))); return; }
     else if ([method isEqual:@"cancelAttention"]) { if ([self.attention containsObject:args[@"id"]]) [NSApp cancelUserAttentionRequest:[args[@"id"] integerValue]]; [self.attention removeObject:args[@"id"]]; }
     else if ([method isEqual:@"clearDockMenu"]) { if ([self.dockOwner isEqual:args[@"owner"]]) { SparkDockMenu = nil; self.dockOwner = nil; } }
@@ -127,7 +129,7 @@ RCT_EXPORT_MODULE(NativeDesktopSystem)
   [self stopObserving]; [self.subscriptions removeAllObjects];
   for (NSNumber *value in self.assertions) IOPMAssertionRelease(value.unsignedIntValue); [self.assertions removeAllObjects];
   for (NSNumber *value in self.attention) [NSApp cancelUserAttentionRequest:value.integerValue]; [self.attention removeAllObjects];
-  SparkDockMenu = nil; NSApp.dockTile.badgeLabel = nil;
+  SparkDockMenu = nil; NSApp.dockTile.badgeLabel = nil; SparkSetDockProgress(NSApp.dockTile, nil);
 }); }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeDesktopSystemSpecJSI>(params); }
 @end

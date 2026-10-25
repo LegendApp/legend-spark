@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: Taskbar badge text and Jump List on Windows; counts and progress unsupported
+intent: >
+  On Windows the Dock & taskbar screen reports the taskbar menu available and the Dock menu and app
+  progress unsupported-platform. Badge text and clear update the taskbar overlay icon, and the
+  launcher menu installs a Jump List with tasks. Badge counts and progress are macOS-only and reject
+  SparkError:E_UNSUPPORTED_PLATFORM. Not yet run on Windows (#302).
+checks: [SYS-TASKBAR-01]
+tags: [system-integration]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/dock" }
+- extendedWaitUntil: { visible: { id: system-integration-dock-root }, timeout: 10s }
+- assertText: { id: system-integration-dock-availability-taskbarMenu, equals: 'taskbarMenu: {"available":true}' }
+- assertText: { id: system-integration-dock-availability-dockMenu, equals: 'dockMenu: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: system-integration-dock-availability-appProgress, equals: 'appProgress: {"available":false,"reason":"unsupported-platform"}' }
+- tapOn: { id: system-integration-dock-badge-text }
+- assertText: { id: system-integration-dock-badge-text-result, equals: ok }
+- tapOn: { id: system-integration-dock-badge-clear }
+- assertText: { id: system-integration-dock-badge-clear-result, equals: ok }
+- tapOn: { id: system-integration-dock-badge-count }
+- assertText: { id: system-integration-dock-badge-count-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: system-integration-dock-progress-paused }
+- assertText: { id: system-integration-dock-progress-paused-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: system-integration-dock-launcher-install }
+- assertText: { id: system-integration-dock-launcher-install-result, equals: installed }
+- tapOn: { id: system-integration-dock-launcher-remove }
+- assertText: { id: system-integration-dock-launcher-remove-result, equals: removed }

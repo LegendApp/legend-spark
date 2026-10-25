@@ -1,0 +1,23 @@
+appId: so.legend.spark.examples.kitchensink
+name: Attention requests bounce the Dock icon and stop on removal
+intent: >
+  On System integration > Dock & taskbar, "Informational attention" waits 3 seconds, then requests
+  attention and reports "requested": switch to another app within the 3 seconds and the Dock icon
+  bounces once. "Critical attention" bounces until the app is activated; "Stop attention" removes the
+  registration, stops the bouncing and reports "removed". manual: true keeps the gate from running
+  it: requestUserAttention bounces the real Dock icon, so no automated run may call it.
+checks: [SYS-ATTN-01]
+tags: [system-integration]
+platforms: [macos]
+manual: true
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/dock" }
+- extendedWaitUntil: { visible: { id: system-integration-dock-root }, timeout: 10s }
+- tapOn: { id: system-integration-dock-attention-informational }
+- assertText: { id: system-integration-dock-attention-informational-result, equals: requested, timeout: 10s }
+- tapOn: { id: system-integration-dock-attention-stop }
+- assertText: { id: system-integration-dock-attention-stop-result, equals: removed }
+- tapOn: { id: system-integration-dock-attention-critical }
+- assertText: { id: system-integration-dock-attention-critical-result, equals: requested, timeout: 10s }
+- tapOn: { id: system-integration-dock-attention-stop }
+- assertText: { id: system-integration-dock-attention-stop-result, equals: removed }

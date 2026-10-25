@@ -757,6 +757,42 @@ test("launcher menus stop callbacks on failed removal and enforce surface suppor
   await expect(system.createTaskbarMenu({ items: [{ type: "submenu", id: "sub", label: "Sub", items: [] }], onAction: () => {} } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
 });
 
+test("app badges take text or a count, and progress validates before reaching native code", async () => {
+  await system.setAppBadge("New"); await system.setAppBadge(3); await system.setAppBadge(0); await system.setAppBadge("");
+  expect(calls.map(call => call.args)).toEqual([{ label: "New" }, { count: 3 }, { count: 0 }, { label: "" }]);
+  for (const value of [-1, 1.5, Number.NaN, 2 ** 53, "a\0b"]) await expect(system.setAppBadge(value as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  calls.length = 0;
+  await system.setAppProgress({ state: "normal", value: 0.35 }); await system.setAppProgress({ state: "indeterminate" });
+  await system.setAppProgress({ state: "paused", value: 0 }); await system.setAppProgress({ state: "error", value: 1 }); await system.setAppProgress(null);
+  expect(calls.map(call => [call.method, call.args])).toEqual([["progress", { state: "normal", value: 0.35 }], ["progress", { state: "indeterminate" }], ["progress", { state: "paused", value: 0 }], ["progress", { state: "error", value: 1 }], ["progress", { state: "none" }]]);
+  calls.length = 0;
+  for (const value of [{ state: "normal", value: 1.01 }, { state: "normal", value: -0.1 }, { state: "normal", value: Number.NaN }, { state: "normal" }, { state: "busy", value: 0.5 }, undefined, 0.5])
+    await expect(system.setAppProgress(value as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(system.setAppProgress({ state: "indeterminate", value: 0.5 } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(system.setAppProgress({ state: "normal", value: 0.5, color: "red" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
+});
+test("system feature availability is truthful per platform", () => {
+  const report = () => Object.fromEntries((["appBadge", "appProgress", "attention", "dockMenu", "taskbarMenu"] as const).map(feature => [feature, system.getSystemAvailability(feature).available]));
+  expect(system.getSystemAvailability()).toEqual({ available: true });
+  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: true, taskbarMenu: false });
+  platform.OS = "windows";
+  expect(report()).toEqual({ appBadge: true, appProgress: false, attention: true, dockMenu: false, taskbarMenu: true });
+  platform.OS = "web";
+  expect(system.getSystemAvailability("appBadge")).toEqual({ available: false, reason: "unsupported-platform" });
+  expect(() => system.getSystemAvailability("dock" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+});
+test("Windows takes badge text but rejects badge counts, progress and Recent Jump List options before native code", async () => {
+  platform.OS = "windows";
+  await system.setAppBadge("New"); await system.setAppBadge("");
+  expect(calls.map(call => call.args)).toEqual([{ label: "New" }, { label: "" }]);
+  calls.length = 0;
+  for (const run of [() => system.setAppBadge(3), () => system.setAppBadge(0), () => system.setAppProgress({ state: "normal", value: 0.5 }), () => system.setAppProgress(null)])
+    await expect(run()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(system.createTaskbarMenu({ items: [], onAction: () => {}, recentDocuments: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
+});
+
 test("application menu updates snapshot inputs, serialize and retain last successful owners", async () => {
   const received: unknown[] = [];
   const item = await menus.createMenu({ id: "queued", items: [], onAction: event => received.push(event) });

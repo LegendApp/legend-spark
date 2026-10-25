@@ -15,6 +15,9 @@ export type TaskbarMenuItem = SupportedTaskbarLeaf;
 type LauncherMenuOptions = { items: readonly MenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void };
 export interface DockMenuOptions { items: readonly DockMenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
 export interface TaskbarMenuOptions { items: readonly TaskbarMenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
+/** Determinate progress has a completed fraction from 0 to 1; paused and error tint the bar. */
+export type AppProgress = { state: "indeterminate" } | { state: "normal" | "paused" | "error"; value: number };
+export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu";
 export interface SystemInfo { osVersion: string; architecture: string; locale: string; dark: boolean; idleSeconds: number; onBattery: boolean; batteryLevel: number | null }
 export type SystemEvent = { type: "sleep" | "wake" | "lock" | "unlock" | "powerChanged" | "appearanceChanged" | "displaysChanged" };
 export type LoginItemStatus = "enabled" | "disabled" | "requiresApproval" | "notFound" | "unavailable";
@@ -22,8 +25,15 @@ export interface AttentionOptions { kind?: "informational" | "critical" }
 export interface PreventSleepOptions { reason: string; kind?: "display" | "system" }
 let sequence = 0;
 const token = () => `system-${Date.now()}-${++sequence}`;
-export function getSystemAvailability(): Availability {
+const FEATURES: Record<SystemFeature, readonly string[]> = {
+  appBadge: ["macos", "windows"], appProgress: ["macos"], attention: ["macos", "windows"],
+  dockMenu: ["macos"], taskbarMenu: ["windows"],
+};
+/** Without a feature, whether the system module is usable at all. */
+export function getSystemAvailability(feature?: SystemFeature): Availability {
+  if (feature !== undefined && !Object.hasOwn(FEATURES, feature)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown system feature");
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
+  if (feature && !FEATURES[feature].includes(Platform.OS)) return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };
 }
 async function call<T>(method: string, args: object, validate: (value: unknown) => value is T): Promise<T> {
@@ -47,10 +57,31 @@ export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
   if (typeof enabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected enabled boolean");
   await command("login", { enabled });
 }
-/** Dock badge on macOS, taskbar overlay on Windows; empty string clears it. */
-export async function setAppBadge(label: string): Promise<void> {
-  if (typeof label !== "string" || label.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "Expected badge text without NUL");
-  await command("badge", { label });
+/**
+ * Dock badge on macOS, taskbar overlay icon on Windows; an empty string clears it. A count (macOS only)
+ * is formatted with the user's locale, and 0 clears it.
+ */
+export async function setAppBadge(value: string | number): Promise<void> {
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value) || value < 0) throw new SparkError("E_INVALID_ARGUMENT", "Expected a badge count that is a non-negative integer");
+    if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Badge counts require macOS");
+    await command("badge", { count: value });
+    return;
+  }
+  if (typeof value !== "string" || value.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "Expected badge text without NUL");
+  await command("badge", { label: value });
+}
+/** Progress on the Dock tile (macOS only); null clears it. */
+export async function setAppProgress(progress: AppProgress | null): Promise<void> {
+  if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "App progress requires macOS");
+  if (progress === null) { await command("progress", { state: "none" }); return; }
+  const state = progress?.state;
+  if (state === "indeterminate") { options(progress, ["state"]); await command("progress", { state }); return; }
+  if (state !== "normal" && state !== "paused" && state !== "error") throw new SparkError("E_INVALID_ARGUMENT", "Unknown progress state");
+  options(progress, ["state", "value"]);
+  const { value } = progress as { value: unknown };
+  if (typeof value !== "number" || !(value >= 0 && value <= 1)) throw new SparkError("E_INVALID_ARGUMENT", "Progress value must be from 0 to 1");
+  await command("progress", { state, value });
 }
 export async function requestAttention(value: AttentionOptions = {}): Promise<AsyncRegistration> {
   options(value, ["kind"]);
