@@ -126,6 +126,23 @@ the other patches, it checks the version and exact source, is idempotent, and re
 atomically. Existing runtimes need a native rebuild. `tests/rtl-text-input-alignment-native.test.ts`
 compiles the patch's helpers and checks text and placeholders in `NSTextField` and `NSTextView`.
 
+## RN macOS accessibility state patch
+
+`react-native-macos@0.81.7` Fabric applies `accessibilityState` only on iOS: in `RCTViewComponentView.mm` it is inside
+`#if !TARGET_OS_OSX`. So a disabled `Pressable` (`disabled`, `accessibilityState.disabled`) with an
+`accessibilityRole` told VoiceOver it was enabled, a selected one (`accessibilityState.selected`) that it was not
+selected, and a view without a role reported `isAccessibilityEnabled` NO, as a plain `NSView` does, enabled or not.
+`accessibility-state.cjs` adds `isAccessibilityEnabled` and `isAccessibilitySelected` to `RCTViewComponentView` on
+macOS, answered from the view's current props: enabled unless `accessibilityState.disabled` or the not-enabled
+accessibility trait, selected when `accessibilityState.selected`. Reading the props covers the first mount, recycled
+views and every update. Like the other patches, it checks the version and exact source, is idempotent, and replaces
+the file atomically. Existing runtimes need a native rebuild. `tests/accessibility-state-native.test.ts` compiles the
+patched methods against AppKit. In the Kitchen Sink, `e2e/flows/native-controls/buttons.yaml` checks the Pressables
+on Button styles with `assertA11y` (`enabled`, `selected`) as they are disabled, selected and enabled again. The
+accessibility audit ([e2e-flows.md](e2e-flows.md#accessibility-audit)) exempts disabled React Native text as it does
+disabled AppKit controls; `e2e/flows/accessibility/audit-native-controls.yaml` audits Button styles again with the
+Pressables disabled.
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.
@@ -165,7 +182,6 @@ spark should retain runtime selection and compatibility policy while handing sta
 Validated on macOS on 2026-09-13: 131 unit tests (564 assertions), workspace TypeScript, all three template consumers including direct upstream creation, iOS/Android/Windows native generation, and all five universal Settings bundles. The Windows preparation check also passed for both the starter and the added native-greeting module, including prebuilt incompatibility detection. Windows native compilation and execution still require a Windows machine.
 
 Validated the Expo terminal patch on macOS on 2026-09-14: workspace TypeScript and 163 unit tests passed. A packed kitchen-sink consumer started the real Expo terminal, opened Spark Runner, switched to the missing-development-build state and back without compiling, reloaded through Expo, and launched DevTools. Native configuration invalidation blocked bundles with HTTP 409 and disconnected the owned Hermes runtime; restoring configuration restarted Expo. Fast Refresh delivered source edits, with zero idle updates over 12 seconds. Ctrl+C closed the session. Tests cover simulated Windows key selection, IPC dispatch, build-error recovery, version/source mismatch rejection, and worker preload isolation; native Windows launch and an actual build through the new key remain unverified.
-
 
 Validated shared development sessions on macOS on 2026-09-14: TypeScript and 168 unit tests (750 assertions) passed. `test:universal:dev` served all five Settings graphs from one Expo process, preserved the platform UI/Uniwind backends, blocked only the incompatible host desktop's bundle, delivered one source edit to iOS and web HMR clients, restarted with desktop still incompatible, and removed the session/server on shutdown. Expo `--clear`, `--offline`, `--go`, and `-p` were exercised. `test:add-desktop` also passed; an additional live shared session preserved the adopted app's original entry, custom Metro resolver, plugin output, and all-platform manifest. These checks do not claim native app execution.
 
