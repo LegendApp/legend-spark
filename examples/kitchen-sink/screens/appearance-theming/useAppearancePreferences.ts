@@ -22,10 +22,18 @@ export function useAppearancePreferences(windowId: string) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string>();
   const [windowAppearance, setWindowAppearance] = useState<WindowAppearance>("system");
-  const received = useRef(0), overridden = useRef(false);
+  const received = useRef(0), overridden = useRef(false), open = useRef(false);
+  // Overrides and the reset on close run one at a time, so a reset waits for an override still in flight.
+  const overrides = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueue = useCallback((step: () => unknown) => {
+    const run = overrides.current.then(step);
+    overrides.current = run.catch(() => {});
+    return run;
+  }, []);
   const report = useCallback((cause: unknown) => setError(describeError(cause)), []);
   const refresh = useCallback(() => { getAppearancePreferences().then(setPreferences, report); }, [report]);
   useRegistrations(hold => {
+    open.current = true;
     refresh();
     hold(onSystemEvent(event => {
       if (!TYPES.includes(event.type as typeof TYPES[number])) return;
@@ -33,10 +41,18 @@ export function useAppearancePreferences(windowId: string) {
       refresh();
     }).then(registration => { setListening(true); return registration; }));
     // The override belongs to this screen: leaving it restores the window to the app's appearance.
-    hold({ remove: () => { if (overridden.current) { overridden.current = false; return setWindowOptions(windowId, { appearance: "system" }); } } });
-  }, report, [refresh, report, windowId]);
+    hold({ remove: () => {
+      open.current = false;
+      return enqueue(() => { if (overridden.current) { overridden.current = false; return setWindowOptions(windowId, { appearance: "system" }); } });
+    } });
+  }, report, [refresh, report, windowId, enqueue]);
   const overrideWindow = useCallback((appearance: WindowAppearance) => {
-    setWindowOptions(windowId, { appearance }).then(() => { overridden.current = appearance !== "system"; setWindowAppearance(appearance); }, report);
-  }, [report, windowId]);
+    enqueue(async () => {
+      if (!open.current) return;
+      await setWindowOptions(windowId, { appearance });
+      overridden.current = appearance !== "system";
+      if (open.current) setWindowAppearance(appearance);
+    }).catch(cause => { if (open.current) report(cause); });
+  }, [enqueue, report, windowId]);
   return { availability: getSystemAvailability("appearancePreferences"), preferences, events, listening, error, windowAppearance, overrideWindow };
 }
