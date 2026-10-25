@@ -1,10 +1,11 @@
 import { expect, test } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { acquireRunnerLock } from "../packages/cli/src/runner-install.ts";
+import { run } from "./subprocess.ts";
 
 const macTest = test.skipIf(process.platform !== "darwin");
 
@@ -65,7 +66,7 @@ macTest("parent death closes the keeper pipe and releases the kernel lock", asyn
       parent.once("error", reject);
       parent.once("close", code => reject(new Error(`Lock-owning parent exited before readiness (${code}): ${stderr}`)));
     });
-    const keeper = spawnSync("pgrep", ["-P", String(parent.pid)], { encoding: "utf8" });
+    const keeper = await run("pgrep", ["-P", String(parent.pid)]);
     keeperPid = Number(keeper.stdout.trim().split("\n")[0]);
     expect(Number.isInteger(keeperPid) && keeperPid > 0).toBe(true);
     parent.kill("SIGKILL");
@@ -89,7 +90,7 @@ macTest("recovers a dead legacy owner process", async () => {
   const temporary = mkdtempSync(path.join(os.tmpdir(), "spark-runner-lock-"));
   const lock = path.join(temporary, "runner.lock");
   try {
-    const child = spawnSync(process.execPath, ["-e", `require('node:fs').writeFileSync(${JSON.stringify(lock)}, String(process.pid))`]);
+    const child = await run(process.execPath, ["-e", `require('node:fs').writeFileSync(${JSON.stringify(lock)}, String(process.pid))`]);
     expect(child.status).toBe(0);
     const release = await acquireRunnerLock(lock, 100);
     expect(readFileSync(lock, "utf8")).toMatch(/^v2:/);

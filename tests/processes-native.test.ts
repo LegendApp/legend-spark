@@ -1,9 +1,9 @@
 import { test, expect } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-test.skipIf(process.platform !== "darwin")("actual macOS process implementation preserves bytes, capture limits, exit and termination", () => {
+test.skipIf(process.platform !== "darwin")("actual macOS process implementation preserves bytes, capture limits, exit and termination", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-process-native-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
@@ -13,7 +13,7 @@ test.skipIf(process.platform !== "darwin")("actual macOS process implementation 
     const [bridge, checks] = fixture.split("// IMPLEMENTATION HERE");
     writeFileSync(path.join(directory, "main.mm"), bridge + source + checks);
     const binary = path.join(directory, "test");
-    execFileSync("clang++", ["-std=c++20", "-fobjc-arc", "-fblocks", "-framework", "AppKit", path.join(directory, "main.mm"), "-o", binary]);
-    expect(execFileSync(binary, { encoding: "utf8", timeout: 15000 })).toContain("Process native checks passed");
+    await runOk("clang++", ["-std=c++20", "-fobjc-arc", "-fblocks", "-framework", "AppKit", path.join(directory, "main.mm"), "-o", binary]);
+    expect(await runOk(binary, [], { timeout: 15000 })).toContain("Process native checks passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
-});
+}, 25000);

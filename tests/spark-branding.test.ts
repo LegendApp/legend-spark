@@ -1,18 +1,18 @@
-import { spawnSync } from "node:child_process";
 import { expect, test } from "vitest";
+import { run } from "./subprocess.ts";
 import { readFileSync, readdirSync, existsSync, globSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 const root = path.resolve(import.meta.dirname, "..");
 const require = createRequire(import.meta.url);
-test("public spark package exposes the CLI and component entry points", () => {
+test("public spark package exposes the CLI and component entry points", async () => {
   const pkg = JSON.parse(readFileSync(path.join(root, "packages/desktop/package.json"), "utf8"));
   expect(pkg.name).toBe("@legendapp/spark");
   expect(pkg.bin.spark).toBe("bin/spark.cjs");
   for (const entry of ["./ui", "./ui/uniwind", "./audio", "./auth-session", "./files", "./windows"]) {
     expect(existsSync(require.resolve(`@legendapp/spark/${entry.slice(2)}`))).toBe(true);
   }
-  const command = spawnSync(process.execPath, [path.join(root, "packages/desktop/bin/spark.cjs"), "--help"], { cwd: root });
+  const command = await run(process.execPath, [path.join(root, "packages/desktop/bin/spark.cjs"), "--help"], { cwd: root });
   expect(command.status).toBe(0);
   expect(command.stdout.toString()).toContain("Legend Spark");
   expect(command.stdout.toString()).toContain("spark create MyApp");

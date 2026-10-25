@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test.skipIf(process.platform !== "darwin")("Windows Nitro uses RNW's runtime-supplied initializer and retains installation errors", () => {
+test.skipIf(process.platform !== "darwin")("Windows Nitro uses RNW's runtime-supplied initializer and retains installation errors", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-windows-nitro-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
@@ -84,7 +84,7 @@ int main() {
   puts("Windows Nitro initializer passed");
 }
 `);
-    execFileSync("clang++", ["-std=c++20", "-I", directory, input, "-o", output]);
-    expect(execFileSync(output, { encoding: "utf8", timeout: 10000 })).toContain("Windows Nitro initializer passed");
+    await runOk("clang++", ["-std=c++20", "-I", directory, input, "-o", output]);
+    expect(await runOk(output, [], { timeout: 10000 })).toContain("Windows Nitro initializer passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 25000);
