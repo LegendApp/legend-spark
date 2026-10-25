@@ -11,11 +11,16 @@ export type SidebarLayoutEvent = Readonly<{
   width: Double;
 }>;
 
+export type SidebarRowLayoutEvent = Readonly<{
+  width: Double;
+}>;
+
 export interface NativeProps extends ViewProps {
   contentInsetTop?: Double;
   defaultRowHeight?: Double;
   itemsJson?: string;
   onSidebarLayout?: DirectEventHandler<SidebarLayoutEvent>;
+  onSidebarRowLayout?: DirectEventHandler<SidebarRowLayoutEvent>;
   onSidebarSelectionChange?: DirectEventHandler<SidebarSelectionChangeEvent>;
   selectedId?: string;
   selectionRevision?: Int32;

@@ -30,7 +30,9 @@ export interface SidebarItemProps extends SpecializedViewProps {
   selectable?: boolean;
   onContextMenu?: (event: SidebarContextMenuEvent) => void;
 }
-const SidebarContext = createContext(false);
+// Inside a Sidebar: the row width the native list reports, which React rows take, since it excludes
+// the source-list insets and a scroller. Undefined until the first native layout.
+const SidebarContext = createContext<{ rowWidth: number | undefined } | null>(null);
 export function getSidebarAvailability() {
   const availability = macosViewAvailability("Sidebar");
   return availability.available ? macosViewAvailability("SidebarItem") : availability;
@@ -67,6 +69,7 @@ export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defa
   if (selectedId !== null && !selectableIds.has(selectedId)) throw new SparkError("E_INVALID_ARGUMENT", "Selected sidebar ID must identify a selectable row");
   const control = useControl({ ref, onError }, getSidebarAvailability());
   const [selectionRevision, revise] = useState(0);
+  const [rowWidth, setRowWidth] = useState<number>();
   function selection(event: NativeSyntheticEvent<{ id: string }>) {
     if (!control.active()) return;
     const id = event?.nativeEvent?.id;
@@ -79,13 +82,21 @@ export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defa
     catch (cause) { control.error(new SparkError("E_INVALID_DATA", "Invalid sidebar layout", { cause })); return; }
     onContentLayout?.({ width: event.nativeEvent.width, height: event.nativeEvent.height });
   }
-  if (control.failed) return <View {...props} ref={control.ref}><SidebarContext.Provider value>{items?.map(item => <Text key={item.id}>{item.label}</Text>) ?? children}</SidebarContext.Provider></View>;
-  return <NativeSidebar {...props} ref={control.ref} itemsJson={itemsJson} selectedId={selectedId ?? ""} selectionRevision={selectionRevision} contentInsetTop={contentInsetTop} defaultRowHeight={defaultRowHeight} onSidebarLayout={layout} onSidebarSelectionChange={selection}>
-    <SidebarContext.Provider value>{children}</SidebarContext.Provider>
+  function rowLayout(event: NativeSyntheticEvent<{ width: number }>) {
+    if (!control.active()) return;
+    try { finite(event?.nativeEvent?.width, "row width"); }
+    catch (cause) { control.error(new SparkError("E_INVALID_DATA", "Invalid sidebar row layout", { cause })); return; }
+    setRowWidth(event.nativeEvent.width);
+  }
+  const context = useMemo(() => ({ rowWidth }), [rowWidth]);
+  if (control.failed) return <View {...props} ref={control.ref}><SidebarContext.Provider value={context}>{items?.map(item => <Text key={item.id}>{item.label}</Text>) ?? children}</SidebarContext.Provider></View>;
+  return <NativeSidebar {...props} ref={control.ref} itemsJson={itemsJson} selectedId={selectedId ?? ""} selectionRevision={selectionRevision} contentInsetTop={contentInsetTop} defaultRowHeight={defaultRowHeight} onSidebarLayout={layout} onSidebarRowLayout={rowLayout} onSidebarSelectionChange={selection}>
+    <SidebarContext.Provider value={context}>{children}</SidebarContext.Provider>
   </NativeSidebar>;
 }
-export function SidebarItem({ id, children, rowHeight, selectable = true, onContextMenu, ref, onError, ...props }: SidebarItemProps) {
-  if (!useContext(SidebarContext)) throw new SparkError("E_INVALID_ARGUMENT", "SidebarItem requires a Sidebar parent");
+export function SidebarItem({ id, children, rowHeight, selectable = true, onContextMenu, ref, onError, style, ...props }: SidebarItemProps) {
+  const sidebar = useContext(SidebarContext);
+  if (!sidebar) throw new SparkError("E_INVALID_ARGUMENT", "SidebarItem requires a Sidebar parent");
   identifier(id, "sidebar ID"); callback(onContextMenu, "context menu");
   if (rowHeight !== undefined && rowHeight !== "auto") finite(rowHeight, "row height", 1);
   if (typeof selectable !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected selectable boolean");
@@ -99,6 +110,6 @@ export function SidebarItem({ id, children, rowHeight, selectable = true, onCont
     } catch (cause) { control.error(new SparkError("E_INVALID_DATA", "Invalid sidebar context menu event", { cause })); return; }
     onContextMenu?.({ id, position: { x: data.x, y: data.y }, windowPosition: { x: data.pageX, y: data.pageY }, modifiers: { alt: data.altKey, control: data.ctrlKey, meta: data.metaKey, shift: data.shiftKey } });
   }
-  if (control.failed) return <View {...props} ref={control.ref}>{children}</View>;
-  return <NativeSidebarItem {...props} ref={control.ref} itemId={id} autoHeight={rowHeight === "auto"} rowHeight={typeof rowHeight === "number" ? rowHeight : 0} selectable={selectable} onRightClick={contextMenu}>{children}</NativeSidebarItem>;
+  if (control.failed) return <View {...props} style={style} ref={control.ref}>{children}</View>;
+  return <NativeSidebarItem {...props} style={sidebar.rowWidth === undefined ? style : [style, { width: sidebar.rowWidth }]} ref={control.ref} itemId={id} autoHeight={rowHeight === "auto"} rowHeight={typeof rowHeight === "number" ? rowHeight : 0} selectable={selectable} onRightClick={contextMenu}>{children}</NativeSidebarItem>;
 }

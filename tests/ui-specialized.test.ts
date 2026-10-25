@@ -151,6 +151,17 @@ test("sidebar selection acknowledgments reuse the serialized rows and refreshed 
   await act(async () => rendered.update(React.createElement(Sidebar, { items: [{ id: "b", label: "B" }], selectedId: "b", onSelectionChange })));
   expect(JSON.parse(rendered.root.findByType("Sidebar").props.itemsJson)).toEqual([{ id: "b", title: "B", selectable: true }]);
 });
+test("custom sidebar rows take the native row width once it is reported", async () => {
+  const onError = vi.fn();
+  await mount(React.createElement(Sidebar, { selectedId: null, onSelectionChange: vi.fn(), onError, children: React.createElement(SidebarItem, { id: "row", style: { minHeight: 34 } }, "Content") }));
+  expect(rendered.root.findByType("SidebarItem").props.style).toEqual({ minHeight: 34 });
+  const native = rendered.root.findByType("Sidebar").props;
+  await act(async () => native.onSidebarRowLayout({ nativeEvent: { width: 288 } }));
+  expect(rendered.root.findByType("SidebarItem").props.style).toEqual([{ minHeight: 34 }, { width: 288 }]);
+  await act(async () => rendered.root.findByType("Sidebar").props.onSidebarRowLayout({ nativeEvent: { width: Number.NaN } }));
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  expect(rendered.root.findByType("SidebarItem").props.style).toEqual([{ minHeight: 34 }, { width: 288 }]);
+});
 test("custom sidebar rows expose owned context-menu coordinates", async () => {
   const onContextMenu = vi.fn();
   await mount(React.createElement(Sidebar, { selectedId: null, onSelectionChange: vi.fn(), children: React.createElement(SidebarItem, { id: "row", rowHeight: "auto", onContextMenu }, "Content") }));

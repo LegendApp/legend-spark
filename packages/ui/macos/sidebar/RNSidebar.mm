@@ -22,6 +22,25 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
 @implementation RNSidebarDataItem
 @end
 
+// A data row's title, inset at both ends and centered vertically, aligned to the row's layout direction.
+@interface RNSidebarDataCell : NSTableCellView
+@end
+
+@implementation RNSidebarDataCell
+- (void)layoutTitle
+{
+  NSTextField *title = self.textField;
+  CGFloat height = title.intrinsicContentSize.height;
+  title.alignment = self.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft ? NSTextAlignmentRight : NSTextAlignmentLeft;
+  title.frame = NSMakeRect(12, round((NSHeight(self.bounds) - height) / 2), MAX(0, NSWidth(self.bounds) - 24), height);
+}
+
+- (void)resizeSubviewsWithOldSize:(NSSize)oldSize
+{
+  [self layoutTitle];
+}
+@end
+
 @interface RNSidebarRowView : NSTableRowView
 @property (nonatomic, assign) BOOL contextHighlighted;
 @end
@@ -224,7 +243,9 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   CGFloat _defaultRowHeight;
   NSSize _lastReportedSize;
   NSInteger _contextHighlightedRow;
+  CGFloat _lastReportedRowWidth;
   BOOL _updatingSelection;
+  BOOL _rightToLeft;
 #else
   RCTPlatformView *_placeholderView;
 #endif
@@ -243,6 +264,8 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
     _defaultRowHeight = 28;
     _lastReportedSize = NSZeroSize;
     _contextHighlightedRow = -1;
+    _lastReportedRowWidth = 0;
+    _rightToLeft = NO;
     self.wantsLayer = YES;
     [self setupSidebar];
 #else
@@ -278,6 +301,8 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   if (@available(macOS 11.0, *)) {
     _tableView.style = NSTableViewStyleSourceList;
   }
+  // Follows the React layout direction (updateLayoutMetrics), not the application's.
+  _tableView.userInterfaceLayoutDirection = NSUserInterfaceLayoutDirectionLeftToRight;
 
   _tableColumn = [[NSTableColumn alloc] initWithIdentifier:RNSidebarColumnIdentifier];
   _tableColumn.resizingMask = NSTableColumnAutoresizingMask;
@@ -442,6 +467,25 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   }
 }
 
+// React rows are laid out by Yoga, so their width is reported for the Sidebar to apply: the column the
+// source-list table fits inside its clip view, which excludes the row insets and a legacy scroller.
+- (void)reportRowWidthIfNeeded
+{
+  CGFloat width = _tableColumn.width;
+  const auto eventEmitter = std::static_pointer_cast<const SidebarEventEmitter>(_eventEmitter);
+  if (!eventEmitter || width <= 0 || width == _lastReportedRowWidth) {
+    return;
+  }
+
+  _lastReportedRowWidth = width;
+  eventEmitter->onSidebarRowLayout(SidebarEventEmitter::OnSidebarRowLayout{.width = width});
+}
+
+- (void)tableViewColumnDidResize:(NSNotification *)notification
+{
+  [self reportRowWidthIfNeeded];
+}
+
 - (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView
                           index:(NSInteger)index
 {
@@ -519,15 +563,13 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
     return cell;
   }
 
-  NSTableCellView *cell = [tableView makeViewWithIdentifier:RNSidebarDataCellIdentifier owner:self];
+  RNSidebarDataCell *cell = [tableView makeViewWithIdentifier:RNSidebarDataCellIdentifier owner:self];
   if (!cell) {
-    cell = [NSTableCellView new];
+    cell = [RNSidebarDataCell new];
     cell.identifier = RNSidebarDataCellIdentifier;
 
     NSTextField *textField = [NSTextField labelWithString:@""];
-    textField.autoresizingMask = NSViewWidthSizable;
     textField.font = [NSFont systemFontOfSize:13 weight:NSFontWeightRegular];
-    textField.frame = NSMakeRect(12, 4, 180, MAX(0, _defaultRowHeight - 8));
     textField.lineBreakMode = NSLineBreakByTruncatingTail;
     textField.textColor = NSColor.labelColor;
 
@@ -535,9 +577,9 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
     [cell addSubview:textField];
   }
 
-  RNSidebarDataItem *item = _dataItems[row];
-  cell.textField.stringValue = item.title;
-  cell.textField.frame = NSMakeRect(12, 4, MAX(0, tableView.bounds.size.width - 20), MAX(0, _defaultRowHeight - 8));
+  cell.userInterfaceLayoutDirection = _tableView.userInterfaceLayoutDirection;
+  cell.textField.stringValue = _dataItems[row].title;
+  [cell layoutTitle];
   return cell;
 }
 
@@ -601,6 +643,17 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
            oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
 {
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+
+#if TARGET_OS_OSX
+  // Mirror with the React layout direction, which can differ from the application's.
+  const BOOL rightToLeft = layoutMetrics.layoutDirection == LayoutDirection::RightToLeft;
+  if (rightToLeft != _rightToLeft) {
+    _rightToLeft = rightToLeft;
+    _tableView.userInterfaceLayoutDirection = rightToLeft ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight;
+    [self reloadRows];
+  }
+#endif
+
   [self layoutSubviews];
 }
 
@@ -609,10 +662,12 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   [super layoutSubviews];
 
 #if TARGET_OS_OSX
+  // The table keeps its column fitted to the clip view; a column as wide as the Sidebar would push the
+  // source-list row insets past its trailing edge.
   _scrollView.frame = self.bounds;
-  _tableColumn.width = self.bounds.size.width;
-  [_tableView tile];
+  [_scrollView tile];
   [self reportLayoutIfNeeded];
+  [self reportRowWidthIfNeeded];
 #else
   _placeholderView.frame = self.bounds;
 #endif
@@ -633,6 +688,7 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   _contentInsetTop = 0;
   _defaultRowHeight = 28;
   _lastReportedSize = NSZeroSize;
+  _lastReportedRowWidth = 0;
   _contextHighlightedRow = -1;
   _updatingSelection = NO;
   _scrollView.contentInsets = NSEdgeInsetsZero;
