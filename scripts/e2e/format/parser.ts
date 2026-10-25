@@ -65,7 +65,8 @@ function nodeAt(doc: Document.Parsed, pointer: string): { node: Node | null; key
 }
 const keyNode = (map: Node | null, name: string) => isMap(map) ? (map.items as Pair<Node>[]).find(pair => isScalar(pair.key) && pair.key.value === name)?.key : undefined;
 
-function distance(a: string, b: string): number {
+/** Case-insensitive edit distance. */
+export function distance(a: string, b: string): number {
   const row = Array.from({ length: b.length + 1 }, (_, index) => index);
   for (let i = 1; i <= a.length; i++) {
     let previous = row[0]!; row[0] = i;

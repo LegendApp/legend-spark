@@ -4,8 +4,8 @@ Kitchen Sink behavior is verified by YAML flows. The format uses Maestro's core
 vocabulary with Maestro semantics, plus desktop extensions. This page covers how to
 write a flow and check it. The full command list is in
 [e2e-flow-commands.md](e2e-flow-commands.md), which is generated from the catalog.
-The runner ([#49](https://github.com/LegendApp/legend-spark/issues/49)) executes
-flows; this page covers only the format and its tooling.
+[Running flows](#running-flows) covers the runner, its reports and its backend
+interface.
 
 ## Layout
 
@@ -33,8 +33,10 @@ A file you name on the command line outside those folders is checked as a flow.
    the check IDs in `checks:`.
 3. Run `bun run e2e:lint e2e/flows/<area>` and fix every finding. Lint also runs
    validation, so a clean lint means the files are valid too.
-4. Before you open a PR, run `bun run e2e:lint` with no arguments. It checks all of `e2e/`.
-5. Run `bun run e2e:coverage` and fix every problem in your area (see
+4. Run it: `bun run e2e:run e2e/flows/<area>/<name>.yaml --agent` (see
+   [Running flows](#running-flows)).
+5. Before you open a PR, run `bun run e2e:lint` with no arguments. It checks all of `e2e/`.
+6. Run `bun run e2e:coverage` and fix every problem in your area (see
    [Coverage](#coverage)). Surface outside your area may stay uncovered.
 
 ```sh
@@ -154,6 +156,149 @@ commands, frame timing, performance, `assertState`, and:
 There is no `retry` and no sleep command. Every command waits for its target, and a
 flaky flow counts as a failed flow. Use `extendedWaitUntil` to wait for state, or
 `setClock: virtual` with `advanceClock` to step through animation.
+
+## Running flows
+
+```sh
+bun run e2e:run [flow|dir…] [--backend name[,name…]] [--agent] [--report dir] [--app path]
+```
+
+With no paths it runs every flow under `e2e/flows`. A directory runs the flows under
+it. `--backend` picks backends by name; the default is every available backend.
+`--app` is the app under test, also available to flows as `${APP_PATH}`. The exit code
+is 0 when every flow passed or was skipped, 1 when one failed, and 2 for a usage error.
+
+**No production backend exists yet.** The macOS black-box backend (AX + CGEvent) lands
+with [#50](https://github.com/LegendApp/legend-spark/issues/50), and the adapter for the
+Spark in-app driver lands with [#52](https://github.com/LegendApp/legend-spark/issues/52).
+Until then, `e2e:run` exits 2 and says so. The runner's behavior is covered by
+`tests/e2e-runner.test.ts`, which uses an in-memory test backend.
+
+### Semantics
+
+- **Implicit waits.** A command waits for its target, polling every 100ms. The default
+  is 5s; a command's `timeout` overrides it. `assertVisible` and
+  `extendedWaitUntil: { visible }` wait for at least one match. `assertNotVisible` and
+  `extendedWaitUntil: { notVisible }` wait for none. Commands that act on a target, such as
+  `tapOn`, wait for exactly one.
+- **Zero retries.** Only lookups and checks are polled. An action runs once. The first
+  failure ends the flow, and a failed flow is never rerun.
+- **Flow timeout.** The header `timeout` bounds the whole flow. The default is 10 minutes.
+- **`when`** checks `platform` and `matrix` first, then `visible` and `notVisible` once,
+  without waiting. A command whose condition is false is reported as a `skipped` step.
+- **Matrix.** The flow runs once per combination of the header `matrix`, in header order.
+  Each combination gets its own result, such as `flows/windows/sheet[appearance=dark]`.
+  A dimension that no active backend applies is an `unsupported` failure.
+- **`platforms`.** A flow that excludes the running platform is reported as `skipped`
+  with the reason.
+- **Variables.** `${FIXTURES}` is `<e2e root>/fixtures`. `${TMP}` is a fresh directory per
+  flow run. `${APP_PATH}` is set by `--app`. Header `env` can use these, and `runFlow`
+  env overrides both for its commands. An undefined variable fails the command.
+- **`runFlow`.** A file must be a valid subflow, and a cycle is an error. Failures inside
+  it report the failing command plus every call site (`stack`).
+- **`repeat`** checks `while` before each iteration and stops after `times`. With only
+  `while`, the flow timeout bounds it.
+- **Restoration.** Commands that change OS or app state register an undo. When the flow
+  exits (pass, failure, timeout or Ctrl-C), the runner runs `onFlowComplete`, then the
+  undos last-in first-out, then stops the backends. If a restoration fails, a flow that
+  otherwise passed fails with kind `restore`.
+
+### Selector semantics
+
+Backends find elements. The runner applies the rest, so every backend behaves the same:
+
+- `text` and `label` match the whole value after trimming. A `/regex/` is a search.
+  `id` and `role` are exact. Per-platform text uses the running platform's variant. If
+  that variant is missing, the command fails.
+- `within`, `window` and relation anchors must each match exactly one element or window.
+  An inner part inherits the outer `window`.
+- Matches are in reading order (top to bottom, then left to right), and `index` picks one.
+  With `below`, `above`, `leftOf` or `rightOf`, matches are ordered nearest first and the
+  nearest wins. A relation holds when the element's center is past the anchor's edge.
+- `point` is a percentage of, or an offset from the top-left of, its `within` element or
+  its window.
+- A miss is `not-found` and lists up to five nearby candidates: the elements whose id,
+  label or text are closest. More than one match is `ambiguous` and lists every match.
+
+### Reports
+
+Each run writes one directory. The default is `artifacts/e2e/run-<timestamp>`; use
+`--report` to choose another.
+
+```
+report.json                    # the gate and dashboards read this
+junit.xml                      # one testsuite per flow file
+index.html                     # static page; open it in a browser
+<flow path>/<matrix or "run">/
+  tmp/                         # ${TMP}
+  output/                      # takeScreenshot and other files the flow asked for
+  failure/                     # elements-<backend>.json, screenshot, logs, driver trace
+  backend-<name>/              # the backend's private directory (Session.dir)
+```
+
+Failure evidence is collected when the failure happens, before `onFlowComplete` and
+restoration change anything.
+
+`report.json` has `version`, `startedAt`, `durationMs`, `platform`, `backends`,
+`interrupted`, `summary` (`total`, `passed`, `failed`, `skipped`) and `flows`. Each flow
+has `id`, `file`, `name`, `intent`, `checks`, `tags`, `matrix`, `status`, `skipReason`,
+`durationMs`, `steps` (every command run, with `depth`, `status` and duration), `failure`,
+`errors` (problems after the first failure) and `artifacts`. A `failure` has `kind`,
+`message`, `command`, `location`, `stack`, `candidates`, `matches`, `artifacts` and, for
+invalid flows, `diagnostics`. Artifact paths are relative to the run directory.
+
+Failure kinds: `assertion`, `not-found`, `ambiguous`, `unsupported` (a command, selector
+or matrix dimension the active backends cannot handle; never skipped silently),
+`invalid` (an undefined variable, an unreadable `runFlow` file, a cycle), `format`,
+`timeout`, `interrupted`, `restore` and `error` (an unexpected backend error).
+
+### Agent mode
+
+`--agent` prints one JSON object per line:
+
+| `event` | Fields |
+| --- | --- |
+| `run-start` | `runDir`, `platform`, `backends`, `files` |
+| `flow-start` | `id`, `file`, `name`, `intent`, `matrix` |
+| `flow-end` | Everything in the report's flow entry except `steps`. `failure.location` and `failure.stack` are `file:line:column` strings, and artifact paths are absolute. |
+| `run-end` | `summary`, `interrupted`, `reports` (`json`, `junit`, `html`) |
+
+To repair a failing flow, read `intent`, go to `failure.location`, and compare the
+selector with `failure.candidates`. Then open the screenshot and the
+`elements-<backend>.json` dump from `failure.artifacts`.
+
+### Backends
+
+A backend implements `Backend` in `scripts/e2e/runner/backend.ts` and is registered by
+name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
+
+- `kind` is `black-box` (OS input and the accessibility tree) or `driver` (in-process).
+  Commands marked **driver** run only on a driver backend. Other commands run only on a
+  black-box backend, except lifecycle commands, which either kind may own. Visibility
+  checks (`assertVisible`, `assertNotVisible`, `extendedWaitUntil`, `when`) use the
+  black-box backend.
+- `commands` is the dispatch table. If no eligible backend has a command, the flow fails
+  with `unsupported`, naming the backend. The runner itself runs `runFlow`, `repeat`,
+  `extendedWaitUntil`, `assertVisible` and `assertNotVisible`.
+- Selectors: implement `elements()` (every visible element, in screen coordinates, with
+  `parent` keys) and the runner matches everything, lists candidates and dumps the tree.
+  A backend that cannot list elements implements `query()` with the atom keys it
+  supports in `queryKeys`. Any other selector key is `unsupported`. `windows()` lists
+  windows front to back.
+- Handlers get a `CommandContext`. It has `target()`, `resolve(selector)` and
+  `window(selector)` (waits with the shared semantics), `eventually(check)` (polls a
+  check that throws `Failure("assertion", …)`), `onRestore(label, undo)`, `run(commands)`
+  for nested commands, and `outputDir` with `addArtifact` for files the flow asked for.
+- `matrix` lists the dimensions the backend applies, from `session.matrix` in `start`.
+  `collect(dir)` writes failure evidence: a screenshot, logs, a driver trace.
+
+The #52 driver protocol (`ping`, `navigate`, `waitFor`, `setAppAppearance`, `capture`,
+`quit`) fits as a `driver` backend:
+
+- `start` and `launchApp` launch the app in driver mode, and `openUrl` maps to `navigate`.
+- `query` supports `id` through `waitFor`, and returns at most the first match.
+- `matrix` has `appearance` (via `setAppAppearance`) and `locale` (a launch argument).
+- `takeScreenshot` and `collect` use `capture`, and `stop` uses `quit`.
 
 ## Lint rules
 
