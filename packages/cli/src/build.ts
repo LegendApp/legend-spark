@@ -95,8 +95,14 @@ export async function analyze(root: string) {
   ) });
   await exportBundle({ SPARK_RUNTIME_SOURCES: runtimeSources });
   const map = readJson(path.join(dir, "app.map"));
-  const sourceFile = (source: string) => source.includes("\0") ? undefined
-    : [path.resolve(root, source), path.resolve(root, source.replace(/^\//, ""))].find(file => existsSync(file));
+  // Paths are absolute, or relative to the app or to Metro's server root, which can be a workspace above the app.
+  const sourceFile = (source: string) => {
+    if (source.includes("\0")) return undefined;
+    for (let base = root; ; base = path.dirname(base)) {
+      const file = [path.resolve(base, source), path.resolve(base, source.replace(/^\//, ""))].find(file => existsSync(file));
+      if (file || base === path.dirname(base)) return file;
+    }
+  };
   const used = new Set<string>();
   for (const source of map.sources as string[]) {
     const file = sourceFile(source);

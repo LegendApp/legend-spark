@@ -71,6 +71,21 @@ test.each(["modules/system/src/index.ts", "/modules/system/src/index.ts"])("reco
   expect(report().nativeCheck.violations[0].name).toBe(excluded);
 });
 
+test("recognizes workspace packages in source maps relative to Metro's server root above the app", async () => {
+  const app = path.join(root, "app");
+  mkdirSync(app);
+  renameSync(path.join(root, "desktop.config.json"), path.join(app, "desktop.config.json"));
+  writeJson(path.join(app, "package.json"), { main: "index.ts" });
+  const linked = path.join(root, "packages/system");
+  mkdirSync(path.join(linked, "src"), { recursive: true });
+  writeJson(path.join(linked, "package.json"), readJson(path.join(root, "node_modules", excluded, "package.json")));
+  writeFileSync(path.join(linked, "src/index.ts"), "export const native = true;");
+  rmSync(path.join(root, "node_modules", excluded), { recursive: true });
+  symlinkSync(linked, path.join(root, "node_modules", excluded));
+  commands.sources = ["/packages/system/src/index.ts"];
+  await expect(analyze(app)).rejects.toThrow("used by the production bundle");
+});
+
 test("checks excluded native packages available only through the shared parent install", async () => {
   const app = path.join(root, "app");
   mkdirSync(app);
