@@ -8,8 +8,8 @@ test.skipIf(process.platform !== "darwin")("native sidebar configures rows on a 
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-sidebar-test-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
-    const source = readFileSync(path.join(root, "packages/ui/macos/sidebar/RNSidebar.mm"), "utf8")
-      .split("\n").filter(line => !line.startsWith("#import")).join("\n");
+    const source = ["RNSparkLayoutDirection.h", "sidebar/RNSidebar.mm"].map(name => readFileSync(path.join(root, "packages/ui/macos", name), "utf8")
+      .split("\n").filter(line => !line.startsWith("#import")).join("\n")).join("\n");
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     writeFileSync(input, readFileSync(path.join(root, "tests/sidebar-updates.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));
     execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", input, "-o", output]);

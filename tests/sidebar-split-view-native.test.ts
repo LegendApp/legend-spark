@@ -8,7 +8,7 @@ test.skipIf(process.platform !== "darwin")("native split views preserve collapse
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-split-view-test-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
-    const source = readFileSync(path.join(root, "packages/ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm"), "utf8")
+    const source = ["RNSparkLayoutDirection.h", "appkit-split-view/RNSidebarSplitViewComponent.mm"].map(name => readFileSync(path.join(root, "packages/ui/macos", name), "utf8")).join("\n")
       .split("\n").filter(line => !line.startsWith("#import")).join("\n");
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     writeFileSync(input, readFileSync(path.join(root, "tests/sidebar-split-view.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));

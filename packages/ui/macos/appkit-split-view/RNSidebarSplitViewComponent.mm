@@ -1,4 +1,5 @@
 #import "RNSidebarSplitViewComponent.h"
+#import "RNSparkLayoutDirection.h"
 
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
@@ -934,6 +935,13 @@ static char RNSidebarSplitViewStartupKey;
   });
 }
 
+// AppKit hosts each pane in its own item wrapper, so a frame in split-view coordinates is converted
+// to the wrapper's. A pane outside the split (the list while it has no column) takes it as is.
+- (void)setPane:(NSView *)pane splitViewFrame:(CGRect)frame
+{
+  pane.frame = pane.superview ? [_splitViewController.splitView convertRect:frame toView:pane.superview] : frame;
+}
+
 - (BOOL)applyEstimatedSplitViewLayoutForBounds:(CGRect)bounds layoutReady:(BOOL)layoutReady
 {
   if (bounds.size.width <= 0 || bounds.size.height <= 0) {
@@ -955,11 +963,18 @@ static char RNSidebarSplitViewStartupKey;
     listWidth = 0;
   }
 
+  // The offsets above run from the leading edge, as AppKit's split view lays out panes.
+  CGFloat sidebarX = 0;
+  if (_splitViewController.splitView.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft) {
+    sidebarX = bounds.size.width - sidebarWidth;
+    listX = bounds.size.width - listX - listWidth;
+    contentX = bounds.size.width - contentX - contentWidth;
+  }
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
-  _sidebarContainer.frame = CGRectMake(0, 0, sidebarWidth, bounds.size.height);
-  _listContainer.frame = CGRectMake(listX, 0, listWidth, bounds.size.height);
-  _contentContainer.frame = CGRectMake(contentX, 0, contentWidth, bounds.size.height);
+  [self setPane:_sidebarContainer splitViewFrame:CGRectMake(sidebarX, 0, sidebarWidth, bounds.size.height)];
+  [self setPane:_listContainer splitViewFrame:CGRectMake(listX, 0, listWidth, bounds.size.height)];
+  [self setPane:_contentContainer splitViewFrame:CGRectMake(contentX, 0, contentWidth, bounds.size.height)];
 
   CGRect sidebarBounds = CGRectMake(0, 0, sidebarWidth, bounds.size.height);
   CGRect contentBounds = CGRectMake(0, 0, contentWidth, bounds.size.height);
@@ -1090,6 +1105,26 @@ static char RNSidebarSplitViewStartupKey;
   [self publishSplitViewLayoutAllowEstimatedReady:NO];
 }
 
+// Each item view lays its pane out by its own direction, not the split view's. macOS 26 floats the sidebar
+// pane in glass inset from the item's outer edge, and places it from the item's direction when the item
+// moves into a window, so a split already in one is re-hosted to place it again.
+- (void)updateItemLayoutDirection
+{
+  NSUserInterfaceLayoutDirection direction = _splitViewController.splitView.userInterfaceLayoutDirection;
+  BOOL changed = NO;
+  for (NSView *item in _splitViewController.splitView.arrangedSubviews) {
+    if (item.userInterfaceLayoutDirection != direction) {
+      item.userInterfaceLayoutDirection = direction;
+      item.needsLayout = YES;
+      changed = YES;
+    }
+  }
+  if (changed && self.window) {
+    [_splitViewController.view removeFromSuperview];
+    [self addSubview:_splitViewController.view];
+  }
+}
+
 - (void)layoutSplitView
 {
   if (_layingOutSplitView) {
@@ -1101,6 +1136,7 @@ static char RNSidebarSplitViewStartupKey;
   _splitViewController.splitView.frame = bounds;
   [self updateSplitItemSizing];
   [self updateListItem];
+  [self updateItemLayoutDirection];
   [self adoptNativeSidebarCollapsed];
   if (_contentContainer.bounds.size.width <= 0 ||
       _contentContainer.bounds.size.height <= 0 ||
@@ -1112,6 +1148,15 @@ static char RNSidebarSplitViewStartupKey;
   [self layoutContentTitlebarMaterial];
   _layingOutSplitView = NO;
   [self publishSplitViewLayoutAllowEstimatedReady:YES];
+}
+
+- (void)invalidatePublishedLayout
+{
+  _lastSidebarWidth = -1;
+  _lastContentWidth = -1;
+  _lastListWidth = -1;
+  _lastHeight = -1;
+  _lastLayoutReady = NO;
 }
 
 - (void)updateEventEmitter:(const EventEmitter::Shared &)eventEmitter
@@ -1326,11 +1371,7 @@ static char RNSidebarSplitViewStartupKey;
 #if TARGET_OS_OSX
   _layingOutSplitView = wasLayingOutSplitView;
   if (shouldRelayout || shouldRecreateContentTitlebarMaterial || shouldRecreateSidebarTitlebarMaterial) {
-    _lastSidebarWidth = -1;
-    _lastContentWidth = -1;
-    _lastListWidth = -1;
-    _lastHeight = -1;
-    _lastLayoutReady = NO;
+    [self invalidatePublishedLayout];
     [self layoutSplitView];
   }
 #endif
@@ -1343,6 +1384,12 @@ static char RNSidebarSplitViewStartupKey;
 
 #if TARGET_OS_OSX
   _currentLayoutMetrics = layoutMetrics;
+  NSUserInterfaceLayoutDirection direction = RNSparkLayoutDirection(layoutMetrics);
+  if (_splitViewController.splitView.userInterfaceLayoutDirection != direction) {
+    // AppKit mirrors the panes and keeps their widths; only their x positions change.
+    _splitViewController.splitView.userInterfaceLayoutDirection = direction;
+    [self invalidatePublishedLayout];
+  }
   [self layoutSplitView];
 #else
   CGFloat sidebarWidth = self.bounds.size.width * 0.26;

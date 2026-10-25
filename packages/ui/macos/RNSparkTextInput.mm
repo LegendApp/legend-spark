@@ -1,4 +1,5 @@
 #import "RNSparkTextInput.h"
+#import "RNSparkLayoutDirection.h"
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
 #import <react/renderer/components/RNSparkUISpec/Props.h>
@@ -42,7 +43,11 @@ using namespace facebook::react;
 }
 - (void)layoutSubviews { [super layoutSubviews]; _field.frame = self.bounds; }
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics {
-  [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics]; [self layoutSubviews];
+  [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+  NSUserInterfaceLayoutDirection direction = RNSparkLayoutDirection(layoutMetrics);
+  _field.alignment = RNSparkLeadingTextAlignment(direction);
+  _field.userInterfaceLayoutDirection = direction;
+  [self layoutSubviews];
 }
 - (void)prepareForRecycle {
   [_field abortEditing];

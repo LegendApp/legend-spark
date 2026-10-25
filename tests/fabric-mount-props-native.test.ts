@@ -8,7 +8,7 @@ test.skipIf(process.platform !== "darwin")("split view and drag view apply their
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-fabric-mount-test-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
-    const source = ["ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm", "drag-drop/macos/RNDesktopDragView.mm"]
+    const source = ["ui/macos/RNSparkLayoutDirection.h", "ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm", "drag-drop/macos/RNDesktopDragView.mm"]
       .map(name => readFileSync(path.join(root, "packages", name), "utf8").split("\n").filter(line => !line.startsWith("#import")).join("\n")).join("\n");
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     writeFileSync(input, readFileSync(path.join(root, "tests/fabric-mount-props.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));
