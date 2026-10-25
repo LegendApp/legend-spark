@@ -519,6 +519,7 @@ A golden only works if the same build renders the same pixels every time. The dr
 | `check-id` | A check ID that is not `PREFIX-NAME-NN`, such as `MW-TEAR-01`. |
 | `dev-build` | `build: dev` in a gate flow (under `flows/`). |
 | `point-selector` | A `point` selector that is not anchored `within: { id }`. |
+| `missing-fixture` | A flow's `${FIXTURES}/…` path that does not exist (also reported by `e2e:validate`). |
 | `schema`, `yaml`, `structure` | Validation problems (also reported by `e2e:validate`). |
 
 ## Check registry

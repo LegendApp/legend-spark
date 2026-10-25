@@ -1,7 +1,9 @@
 import { isMap, isScalar, isSeq, visit, type Node } from "yaml";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import type { Kind } from "../files.ts";
-import { checkBudgets, checkFlow, checkGate, checkRegistry, checkSubflow, diagnosticAt, type Diagnostic, type Loaded } from "./parser.ts";
+import { rootOf } from "../runner/executor.ts";
+import { checkBudgets, checkFlow, checkGate, checkRegistry, checkSubflow, diagnosticAt, load, type Diagnostic, type Loaded } from "./parser.ts";
 import { CHECK_ID } from "./primitives.ts";
 
 const byPosition = (diagnostics: Diagnostic[]) => diagnostics.sort((a, b) => a.line - b.line || a.column - b.column);
@@ -33,6 +35,21 @@ function pointSelectors(loaded: Loaded): Diagnostic[] {
   return out;
 }
 
+/** Every `${FIXTURES}/…` path in a flow names a file in its e2e root's fixtures/. Subflows take FIXTURES from their caller. */
+function missingFixtures(source: string, file: string): Diagnostic[] {
+  const loaded = load(source, file), fixtures = path.join(rootOf(path.resolve(file)), "fixtures");
+  const out: Diagnostic[] = [];
+  for (const doc of loaded.docs) visit(doc, {
+    Scalar(_, node) {
+      if (typeof node.value !== "string") return;
+      for (const [, relative] of node.value.matchAll(/\$\{FIXTURES\}\/([^\s"']+)/g)) {
+        if (!existsSync(path.join(fixtures, relative!))) out.push(diagnosticAt(loaded, node, "missing-fixture", `\${FIXTURES}/${relative} does not exist in ${path.relative(process.cwd(), fixtures)}`));
+      }
+    },
+  });
+  return out;
+}
+
 /** Validation problems plus the authoring rules the gate enforces. `gate` marks flows the release gate runs (under flows/). */
 export function lintFlow(source: string, file: string, { gate }: { gate: boolean }): Diagnostic[] {
   const { loaded, diagnostics } = checkFlow(source, file);
@@ -52,5 +69,6 @@ export function checkFile(mode: "validate" | "lint", kind: Kind, source: string,
   if (kind === "gate") return checkGate(source, file).diagnostics;
   if (kind === "budgets") return checkBudgets(source, file).diagnostics;
   if (kind === "subflow") return mode === "lint" ? lintSubflow(source, file) : checkSubflow(source, file).diagnostics;
-  return mode === "lint" ? lintFlow(source, file, { gate: file.split(path.sep).includes("flows") }) : checkFlow(source, file).diagnostics;
+  const diagnostics = mode === "lint" ? lintFlow(source, file, { gate: file.split(path.sep).includes("flows") }) : checkFlow(source, file).diagnostics;
+  return [...diagnostics, ...missingFixtures(source, file)];
 }

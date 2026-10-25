@@ -333,6 +333,16 @@ describe("cli", () => {
     expect(lint.stdout).toMatch(/save\.yaml:3:8: gate flows run against release builds.*\[dev-build\]\n.*save\.yaml:7:3: .*\[no-sleep\]\nlinted 1 file \(1 flow\): 2 problems\n$/);
   }, cliTimeoutMs);
 
+  test("reports ${FIXTURES} paths that do not exist", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "e2e-cli-"));
+    for (const dir of ["flows/editor", "fixtures/docs"]) mkdirSync(path.join(root, dir), { recursive: true });
+    writeFileSync(path.join(root, "fixtures/docs/notes.md"), "notes\n");
+    writeFileSync(path.join(root, "flows/editor/open.yaml"), 'appId: a\nname: Open\nchecks: [ED-OPEN-01]\n---\n- launchApp: { openFile: "${FIXTURES}/docs/notes.md" }\n- launchApp: { openFile: "${FIXTURES}/docs/missing.md" }\n');
+    const validate = await cli("validate", root);
+    expect(validate.status, outcome(validate)).toBe(1);
+    expect(validate.stdout).toMatch(/open\.yaml:6:26: \$\{FIXTURES\}\/docs\/missing\.md does not exist.*\[missing-fixture\]\nvalidated 1 file \(1 flow\): 1 problem\n$/);
+  }, cliTimeoutMs);
+
   test("rejects unknown modes and missing paths", async () => {
     const unknown = await cli("check");
     expect(unknown.status, outcome(unknown)).toBe(2);
