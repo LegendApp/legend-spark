@@ -31,6 +31,7 @@ static NSDictionary *SparkArgs(NSString *json) { return [NSJSONSerialization JSO
 static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
 // The harness strips imports, SparkTestDriver.h included; these apps are never driven.
 static BOOL SparkTestDriverActive(void) { return NO; }
+static BOOL SparkSafeMode(void) { return NO; }
 // ACTUAL_IMPLEMENTATION
 @interface TestWindow : NSObject
 @property (weak) id<NSWindowDelegate> delegate;

@@ -1,17 +1,51 @@
 import { beforeEach, expect, test, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { parseAllDocuments } from "yaml";
 const mocks = vi.hoisted(() => ({ call: vi.fn(), listeners: new Set<(event: any) => void>(), platform: { OS: "macos" } }));
 vi.mock("react-native", () => ({ Platform: mocks.platform, TurboModuleRegistry: { get: () => ({ call: mocks.call }) }, NativeEventEmitter: class { addListener(_: string, listener: (event: any) => void) { mocks.listeners.add(listener); return { remove: () => { mocks.listeners.delete(listener); } }; } } }));
-import { getAppContext, addAppListener, beforeQuit, quit } from "../packages/desktop-app/src/api";
+import { getAppContext, addAppListener, beforeQuit, quit, relaunch } from "../packages/desktop-app/src/api";
 const tick = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
 function emit(event: any) { for (const listener of mocks.listeners) listener(event); }
 function calls(method: string) { return mocks.call.mock.calls.filter(([name]) => name === method).map(([, json]) => JSON.parse(json)); }
 beforeEach(() => { mocks.call.mockReset().mockResolvedValue("null"); mocks.listeners.clear(); });
+const launch = { safeMode: null, relaunched: false, instance: "primary" };
 test("app context validates the complete contract and exposes only owned metadata", async () => {
-  for (const value of [null, {}, { projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: [] } }]) {
+  const base = { projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} } };
+  for (const value of [null, {}, { ...base, runtime: { mode: "dev", modules: [] }, launch }, base, { ...base, launch: { ...launch, safeMode: "always" } },
+    { ...base, launch: { ...launch, relaunched: "yes" } }, { ...base, launch: { ...launch, instance: "secondary" } }]) {
     mocks.call.mockResolvedValue(JSON.stringify(value)); await expect(getAppContext()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   }
-  mocks.call.mockResolvedValue(JSON.stringify({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" }, internal: "secret" }, extra: true }));
-  expect(await getAppContext()).toEqual({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" } } });
+  mocks.call.mockResolvedValue(JSON.stringify({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" }, internal: "secret" }, launch: { safeMode: "modifier", relaunched: true, instance: "test-driver", internal: 1 }, extra: true }));
+  expect(await getAppContext()).toEqual({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" } }, launch: { safeMode: "modifier", relaunched: true, instance: "test-driver" } });
+});
+test("relaunch validates options before native work and reports the shared quit decision", async () => {
+  await expect(relaunch({ arguments: "x" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(relaunch({ arguments: ["a\0b"] })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(relaunch({ safeMode: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(relaunch({ arguments: undefined, extra: undefined } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(relaunch(null as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(mocks.call).not.toHaveBeenCalled();
+  mocks.call.mockResolvedValue('{"quitRequested":false,"reason":"vetoed"}');
+  await expect(relaunch({ arguments: ["--spark-safe-mode"] })).resolves.toEqual({ quitRequested: false, reason: "vetoed" });
+  mocks.call.mockResolvedValue('{"quitRequested":true}');
+  await expect(relaunch()).resolves.toEqual({ quitRequested: true });
+  // Omitted arguments let the host reuse this launch's own arguments.
+  expect(calls("relaunch")).toEqual([{ arguments: ["--spark-safe-mode"] }, {}]);
+  mocks.call.mockResolvedValue("null"); await expect(relaunch()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  mocks.call.mockRejectedValue(Object.assign(Error("spawn failed"), { code: "E_IO" })); await expect(relaunch()).rejects.toMatchObject({ code: "E_NATIVE" });
+});
+test("relaunch snapshots and validates the owned argument array before yielding", async () => {
+  mocks.call.mockResolvedValue('{"quitRequested":true}');
+  const args = ["original"];
+  const pending = relaunch({ arguments: args });
+  args[0] = "changed\0argument";
+  args.push("later");
+  await expect(pending).resolves.toEqual({ quitRequested: true });
+  expect(calls("relaunch")).toEqual([{ arguments: ["original"] }]);
+  const deceptive = ["valid"];
+  deceptive[Symbol.iterator] = function* () { yield "invalid\0copy"; return undefined; };
+  await expect(relaunch({ arguments: deceptive })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(calls("relaunch")).toHaveLength(1);
 });
 test("quit joins concurrent requests and waits for the native decision", async () => {
   let resolve!: (value: string) => void;
@@ -22,11 +56,48 @@ test("quit joins concurrent requests and waits for the native decision", async (
   mocks.call.mockResolvedValue('{"quitRequested":true}'); await expect(quit()).resolves.toEqual({ quitRequested: true });
   mocks.call.mockResolvedValue('null'); await expect(quit()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
 });
+test.each([true, false])("relaunch preserves the pending quit decision (%s) after orphan cleanup", async allow => {
+  mocks.call.mockRejectedValue(Error("bridge failed"));
+  await expect(beforeQuit(() => true)).rejects.toMatchObject({ code: "E_NATIVE" });
+  mocks.call.mockClear();
+  let finishCleanup!: (value: string) => void, finishQuit!: (value: string) => void;
+  const cleanup = new Promise<string>(resolve => { finishCleanup = resolve; });
+  const decision = new Promise<string>(resolve => { finishQuit = resolve; });
+  let pending = false;
+  mocks.call.mockImplementation(method => {
+    if (method === "quitGuard") {
+      if (pending) finishQuit('{"quitRequested":false,"reason":"vetoed"}');
+      return cleanup;
+    }
+    pending = true;
+    return decision;
+  });
+  const quitting = quit();
+  await tick();
+  const restarting = relaunch();
+  await tick();
+  expect(calls("quit")).toHaveLength(0);
+  expect(calls("relaunch")).toHaveLength(0);
+  finishCleanup("null");
+  await tick();
+  expect(calls("quitGuard")).toHaveLength(1);
+  expect(calls("quit")).toHaveLength(1);
+  expect(calls("relaunch")).toHaveLength(1);
+  const joined = relaunch();
+  await tick();
+  expect(calls("quitGuard")).toHaveLength(1);
+  const result = allow ? { quitRequested: true } : { quitRequested: false, reason: "vetoed" };
+  finishQuit(JSON.stringify(result));
+  await expect(Promise.all([quitting, restarting, joined])).resolves.toEqual([result, result, result]);
+});
 test("live app events validate payloads and never expose guard protocol or unrelated events", () => {
   const listener = vi.fn(), registration = addAppListener("secondInstance", listener);
-  emit({ type: "secondInstance" }); emit({ type: "beforeQuit", requestId: 1 }); emit({ type: "secondInstance", arguments: ["app", "file"], nativePrivate: true });
-  expect(listener).toHaveBeenCalledExactlyOnceWith({ type: "secondInstance", arguments: ["app", "file"] }); registration.remove();
-  emit({ type: "secondInstance", arguments: [] }); expect(listener).toHaveBeenCalledTimes(1);
+  const forwarded = { arguments: ["app", "/tmp/a.txt"], workingDirectory: "/tmp", files: ["/tmp/a.txt"], urls: ["spark-ks://app-lifecycle/instance"] };
+  emit({ type: "secondInstance" }); emit({ type: "beforeQuit", requestId: 1 }); emit({ type: "secondInstance", arguments: ["app"] });
+  emit({ type: "secondInstance", ...forwarded, files: "a" }); emit({ type: "secondInstance", ...forwarded, workingDirectory: 1 });
+  emit({ type: "secondInstance", ...forwarded, nativePrivate: true });
+  expect(listener).toHaveBeenCalledExactlyOnceWith({ type: "secondInstance", ...forwarded }); registration.remove();
+  emit({ type: "secondInstance", ...forwarded }); expect(listener).toHaveBeenCalledTimes(1);
   expect(() => addAppListener("beforeQuit" as never, () => {})).toThrow();
 });
 test("independent guards ignore other owners, duplicate requests and stale approvals", async () => {
@@ -62,4 +133,12 @@ test("application window events follow logical IDs across native generations", (
   emit({ type: "closed" });
   expect(listener.mock.calls).toEqual([[{ type: "windowClosed", windowId: "editor" }], [{ type: "windowClosed", windowId: "editor" }]]);
   registration.remove();
+});
+
+test("lifecycle acceptance flows require manual signoff until their black-box backend exists", () => {
+  for (const file of ["second-instance", "relaunch", "relaunch-veto", "safe-mode"]) {
+    const documents = parseAllDocuments(readFileSync(new URL(`../e2e/flows/app-lifecycle/${file}.yaml`, import.meta.url), "utf8"));
+    expect(documents.flatMap(document => document.errors)).toEqual([]);
+    expect(documents[0].toJS()).toMatchObject({ manual: true, platforms: ["macos", "windows"] });
+  }
 });

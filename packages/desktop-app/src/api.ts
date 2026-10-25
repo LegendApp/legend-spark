@@ -4,7 +4,20 @@ import { callAppNative } from "./transport";
 import { SparkError, asyncRegistration, nativeError, type Availability, type AsyncRegistration, type Subscription } from "./contracts";
 export type { AsyncRegistration, Subscription } from "./contracts";
 export interface AppRuntime { mode: "go" | "dev" | "preview" | "release"; modules: Readonly<Record<string, string>> }
-export interface AppContext { projectId: string; name: string; version: string; runtime: AppRuntime; launchArguments: readonly string[] }
+/** What started this process. Safe mode is latched at launch and skips Spark's native restoration. */
+export interface AppLaunch {
+  /** `flag`: launched with `--spark-safe-mode`. `modifier`: Shift was held at launch. `null`: a normal launch. */
+  safeMode: "flag" | "modifier" | null;
+  /** Started by `relaunch()`. */
+  relaunched: boolean;
+  /** `primary`: this process owns the project's single-instance lock. `test-driver`: a test-driver session, which never takes it. */
+  instance: "primary" | "test-driver";
+}
+export interface AppContext { projectId: string; name: string; version: string; runtime: AppRuntime; launchArguments: readonly string[]; launch: AppLaunch }
+export interface RelaunchOptions {
+  /** Arguments after the executable for the new instance. Default: this launch's arguments except --spark-safe-mode. */
+  arguments?: readonly string[];
+}
 export type QuitResult = { quitRequested: true } | { quitRequested: false; reason: "vetoed" };
 export type AppEventMap = {
   windowOpened: { type: "windowOpened"; windowId: string };
@@ -12,7 +25,8 @@ export type AppEventMap = {
   activate: { type: "activate" };
   deactivate: { type: "deactivate" };
   reopen: { type: "reopen"; hasVisibleWindows: boolean; mainWindowWasVisible: boolean };
-  secondInstance: { type: "secondInstance"; arguments: readonly string[] };
+  /** A later launch of this project, forwarded before that process exits. `files` are absolute paths and `urls` non-file URLs it was asked to open. */
+  secondInstance: { type: "secondInstance"; arguments: readonly string[]; workingDirectory: string; files: readonly string[]; urls: readonly string[] };
   willQuit: { type: "willQuit" };
 };
 export type AppEvent = AppEventMap[keyof AppEventMap];
@@ -23,23 +37,42 @@ export function getAppAvailability(): Availability {
 }
 function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === "object" && !Array.isArray(value); }
 function strings(value: unknown): value is string[] { return Array.isArray(value) && value.every(item => typeof item === "string"); }
+function launch(value: unknown): value is AppLaunch {
+  return record(value) && [null, "flag", "modifier"].includes(value.safeMode as string) && typeof value.relaunched === "boolean" && (value.instance === "primary" || value.instance === "test-driver");
+}
 function context(value: unknown): value is AppContext {
-  if (!record(value) || ![value.projectId, value.name, value.version].every(item => typeof item === "string" && item.length > 0) || !strings(value.launchArguments) || !record(value.runtime)) return false;
+  if (!record(value) || ![value.projectId, value.name, value.version].every(item => typeof item === "string" && item.length > 0) || !strings(value.launchArguments) || !record(value.runtime) || !launch(value.launch)) return false;
   return ["go", "dev", "preview", "release"].includes(value.runtime.mode as string) && record(value.runtime.modules) && Object.values(value.runtime.modules).every(item => typeof item === "string");
 }
 export async function getAppContext(): Promise<AppContext> {
   const value = await callAppNative("context", context);
-  return { projectId: value.projectId, name: value.name, version: value.version, launchArguments: [...value.launchArguments], runtime: { mode: value.runtime.mode, modules: { ...value.runtime.modules } } };
+  const { safeMode, relaunched, instance } = value.launch;
+  return { projectId: value.projectId, name: value.name, version: value.version, launchArguments: [...value.launchArguments], runtime: { mode: value.runtime.mode, modules: { ...value.runtime.modules } }, launch: { safeMode, relaunched, instance } };
 }
 const command = (method: string, args: object = {}) => callAppNative(method, (value): value is null => value === null, args).then(() => {});
 const orphanGuards = new Set<AsyncRegistration>();
 async function cleanOrphanGuards(): Promise<void> {
   await Promise.all([...orphanGuards].map(async guard => { await guard.remove(); orphanGuards.delete(guard); }));
 }
+const quitResult = (value: unknown): value is QuitResult => record(value) && (value.quitRequested === true || (value.quitRequested === false && value.reason === "vetoed"));
 let quitting: Promise<QuitResult> | undefined;
 /** Joins an existing quit decision. Success permits shutdown; it is not an after-exit hook. */
 export function quit(): Promise<QuitResult> {
-  return quitting ??= cleanOrphanGuards().then(() => callAppNative("quit", (value): value is QuitResult => record(value) && (value.quitRequested === true || (value.quitRequested === false && value.reason === "vetoed")))).finally(() => { quitting = undefined; });
+  return quitting ??= cleanOrphanGuards().then(() => callAppNative("quit", quitResult)).finally(() => { quitting = undefined; });
+}
+/**
+ * Starts a new instance, then runs the same quit decision as `quit()` (joining one already pending).
+ * Approval hands the project's instance lock to the new process when this one exits; a veto stops it.
+ */
+export async function relaunch(options: RelaunchOptions = {}): Promise<QuitResult> {
+  if (!record(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected relaunch options");
+  for (const key of Object.keys(options)) if (key !== "arguments") throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown relaunch option: ${key}`);
+  const input = options.arguments;
+  if (input !== undefined && !Array.isArray(input)) throw new SparkError("E_INVALID_ARGUMENT", "Relaunch arguments must be an array");
+  const args = input === undefined ? undefined : [...input];
+  if (args !== undefined && (!strings(args) || args.some(item => item.includes("\0")))) throw new SparkError("E_INVALID_ARGUMENT", "Relaunch arguments must be strings without NUL characters");
+  await cleanOrphanGuards();
+  return callAppNative("relaunch", quitResult, args === undefined ? {} : { arguments: args });
 }
 export const hide = (): Promise<void> => command("hide");
 export const activate = (): Promise<void> => command("activate");
@@ -48,7 +81,7 @@ function appEvent(value: DesktopEvent): AppEvent | undefined {
     case "opened": case "closed": if (typeof value.windowId === "string" && value.windowId) return { type: value.type === "opened" ? "windowOpened" : "windowClosed", windowId: value.windowId }; break;
     case "activate": case "deactivate": case "willQuit": return { type: value.type };
     case "reopen": if (typeof value.hasVisibleWindows === "boolean" && typeof value.mainWindowWasVisible === "boolean") return { type: "reopen", hasVisibleWindows: value.hasVisibleWindows, mainWindowWasVisible: value.mainWindowWasVisible }; break;
-    case "secondInstance": if (strings(value.arguments)) return { type: "secondInstance", arguments: [...value.arguments] }; break;
+    case "secondInstance": if (strings(value.arguments) && typeof value.workingDirectory === "string" && strings(value.files) && strings(value.urls)) return { type: "secondInstance", arguments: [...value.arguments], workingDirectory: value.workingDirectory, files: [...value.files], urls: [...value.urls] }; break;
   }
 }
 /** Live events only. Initial identity is getAppContext; file/URL replay belongs to documents. */

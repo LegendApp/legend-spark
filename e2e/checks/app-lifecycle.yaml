@@ -1,0 +1,48 @@
+area: app-lifecycle
+prefix: LIFE
+checks:
+  LIFE-INSTANCE-01:
+    title: A second launch forwards its arguments, working directory, files and URLs to the running instance as a secondInstance event, brings it forward and exits
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#60 LIFE.api"
+    covers:
+      - ./app#addAppListener
+      - ./app#getAppAvailability().available
+  LIFE-INSTANCE-02:
+    title: The running instance owns the single-instance lock and stays the only process after a second launch
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#60 LIFE.api"
+    covers:
+      - ./app#getAppContext
+  LIFE-RELAUNCH-01:
+    title: relaunch() with arguments starts a new instance that reports relaunched and receives those arguments, and the old process exits
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#60 LIFE.api"
+    covers:
+      - ./app#relaunch
+      - ./app#getAppContext
+  LIFE-RELAUNCH-02:
+    title: A beforeQuit veto cancels relaunch(); the app keeps running alone and reports the veto
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#60 LIFE.api"
+    covers:
+      - ./app#relaunch
+      - ./app#beforeQuit
+  LIFE-SAFE-01:
+    title: Launching with --spark-safe-mode or with Shift held reports safe mode and its trigger
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#60 LIFE.api"
+    covers:
+      - ./app#getAppContext
+  LIFE-SAFE-02:
+    title: Safe mode skips the saved main-window frame without discarding it; the next normal launch restores it
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#60 LIFE.api"
+    covers:
+      - ./app#getAppContext

@@ -248,8 +248,8 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if ([args[@"modal"] boolValue] && parent.attachedSheet) { reject(@"E_BUSY", @"Parent already has a sheet", nil); return; }
       window.minSize = NSMakeSize(100, 100); window.maxSize = NSMakeSize(20000, 20000);
       if (!ApplyCommon(window, args, reject)) return;
-      // Driver mode neither reads nor saves bounds: every driven launch opens windows at their configured size.
-      BOOL restoreBounds = [args[@"restoreBounds"] boolValue] && !SparkTestDriverActive();
+      // Safe and driver modes neither read nor save bounds.
+      BOOL restoreBounds = [args[@"restoreBounds"] boolValue] && !SparkSafeMode() && !SparkTestDriverActive();
       NSDictionary *saved = restoreBounds ? [NSUserDefaults.standardUserDefaults dictionaryForKey:[NSString stringWithFormat:@"%@.bounds.%@", SparkNamespace(), key]] : nil;
       if (![saved[@"version"] isEqual:@1]) saved = nil;
       BOOL restoredShell = [objc_getAssociatedObject(window, NSSelectorFromString(@"sparkRestoredShell")) boolValue];

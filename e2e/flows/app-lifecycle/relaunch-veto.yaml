@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: A quit veto cancels relaunch
+intent: >
+  With Veto quit requests on, Relaunch reports that quit was vetoed and the new instance was
+  stopped; the original process keeps running alone and still reports that it was not relaunched.
+  After turning the veto off, the app quits normally.
+checks: [LIFE-RELAUNCH-02]
+tags: [app-lifecycle]
+# Requires manual signoff until the black-box lifecycle backend is available.
+manual: true
+platforms: [macos, windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://app-lifecycle/launch" }
+- tapOn: { id: app-lifecycle-launch-veto }
+- assertText: { id: app-lifecycle-launch-veto, equals: Stop vetoing quit }
+- tapOn: { id: app-lifecycle-launch-relaunch }
+- assertText: { id: app-lifecycle-launch-status, equals: "Quit vetoed; the new instance was stopped." }
+- assertSingleInstance
+- assertText: { id: app-lifecycle-launch-relaunched, equals: "No" }
+- tapOn: { id: app-lifecycle-launch-veto }
+- quitApp: { via: shortcut }
+- assertAppState: { running: false }

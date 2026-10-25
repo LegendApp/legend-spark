@@ -11,6 +11,8 @@
 // What SparkWindow.mm uses of SparkDesktop.mm.
 NSDictionary *SparkContext(void) { return @{ @"runtime": @{} }; }
 NSDictionary *SparkArgs(NSString *json) { return @{}; }
+static BOOL safeMode;
+BOOL SparkSafeMode(void) { return safeMode; }
 NSString *SparkNamespace(void) { return @"spark.test"; }
 
 static void Check(BOOL condition, NSString *message) {
@@ -44,6 +46,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   NSString *saved = [NSUserDefaults.standardUserDefaults stringForKey:key];
   Check(saved.length > 0, @"the saved frame is seeded");
   if ([mode isEqual:@"driver"]) StartDriver(argv[2]);
+  else if ([mode isEqual:@"safe"]) safeMode = YES;
   else Check([mode isEqual:@"normal"], [@"unknown mode " stringByAppendingString:mode]);
   // Expectations come from AppKit on this screen, so a small display (CI) constrains them the same way:
   // the configured window as created, and the saved frame applied and constrained to the screen.

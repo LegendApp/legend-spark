@@ -75,8 +75,8 @@ void SparkApplyWindowOptions(NSWindow *window, NSDictionary *patch) {
 }
 void SparkRestoreWindow(NSWindow *window, NSString *key, NSDictionary *options) {
   [window center];
-  // Driver mode neither reads nor saves the frame, so every driven launch starts at the configured size whatever earlier launches saved.
-  if ([options[@"restoreFrame"] boolValue] && !SparkTestDriverActive()) {
+  // Safe and driver-mode launches neither read nor save the frame: the saved one survives for the next normal launch, and every driven launch starts at the configured size.
+  if ([options[@"restoreFrame"] boolValue] && !SparkSafeMode() && !SparkTestDriverActive()) {
     NSString *name = [NSString stringWithFormat:@"%@.%@", SparkNamespace(), key];
     [window setFrameUsingName:name]; [window setFrameAutosaveName:name];
     // Restored dimensions respect current constraints, rather than overriding them.

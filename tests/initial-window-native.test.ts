@@ -10,7 +10,8 @@ test.skipIf(process.platform !== "darwin")("initial AppKit window options size t
 BOOL SparkTestDriverActive(void) { return NO; }
 NSDictionary *SparkContext(void) { return @{}; }
 NSDictionary *SparkArgs(NSString *json) { return @{}; }
-NSString *SparkNamespace(void) { return @"test"; }`);
+NSString *SparkNamespace(void) { return @"test"; }
+BOOL SparkSafeMode(void) { return NO; }`);
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     writeFileSync(input, source + `
 #include <cassert>

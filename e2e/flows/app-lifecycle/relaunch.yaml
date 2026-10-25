@@ -1,0 +1,31 @@
+appId: so.legend.spark.examples.kitchensink
+name: Relaunch into and out of safe mode
+intent: >
+  Relaunch in safe mode replaces the process with one that reports safe mode from the flag and
+  that it was relaunched. Relaunch normally then drops the flag. Each new instance is reopened on
+  the screen by a forwarded spark-ks:// launch, and only one process is ever left running.
+checks: [LIFE-RELAUNCH-01, LIFE-SAFE-01]
+tags: [app-lifecycle]
+# Requires manual signoff until the black-box lifecycle backend is available.
+manual: true
+platforms: [macos, windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://app-lifecycle/launch" }
+- assertText: { id: app-lifecycle-launch-relaunched, equals: "No" }
+- assertText: { id: app-lifecycle-launch-safe-mode, equals: "Off" }
+- tapOn: { id: app-lifecycle-launch-relaunch-safe }
+- assertAppState: { running: true }
+# The new instance starts on the catalog; a forwarded link reopens this screen in it.
+- launchSecondInstance: { openUrl: "spark-ks://app-lifecycle/launch" }
+- extendedWaitUntil: { visible: { id: app-lifecycle-launch-root }, timeout: 15s }
+- assertSingleInstance
+- assertText: { id: app-lifecycle-launch-relaunched, equals: "Yes" }
+- assertText: { id: app-lifecycle-launch-safe-mode, equals: "On: launched with --spark-safe-mode" }
+- assertText: { id: app-lifecycle-launch-arguments, equals: "--spark-safe-mode" }
+- tapOn: { id: app-lifecycle-launch-relaunch-normal }
+- launchSecondInstance: { openUrl: "spark-ks://app-lifecycle/launch" }
+- extendedWaitUntil: { visible: { id: app-lifecycle-launch-root }, timeout: 15s }
+- assertSingleInstance
+- assertText: { id: app-lifecycle-launch-relaunched, equals: "Yes" }
+- assertText: { id: app-lifecycle-launch-safe-mode, equals: "Off" }
+- assertText: { id: app-lifecycle-launch-arguments, equals: "None" }
