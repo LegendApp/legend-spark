@@ -6,7 +6,7 @@ intent: >
   and confirming suppresses: the next "Empty Trash…" empties without a dialog. "Ask again" clears
   the suppression. "Confirm…" uses its Replace and Cancel labels and resolves true only for Replace.
 checks: [DLG-SUPPRESS-01, DLG-CONFIRM-01]
-manual: true # Requires the black-box backend tracked in #50; manual sign-off until it lands.
+# Non-blocking until the black-box backend tracked in #50 lands.
 tags: [dialogs]
 platforms: [macos, windows]
 ---

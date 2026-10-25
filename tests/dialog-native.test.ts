@@ -12,7 +12,7 @@ function runHarness(harness: string, args: string[] = []) {
     const source = ["packages/file-dialog/ios/RNFileDialog.mm", "packages/message-dialog/macos/RNDesktopMessageDialog.mm"].map(file => readFileSync(path.join(root, file), "utf8").split("\n").filter(line => !line.startsWith("#import")).join("\n")).join("\n");
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     writeFileSync(input, readFileSync(path.join(root, "tests", harness), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));
-    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-I", path.join(root, "tests"), "-framework", "AppKit", input, "-o", output]);
+    execFileSync("clang++", ["-fobjc-arc", "-Werror=deprecated-declarations", "-fblocks", "-std=c++20", "-I", path.join(root, "tests"), "-framework", "AppKit", "-framework", "UniformTypeIdentifiers", input, "-o", output]);
     return execFileSync(output, args, { encoding: "utf8", timeout: 20000 });
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }

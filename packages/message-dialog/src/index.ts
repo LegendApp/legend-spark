@@ -44,7 +44,7 @@ export interface PromptOptions {
 }
 /** Cancel, Escape and host dismissal all resolve `{ canceled: true }`; an empty confirmed value is `""`. */
 export type PromptResult = { canceled: true } | { canceled: false; value: string };
-/** Overrides for the standard About panel. Omitted fields use the app bundle's values. */
+/** Overrides for the native About panel. Omitted fields use the app bundle's values. */
 export interface AboutPanelOptions {
   name?: string;
   /** The marketing version, shown as "Version <version>". */
@@ -136,7 +136,7 @@ export async function showPrompt(options: PromptOptions): Promise<PromptResult> 
   return result.button === 0 ? { canceled: false, value: result.value! } : { canceled: true };
 }
 
-/** Shows the standard About panel (macOS `orderFrontStandardAboutPanelWithOptions:`). It is not modal; the promise resolves once it is shown. AppKit can retain hidden panels when options change, until app exit. Avoid changing About metadata on every call. */
+/** Shows a native About panel on macOS. Calls update and reuse one panel, including after it is closed. Omitted fields use bundle values. It is not modal; the promise resolves once it is shown. */
 export async function showAboutPanel(options: AboutPanelOptions = {}): Promise<void> {
   knownKeys(options, ["name", "version", "build", "credits", "copyright", "iconPath"], "About panel");
   optionalString(options as unknown as Record<string, unknown>, ["name", "version", "build", "credits", "copyright", "iconPath"]);

@@ -1,5 +1,6 @@
 // React Native and Spark stubs for compiling the dialog modules into native test harnesses.
 #import <AppKit/AppKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <memory>
 #define RCT_EXPORT_MODULE(...)
 typedef void (^RCTPromiseResolveBlock)(id);

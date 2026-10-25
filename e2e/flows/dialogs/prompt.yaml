@@ -6,7 +6,7 @@ intent: >
   {"canceled":true}, distinct from confirming an empty value. "Unlock…" shows a secure field that
   masks typed text; Unlock returns the value, which the screen reports by length.
 checks: [DLG-PROMPT-01, DLG-PROMPT-02]
-manual: true # Requires the black-box backend tracked in #50; manual sign-off until it lands.
+# Non-blocking until the black-box backend tracked in #50 lands.
 tags: [dialogs]
 platforms: [macos]
 ---

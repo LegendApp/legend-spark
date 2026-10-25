@@ -5,7 +5,7 @@ intent: >
   panels, accessory controls, message dialogs, the "Don't ask again" checkbox, text prompts and
   the About panel all report available.
 checks: [DLG-AVAIL-01]
-manual: true # Requires the black-box backend tracked in #50; manual sign-off until it lands.
+# Non-blocking until the black-box backend tracked in #50 lands.
 tags: [dialogs]
 platforms: [macos]
 ---

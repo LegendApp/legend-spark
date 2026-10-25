@@ -2,6 +2,8 @@
 #import <RNDesktopApp/SparkDesktop.h>
 @interface RNDesktopMessageDialog ()
 @property NSAlert *alert;
+@property NSPanel *aboutPanel;
+- (NSPanel *)configureAboutPanel:(NSDictionary *)options;
 + (NSAlert *)alertWithArgs:(NSDictionary *)args;
 + (NSDictionary *)aboutPanelOptions:(NSDictionary *)args code:(NSString **)code message:(NSString **)message;
 @end
@@ -47,6 +49,61 @@ RCT_EXPORT_MODULE(NativeDesktopMessageDialog)
   }
   return options;
 }
+- (NSPanel *)configureAboutPanel:(NSDictionary *)options {
+  if (!self.aboutPanel) {
+    self.aboutPanel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 360, 280) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:YES];
+    self.aboutPanel.releasedWhenClosed = NO;
+    [self.aboutPanel center];
+  }
+  NSDictionary *bundle = NSBundle.mainBundle.infoDictionary;
+  NSString *name = options[NSAboutPanelOptionApplicationName] ?: bundle[@"CFBundleDisplayName"] ?: bundle[@"CFBundleName"] ?: NSProcessInfo.processInfo.processName;
+  NSString *version = options[NSAboutPanelOptionApplicationVersion] ?: bundle[@"CFBundleShortVersionString"] ?: @"";
+  NSString *build = options[NSAboutPanelOptionVersion] ?: bundle[@"CFBundleVersion"] ?: @"";
+  NSString *versionLine = version.length ? [@"Version " stringByAppendingString:version] : @"";
+  if (build.length) versionLine = [versionLine stringByAppendingFormat:version.length ? @" (%@)" : @"Version %@", build];
+  NSString *copyright = options[@"Copyright"] ?: bundle[@"NSHumanReadableCopyright"] ?: @"";
+  NSAttributedString *credits = options[NSAboutPanelOptionCredits];
+  if (!credits) for (NSString *extension in @[@"rtf", @"html", @"rtfd"]) {
+    NSURL *url = [NSBundle.mainBundle URLForResource:@"Credits" withExtension:extension];
+    if (url) { credits = [[NSAttributedString alloc] initWithURL:url options:@{} documentAttributes:nil error:nil]; break; }
+  }
+  NSImageView *icon = [NSImageView imageViewWithImage:options[NSAboutPanelOptionApplicationIcon] ?: NSApp.applicationIconImage];
+  icon.imageScaling = NSImageScaleProportionallyUpOrDown;
+  [icon.widthAnchor constraintEqualToConstant:64].active = YES;
+  [icon.heightAnchor constraintEqualToConstant:64].active = YES;
+  NSTextField *title = [NSTextField wrappingLabelWithString:name]; title.font = [NSFont boldSystemFontOfSize:20];
+  NSTextField *detail = [NSTextField wrappingLabelWithString:versionLine];
+  NSTextView *credit = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 312, 120)];
+  credit.editable = NO; credit.drawsBackground = NO; credit.verticallyResizable = YES;
+  credit.maxSize = NSMakeSize(312, CGFLOAT_MAX);
+  credit.textContainer.containerSize = NSMakeSize(312, CGFLOAT_MAX);
+  credit.textContainer.widthTracksTextView = YES;
+  if (credits) {
+    NSMutableAttributedString *text = [credits mutableCopy];
+    [credits enumerateAttribute:NSForegroundColorAttributeName inRange:NSMakeRange(0, credits.length) options:0 usingBlock:^(id color, NSRange range, BOOL *) {
+      if (!color) [text addAttribute:NSForegroundColorAttributeName value:NSColor.labelColor range:range];
+    }];
+    [credit.textStorage setAttributedString:text];
+  }
+  NSScrollView *creditScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 312, 120)];
+  creditScroll.drawsBackground = NO; creditScroll.hasVerticalScroller = YES; creditScroll.documentView = credit;
+  [creditScroll.widthAnchor constraintEqualToConstant:312].active = YES;
+  [creditScroll.heightAnchor constraintEqualToConstant:120].active = YES;
+  creditScroll.hidden = !credits.length;
+  NSTextField *legal = [NSTextField wrappingLabelWithString:copyright]; legal.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+  NSStackView *stack = [NSStackView stackViewWithViews:@[icon, title, detail, creditScroll, legal]];
+  stack.orientation = NSUserInterfaceLayoutOrientationVertical; stack.alignment = NSLayoutAttributeCenterX; stack.spacing = 12;
+  stack.edgeInsets = NSEdgeInsetsMake(24, 24, 24, 24);
+  for (NSTextField *label in @[title, detail, legal]) {
+    label.alignment = NSTextAlignmentCenter; label.selectable = YES;
+    [label.widthAnchor constraintEqualToConstant:312].active = YES;
+    label.hidden = !label.stringValue.length;
+  }
+  self.aboutPanel.title = name;
+  self.aboutPanel.contentView = stack;
+  [self.aboutPanel setContentSize:NSMakeSize(360, stack.fittingSize.height)];
+  return self.aboutPanel;
+}
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   [NSRunLoop.mainRunLoop performBlock:^{
     NSDictionary *args = SparkArgs(json);
@@ -54,7 +111,7 @@ RCT_EXPORT_MODULE(NativeDesktopMessageDialog)
       NSString *code = nil, *message = nil;
       NSDictionary *options = [RNDesktopMessageDialog aboutPanelOptions:args code:&code message:&message];
       if (!options) { reject(code, message, nil); return; }
-      [NSApp orderFrontStandardAboutPanelWithOptions:options];
+      [[self configureAboutPanel:options] makeKeyAndOrderFront:nil];
       resolve(@"null"); return;
     }
     if (![method isEqual:@"show"]) { SparkInvalid(reject, @"Unknown dialog operation"); return; }
@@ -75,6 +132,6 @@ RCT_EXPORT_MODULE(NativeDesktopMessageDialog)
     if (parent) [alert beginSheetModalForWindow:parent completionHandler:complete]; else complete([alert runModal]);
   }];
 }
-- (void)invalidate { [NSRunLoop.mainRunLoop performBlock:^{ if (self.alert.window.sheetParent) [self.alert.window.sheetParent endSheet:self.alert.window returnCode:NSModalResponseCancel]; else if (self.alert) [NSApp abortModal]; [self.alert.window orderOut:nil]; self.alert = nil; }]; }
+- (void)invalidate { [NSRunLoop.mainRunLoop performBlock:^{ if (self.alert.window.sheetParent) [self.alert.window.sheetParent endSheet:self.alert.window returnCode:NSModalResponseCancel]; else if (self.alert) [NSApp abortModal]; [self.alert.window orderOut:nil]; self.alert = nil; [self.aboutPanel close]; self.aboutPanel = nil; }]; }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeDesktopMessageDialogSpecJSI>(params); }
 @end

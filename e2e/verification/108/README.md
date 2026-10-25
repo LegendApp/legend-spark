@@ -24,4 +24,4 @@ From `SPARK_DIALOG_RENDER_DIR=$PWD/e2e/verification/108 bun run test tests/dialo
 | prompt-light.png, prompt-dark.png | A text prompt with "Untitled" in its field and Cancel/Rename buttons. |
 | prompt-secure-light.png, prompt-secure-dark.png | A secure prompt: the field shows bullets for its 7-character value. |
 
-The About panel (`orderFrontStandardAboutPanelWithOptions:`) is not rendered: AppKit only builds it when it is ordered front. The harness checks the option dictionary it receives instead.
+The original About panel was not rendered. The native harness also checks that the module updates and reuses one panel, resets omitted overrides to bundle values, and releases it on invalidation.

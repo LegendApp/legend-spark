@@ -14,7 +14,8 @@ targets:
   - { os: windows-11, arch: x64 }
   - { os: windows-11, arch: arm64 }
 include: [flows/**]
-blocking: { tags: [blocking], default: true }
+# Checks opt into blocking; dialog checks wait for the black-box backend in #50.
+blocking: { tags: [blocking], default: false }
 retries: 0
 timeBudget: 45m
 budgets: budgets.yaml

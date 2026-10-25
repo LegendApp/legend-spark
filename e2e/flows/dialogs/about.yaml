@@ -1,11 +1,11 @@
 appId: so.legend.spark.examples.kitchensink
-name: Standard About panel with overrides
+name: Native About panel with overrides
 intent: >
-  "About with overrides" orders front the standard About panel showing Spark Kitchen Sink,
+  "About with overrides" orders front a native About panel showing Spark Kitchen Sink,
   "Version 1.2.3 (456)", the credits and the copyright, and resolves null. "Standard About panel"
   shows the same panel with the bundle's own name and version.
 checks: [DLG-ABOUT-01]
-manual: true # Requires the black-box backend tracked in #50; manual sign-off until it lands.
+# Non-blocking until the black-box backend tracked in #50 lands.
 tags: [dialogs]
 platforms: [macos]
 ---

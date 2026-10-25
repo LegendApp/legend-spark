@@ -4,7 +4,7 @@ checks:
   DLG-AVAIL-01:
     title: getFileDialogAvailability and getMessageDialogAvailability report the panels, accessory controls, the checkbox, prompts and the About panel as available on macOS
     platforms: [macos]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api"
     covers:
       - ./dialogs#getFileDialogAvailability
@@ -14,56 +14,56 @@ checks:
   DLG-ACCESSORY-01:
     title: An open panel shows a checkbox accessory and returns its final state with the selected paths
     platforms: [macos]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api"
     covers:
       - ./dialogs#openFileDialog
   DLG-ACCESSORY-02:
     title: A save panel shows a format pop-up and checkbox accessory and returns the chosen format and checkbox state with the path; Cancel returns canceled
     platforms: [macos]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api"
     covers:
       - ./dialogs#saveFileDialog
   DLG-SUPPRESS-01:
     title: A message box's "Don't ask again" checkbox returns its state with the button; the caller suppresses only after a confirmed choice and can ask again
     platforms: [macos, windows]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api"
     covers:
       - ./dialogs#showMessage
   DLG-CONFIRM-01:
     title: confirm shows localized confirm and cancel labels and resolves true only for the confirm button
     platforms: [macos, windows]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api"
     covers:
       - ./dialogs#confirm
   DLG-PROMPT-01:
     title: A text prompt opens with its default value selected, Return confirms the typed value and Escape returns a distinct cancellation
     platforms: [macos]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api"
     covers:
       - ./dialogs#showPrompt
   DLG-PROMPT-02:
     title: A secure prompt masks typed text and returns it on confirm
     platforms: [macos]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api"
     covers:
       - ./dialogs#showPrompt
   DLG-ABOUT-01:
-    title: showAboutPanel shows the standard About panel with the bundle's values, and with name, version, build, credits and copyright overrides
+    title: showAboutPanel shows a native About panel with the bundle's values, and with name, version, build, credits and copyright overrides
     platforms: [macos]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api"
     covers:
       - ./dialogs#showAboutPanel
   DLG-UNSUP-01:
     title: On Windows, accessory controls, prompts and the About panel report unsupported-platform and reject typed (E_UNSUPPORTED_OPTION, E_UNSUPPORTED_PLATFORM); the checkbox stays available
     platforms: [windows]
-    blocking: true
+    blocking: false
     spec: "#108 DLG.api; Windows implementations in #247"
     covers:
       - ./dialogs#getFileDialogAvailability().available

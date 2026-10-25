@@ -65,9 +65,10 @@ int main(int argc, char **argv) { @autoreleasepool {
 
   // Open panel: base options plus a disclosed accessory whose controls report their values.
   NSOpenPanel *open = [NSOpenPanel openPanel];
-  NSDictionary *openControls = [RNFileDialog configureOpenPanel:open options:@{ @"title": @"Import", @"message": @"Choose notes", @"prompt": @"Import", @"allowedFileTypes": @[@"txt"], @"canChooseFiles": @YES, @"accessory": accessory }];
+  NSDictionary *openControls = [RNFileDialog configureOpenPanel:open options:@{ @"title": @"Import", @"message": @"Choose notes", @"prompt": @"Import", @"allowedFileTypes": @[@"txt", @"sparkcustomtype"], @"canChooseFiles": @YES, @"accessory": accessory }];
   CHECK([open.title isEqual:@"Import"] && [open.message isEqual:@"Choose notes"] && [open.prompt isEqual:@"Import"]);
   CHECK(open.accessoryView && open.accessoryViewDisclosed);
+  CHECK(open.allowedContentTypes.count == 2 && [open.allowedContentTypes[0] conformsToType:UTTypePlainText] && [open.allowedContentTypes[1].preferredFilenameExtension isEqual:@"sparkcustomtype"] && !open.allowsOtherFileTypes);
   NSPopUpButton *format = (NSPopUpButton *)openControls[@"format"];
   NSButton *metadata = (NSButton *)openControls[@"metadata"];
   CHECK([format isKindOfClass:NSPopUpButton.class] && [metadata isKindOfClass:NSButton.class]);
@@ -82,8 +83,9 @@ int main(int argc, char **argv) { @autoreleasepool {
 
   // Save panel: the accessory sits below the name field; no accessory leaves the panel untouched.
   NSSavePanel *save = [NSSavePanel savePanel];
-  NSDictionary *saveControls = [RNFileDialog configureSavePanel:save options:@{ @"defaultName": @"Notes.md", @"accessory": accessory }];
+  NSDictionary *saveControls = [RNFileDialog configureSavePanel:save options:@{ @"defaultName": @"Notes.md", @"allowedFileTypes": @[@"md"], @"accessory": accessory }];
   CHECK([save.nameFieldStringValue isEqual:@"Notes.md"] && save.accessoryView && saveControls.count == 2);
+  CHECK(save.allowedContentTypes.count == 1 && [save.allowedContentTypes[0].preferredFilenameExtension isEqual:@"md"]);
   CHECK([JSON([files selection:@"/tmp/Notes.md" key:@"path" options:@{ @"accessory": accessory } controls:saveControls]) isEqual:@"{\"accessory\":{\"format\":\"md\",\"metadata\":true},\"path\":\"\\/tmp\\/Notes.md\"}"]);
   NSSavePanel *plain = [NSSavePanel savePanel];
   CHECK([RNFileDialog configureSavePanel:plain options:@{}].count == 0 && !plain.accessoryView);
@@ -123,6 +125,48 @@ int main(int argc, char **argv) { @autoreleasepool {
   NSString *notImage = [icon stringByAppendingString:@".txt"]; [@"text" writeToFile:notImage atomically:YES encoding:NSUTF8StringEncoding error:nil];
   CHECK(![RNDesktopMessageDialog aboutPanelOptions:@{ @"iconPath": notImage } code:&code message:&message] && [code isEqual:@"E_INVALID_DATA"]);
   [NSFileManager.defaultManager removeItemAtPath:icon error:nil]; [NSFileManager.defaultManager removeItemAtPath:notImage error:nil];
+
+  RNDesktopMessageDialog *messages = [RNDesktopMessageDialog new];
+  __weak NSPanel *releasedPanel;
+  @autoreleasepool {
+    NSPanel *panel = [messages configureAboutPanel:about]; releasedPanel = panel;
+    CHECK([panel.title isEqual:@"Spark Notes"] && !panel.releasedWhenClosed);
+    NSStackView *content = (NSStackView *)panel.contentView;
+    CHECK([((NSTextField *)content.arrangedSubviews[1]).stringValue isEqual:@"Spark Notes"]);
+    CHECK([((NSTextField *)content.arrangedSubviews[2]).stringValue isEqual:@"Version 2.1 (421)"]);
+    CHECK([((NSTextView *)((NSScrollView *)content.arrangedSubviews[3]).documentView).string isEqual:@"Made with Spark"]);
+    CHECK([((NSTextField *)content.arrangedSubviews[4]).stringValue isEqual:@"© 2026 Legend"]);
+    CHECK(panel.contentView.bounds.size.width == 360 && panel.contentView.bounds.size.height > 200);
+    if (output) for (NSString *appearance in @[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]) {
+      panel.appearance = [NSAppearance appearanceNamed:appearance];
+      Render(panel.contentView.superview, output, appearance == NSAppearanceNameAqua ? @"about-light" : @"about-dark");
+    }
+    NSMutableString *longCredits = [NSMutableString new];
+    for (int line = 0; line < 100; line++) [longCredits appendFormat:@"Contributor %d — Made with Spark\n", line];
+    [messages configureAboutPanel:@{ NSAboutPanelOptionCredits: [[NSAttributedString alloc] initWithString:longCredits] }];
+    NSTextView *plainCredits = (NSTextView *)((NSScrollView *)((NSStackView *)panel.contentView).arrangedSubviews[3]).documentView;
+    CHECK([[plainCredits.textStorage attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:nil] isEqual:NSColor.labelColor]);
+    [messages configureAboutPanel:[RNDesktopMessageDialog aboutPanelOptions:@{ @"credits": longCredits } code:&code message:&message]];
+    CHECK(panel.contentView.bounds.size.height < 500);
+    [panel.contentView layoutSubtreeIfNeeded];
+    CHECK(((NSScrollView *)((NSStackView *)panel.contentView).arrangedSubviews[3]).documentView.frame.size.height > 120);
+    CHECK([((NSTextView *)((NSScrollView *)((NSStackView *)panel.contentView).arrangedSubviews[3]).documentView).string isEqual:longCredits]);
+    if (output) Render(panel.contentView.superview, output, @"about-long-credits-dark");
+    [panel close];
+    CHECK([messages configureAboutPanel:@{ NSAboutPanelOptionApplicationName: @"Changed" }] == panel);
+    CHECK([panel.title isEqual:@"Changed"]);
+    CHECK([messages configureAboutPanel:@{}] == panel);
+    CHECK([panel.title isEqual:NSBundle.mainBundle.infoDictionary[@"CFBundleDisplayName"] ?: NSBundle.mainBundle.infoDictionary[@"CFBundleName"] ?: NSProcessInfo.processInfo.processName]);
+    CHECK(![((NSTextView *)((NSScrollView *)((NSStackView *)panel.contentView).arrangedSubviews[3]).documentView).string isEqual:@"Made with Spark"]);
+    CHECK(![((NSTextField *)((NSStackView *)panel.contentView).arrangedSubviews[4]).stringValue isEqual:@"© 2026 Legend"]);
+    CHECK(![RNDesktopMessageDialog aboutPanelOptions:@{ @"iconPath": @"/nonexistent/spark-icon.png" } code:&code message:&message]);
+    CHECK(messages.aboutPanel == panel);
+  }
+  @autoreleasepool {
+    [messages invalidate];
+    for (int n = 0; n < 10 && messages.aboutPanel; n++) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+  }
+  CHECK(!messages.aboutPanel && !releasedPanel);
 
   // Nothing was presented.
   CHECK(Offscreen());

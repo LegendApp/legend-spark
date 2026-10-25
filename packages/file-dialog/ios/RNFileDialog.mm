@@ -6,6 +6,17 @@
 
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+
+static NSArray<UTType *> *SparkContentTypes(NSArray<NSString *> *extensions)
+{
+  NSMutableArray<UTType *> *types = [NSMutableArray new];
+  for (NSString *extension in extensions) {
+    UTType *type = [UTType typeWithFilenameExtension:extension];
+    if (type) [types addObject:type];
+  }
+  return types;
+}
 
 // Accessory controls are data: checkboxes and labeled pop-ups in a two-column grid. `controls`
 // receives each control by ID so its final value can be read when the panel completes.
@@ -119,7 +130,7 @@ RCT_EXPORT_MODULE(NativeFileDialog)
 
   NSArray *allowedFileTypes = [options[@"allowedFileTypes"] isKindOfClass:[NSArray class]] ? options[@"allowedFileTypes"] : nil;
   if (allowedFileTypes.count > 0 && panel.canChooseFiles) {
-    panel.allowedFileTypes = allowedFileTypes;
+    panel.allowedContentTypes = SparkContentTypes(allowedFileTypes);
     panel.allowsOtherFileTypes = NO;
   }
 
@@ -147,7 +158,7 @@ RCT_EXPORT_MODULE(NativeFileDialog)
 
   NSArray *allowedFileTypes = [options[@"allowedFileTypes"] isKindOfClass:[NSArray class]] ? options[@"allowedFileTypes"] : nil;
   if (allowedFileTypes.count > 0) {
-    panel.allowedFileTypes = allowedFileTypes;
+    panel.allowedContentTypes = SparkContentTypes(allowedFileTypes);
   }
 
   // defaultPath may name a file: a live directory starts the panel, otherwise the

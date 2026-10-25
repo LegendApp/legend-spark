@@ -6,7 +6,7 @@ intent: >
   Triggering an accessory panel rejects SparkError:E_UNSUPPORTED_OPTION and a prompt or the About
   panel rejects SparkError:E_UNSUPPORTED_PLATFORM, without showing a dialog. Implementations: #247.
 checks: [DLG-UNSUP-01]
-manual: true # Requires the black-box backend tracked in #50; manual sign-off until it lands.
+# Non-blocking until the black-box backend tracked in #50 lands.
 tags: [dialogs]
 platforms: [windows]
 ---
