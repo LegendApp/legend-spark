@@ -1,0 +1,8 @@
+appId: so.legend.kitchensink
+name: Theme follows the appearance
+intent: The theme toggle works in light and dark appearance.
+checks: [APP-THEME-01]
+matrix: { appearance: [light, dark] }
+---
+- launchApp
+- tapOn: { id: theme-toggle }

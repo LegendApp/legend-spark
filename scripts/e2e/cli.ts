@@ -4,19 +4,16 @@ import { readSdkSurface } from "../api-surface.ts";
 import { checkCoverage, formatCoverage } from "./coverage.ts";
 import { collect, type Kind } from "./files.ts";
 import { generatedFiles } from "./format/generate.ts";
-import { lintFlow, lintSubflow } from "./format/lint.ts";
-import { checkFlow, checkGate, checkRegistry, checkSubflow, formatDiagnostic, type Diagnostic } from "./format/parser.ts";
+import { checkFile } from "./format/lint.ts";
+import { formatDiagnostic } from "./format/parser.ts";
+import { gateCommand } from "./gate/gate.ts";
+import { hostEnv } from "./gate/host.ts";
 import { BACKENDS, runCommand } from "./runner/run.ts";
 
 const repo = path.resolve(import.meta.dirname, "../..");
-const LABELS: Record<Kind, [string, string]> = { flow: ["flow", "flows"], subflow: ["subflow", "subflows"], registry: ["check registry", "check registries"], gate: ["gate manifest", "gate manifests"] };
-
-function check(mode: "validate" | "lint", kind: Kind, source: string, file: string): Diagnostic[] {
-  if (kind === "registry") return checkRegistry(source, file).diagnostics;
-  if (kind === "gate") return checkGate(source, file).diagnostics;
-  if (kind === "subflow") return mode === "lint" ? lintSubflow(source, file) : checkSubflow(source, file).diagnostics;
-  return mode === "lint" ? lintFlow(source, file, { gate: file.split(path.sep).includes("flows") }) : checkFlow(source, file).diagnostics;
-}
+const LABELS: Record<Kind, [string, string]> = {
+  flow: ["flow", "flows"], subflow: ["subflow", "subflows"], registry: ["check registry", "check registries"], gate: ["gate manifest", "gate manifests"], budgets: ["budgets file", "budgets files"],
+};
 
 /** The e2e files under the given paths (default: the repository's e2e/). Exits 2 when a path does not exist. */
 function filesIn(paths: string[]): Array<[string, Kind]> {
@@ -46,16 +43,18 @@ if (mode === "schema") {
   for (const [absolute, kind] of files) {
     const file = path.relative(process.cwd(), absolute);
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
-    for (const diagnostic of check(mode, kind, readFileSync(absolute, "utf8"), file)) { console.log(formatDiagnostic(diagnostic)); problems++; }
+    for (const diagnostic of checkFile(mode, kind, readFileSync(absolute, "utf8"), file)) { console.log(formatDiagnostic(diagnostic)); problems++; }
   }
-  const summary = [...counts].map(([kind, count]) => `${count} ${LABELS[kind][count === 1 ? 0 : 1]}`).join(", ") || "no flows, subflows, check registries or gate manifests";
+  const summary = [...counts].map(([kind, count]) => `${count} ${LABELS[kind][count === 1 ? 0 : 1]}`).join(", ") || "no flows, subflows, check registries, gate manifests or budgets files";
   console.log(`${mode === "lint" ? "linted" : "validated"} ${files.length} file${files.length === 1 ? "" : "s"} (${summary}): ${problems} problem${problems === 1 ? "" : "s"}`);
   process.exitCode = problems ? 1 : 0;
-} else if (mode === "run") {
+} else if (mode === "run" || mode === "gate") {
   const controller = new AbortController();
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
-  process.exitCode = await runCommand(args, { backends: BACKENDS, stdout: line => console.log(line), stderr: line => console.error(line), signal: controller.signal });
+  process.exitCode = mode === "gate"
+    ? await gateCommand(args, path.join(repo, "e2e"), { ...hostEnv(), signal: controller.signal })
+    : await runCommand(args, { backends: BACKENDS, stdout: line => console.log(line), stderr: line => console.error(line), signal: controller.signal });
 } else {
-  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path]");
+  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--dry-run]");
   process.exitCode = 2;
 }

@@ -11,7 +11,7 @@ import {
   checkFlow, checkGate, checkRegistry, checkSubflow, FlowFormatError, formatDiagnostic, parseCheckRegistry, parseFlow, parseSubflow, type FlowCommand,
 } from "../scripts/e2e/format/parser.ts";
 import { NESTED } from "../scripts/e2e/format/primitives.ts";
-import { ajv, buildFlowSchema, buildGateSchema, buildRegistrySchema } from "../scripts/e2e/format/schemas.ts";
+import { ajv, buildBudgetsSchema, buildFlowSchema, buildGateSchema, buildRegistrySchema, buildSignoffsSchema } from "../scripts/e2e/format/schemas.ts";
 
 const FIXTURES = "tests/fixtures/e2e";
 const read = (file: string) => readFileSync(path.join(FIXTURES, file), "utf8");
@@ -27,8 +27,8 @@ describe("generated schema", () => {
   });
 
   test("schemas are valid draft-07 and compile under ajv strict mode", () => {
-    for (const schema of [buildFlowSchema(), buildRegistrySchema(), buildGateSchema()]) expect(ajv.validateSchema(schema), JSON.stringify(ajv.errors)).toBe(true);
-    for (const id of ["flow", "checks", "gate"]) expect(ajv.getSchema(id)).toBeTypeOf("function");
+    for (const schema of [buildFlowSchema(), buildRegistrySchema(), buildGateSchema(), buildBudgetsSchema(), buildSignoffsSchema()]) expect(ajv.validateSchema(schema), JSON.stringify(ajv.errors)).toBe(true);
+    for (const id of ["flow", "checks", "gate", "budgets", "signoffs"]) expect(ajv.getSchema(id)).toBeTypeOf("function");
   });
 
   test("VS Code maps the schemas onto e2e files", () => {
@@ -37,6 +37,8 @@ describe("generated schema", () => {
       "./e2e/schema/flow.schema.json": ["e2e/flows/**/*.yaml", "e2e/subflows/**/*.yaml"],
       "./e2e/schema/checks.schema.json": ["e2e/checks/*.yaml"],
       "./e2e/schema/gate.schema.json": ["e2e/gate.yaml"],
+      "./e2e/schema/budgets.schema.json": ["e2e/budgets.yaml"],
+      "./e2e/schema/signoffs.schema.json": ["artifacts/gate/signoffs.yaml"],
     });
   });
 });

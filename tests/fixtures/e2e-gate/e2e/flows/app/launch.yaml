@@ -1,0 +1,9 @@
+appId: so.legend.kitchensink
+name: Cold launch shows the catalog
+intent: Launching the release build shows the catalog within the startup budget.
+checks: [APP-LAUNCH-01]
+tags: [blocking]
+---
+- launchApp
+- assertVisible: { id: catalog }
+- assertStartup: { coldMs: { max: 800 } }

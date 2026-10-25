@@ -1,5 +1,7 @@
 import { isMap, isScalar, isSeq, visit, type Node } from "yaml";
-import { checkFlow, checkSubflow, diagnosticAt, type Diagnostic, type Loaded } from "./parser.ts";
+import path from "node:path";
+import type { Kind } from "../files.ts";
+import { checkBudgets, checkFlow, checkGate, checkRegistry, checkSubflow, diagnosticAt, type Diagnostic, type Loaded } from "./parser.ts";
 import { CHECK_ID } from "./primitives.ts";
 
 const byPosition = (diagnostics: Diagnostic[]) => diagnostics.sort((a, b) => a.line - b.line || a.column - b.column);
@@ -42,4 +44,13 @@ export function lintSubflow(source: string, file: string): Diagnostic[] {
   const { loaded, diagnostics } = checkSubflow(source, file);
   if (loaded.diagnostics.length) return diagnostics;
   return byPosition([...diagnostics, ...pointSelectors(loaded)]);
+}
+
+/** Validates (or lints) one e2e file by kind. Flows under flows/ are gate flows. */
+export function checkFile(mode: "validate" | "lint", kind: Kind, source: string, file: string): Diagnostic[] {
+  if (kind === "registry") return checkRegistry(source, file).diagnostics;
+  if (kind === "gate") return checkGate(source, file).diagnostics;
+  if (kind === "budgets") return checkBudgets(source, file).diagnostics;
+  if (kind === "subflow") return mode === "lint" ? lintSubflow(source, file) : checkSubflow(source, file).diagnostics;
+  return mode === "lint" ? lintFlow(source, file, { gate: file.split(path.sep).includes("flows") }) : checkFlow(source, file).diagnostics;
 }

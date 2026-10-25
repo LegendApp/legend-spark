@@ -52,6 +52,8 @@ export type CommandContext = {
   /** Runs nested commands (measure.run, assertFrames.during, …) with the runner's semantics. */
   run(commands: FlowCommand[]): Promise<void>;
   addArtifact(artifact: Artifact): void;
+  /** Records a measurement for the gate's budgets (docs/e2e-flows.md#metrics), such as `startup.coldMs`. */
+  metric(name: string, value: number): void;
 };
 
 export type CommandHandler = (args: Record<string, unknown>, context: CommandContext) => Promise<void>;

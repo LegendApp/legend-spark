@@ -1,0 +1,16 @@
+suite: release-gate
+appId: so.legend.kitchensink
+build:
+  macos: { artifact: "build/macos-${ARCH}/KitchenSink.app", verifySignature: true }
+targets:
+  - { os: macos-14, arch: arm64, machine: air-m1 }
+  - { os: macos-15, arch: arm64 }
+  - { os: windows-11, arch: x64 }
+include: [flows/**]
+blocking: { tags: [blocking], default: true }
+retries: 0
+timeBudget: 10m
+budgets: budgets.yaml
+coverage: { checks: checks/, exports: true, availability: true }
+signoffs: signoffs/release.yaml
+report: { json: reports/gate/report.json, html: reports/gate/index.html }

@@ -216,11 +216,40 @@ export function checkRegistry(source: string, file = "<area>.yaml"): Checked<Che
   return diagnostics.length ? { loaded, diagnostics } : { loaded, diagnostics, value: registry };
 }
 
-export function checkGate(source: string, file = "gate.yaml"): Checked<unknown> {
+export type GateTarget = { os: string; arch: "arm64" | "x64"; machine?: string };
+export type GateManifest = {
+  suite: string; appId: string;
+  build: Partial<Record<"macos" | "windows", { artifact: string; verifySignature?: boolean }>>;
+  targets: GateTarget[]; include: string[]; blocking: { tags: string[]; default: boolean }; retries: 0; timeBudget: string | number;
+  budgets: string; coverage: { checks: string; exports: boolean; availability: boolean }; signoffs: string; report: { json: string; html: string };
+};
+export type Machine = { name: string; model: string; memoryGB: number };
+export type Budget = {
+  metric: string; description?: string; better: "lower" | "higher"; tolerance: string; blocking?: boolean; flows?: string[];
+  baselines: Record<string, number | "not-measured">;
+};
+export type Budgets = { machines: Record<string, Machine>; budgets: Budget[] };
+export type Signoff = { flow: string; target: string; commit: string; verdict: "pass" | "fail"; by: string; at: string; evidence?: string[]; note?: string };
+
+/** One YAML document validated against a schema. */
+function checkDocument<T>(source: string, file: string, validate: ValidateFunction, what: string): Checked<T> & { doc?: Document.Parsed } {
   const loaded = load(source, file);
-  if (!documents(loaded, 1, "one gate manifest document")) return { loaded, diagnostics: loaded.diagnostics };
-  const diagnostics = schemaDiagnostics(loaded, loaded.docs[0]!, validators.gate, "");
-  return diagnostics.length ? { loaded, diagnostics } : { loaded, diagnostics, value: loaded.docs[0]!.toJS() };
+  if (!documents(loaded, 1, `one ${what} document`)) return { loaded, diagnostics: loaded.diagnostics };
+  const doc = loaded.docs[0]!;
+  const diagnostics = schemaDiagnostics(loaded, doc, validate, "");
+  return diagnostics.length ? { loaded, diagnostics } : { loaded, diagnostics, value: doc.toJS() as T, doc };
+}
+
+export const checkGate = (source: string, file = "gate.yaml"): Checked<GateManifest> => checkDocument<GateManifest>(source, file, validators.gate, "gate manifest");
+export const checkSignoffs = (source: string, file = "signoffs.yaml"): Checked<{ signoffs: Signoff[] }> => checkDocument<{ signoffs: Signoff[] }>(source, file, validators.signoffs, "sign-off");
+
+/** The budgets file: schema, plus every baseline names a defined machine. */
+export function checkBudgets(source: string, file = "budgets.yaml"): Checked<Budgets> {
+  const { doc, ...checked } = checkDocument<Budgets>(source, file, validators.budgets, "budgets");
+  if (!checked.value) return checked;
+  const diagnostics = checked.value.budgets.flatMap((budget, index) => Object.keys(budget.baselines).filter(machine => !(machine in checked.value!.machines)).map(machine =>
+    diagnosticAt(checked.loaded, keyNode(doc!.getIn(["budgets", index, "baselines"], true) as Node, machine), "schema", `${budget.metric}: baseline for unknown machine "${machine}" (machines: ${Object.keys(checked.value!.machines).join(", ")})`)));
+  return diagnostics.length ? { loaded: checked.loaded, diagnostics } : checked;
 }
 
 const orThrow = <T>(checked: Checked<T>): T => { if (checked.diagnostics.length) throw new FlowFormatError(checked.diagnostics); return checked.value!; };
