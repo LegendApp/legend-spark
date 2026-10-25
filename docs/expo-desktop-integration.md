@@ -98,6 +98,22 @@ other patches, it checks the version and exact source, is idempotent, and replac
 file atomically. Existing runtimes need a native rebuild. `tests/rtl-scroll-view-native.test.ts`
 compiles the patched methods against AppKit.
 
+## RN macOS RTL text alignment patch
+
+`react-native-macos@0.81.7` Fabric passes natural `textAlign` (`"auto"` or unset) to TextKit
+as `NSTextAlignmentNatural`. TextKit resolves that from the user's language and the app's
+localization, not from the Yoga layout direction. So in an RTL subtree of an app that isn't
+localized for an RTL language (such as `direction: "rtl"`), text in a full-width box aligns
+left, even when it's Arabic.
+
+`rtl-text-alignment.cjs` resolves natural alignment from the text's layout direction: right in
+RTL, left in LTR. `"left"` and `"right"` keep the upstream behavior, which iOS shares: they
+swap in RTL. `"center"` and `"justify"` are unchanged. Text attributes without a layout
+direction, such as TextInput's, are unchanged too. Like the other patches, it checks the
+version and exact source, is idempotent, and replaces the file atomically. Existing runtimes
+need a native rebuild. `tests/rtl-text-alignment-native.test.ts` compiles the patched and the
+upstream code and lays text out with TextKit.
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.
