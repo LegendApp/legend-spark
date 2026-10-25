@@ -48,11 +48,12 @@ int main(int argc, char** argv) {
     run.join();
     if (result != 0) return 1;
     if (mode == "late") {
-      std::this_thread::sleep_for(std::chrono::milliseconds(400));
+      // The fake answers this run only after writing its orphan notifications, so they are handled by the time it returns.
+      result = SparkCodexTestRunPrompt("drain", 5000, output, sizeof(output), error, sizeof(error));
       const size_t retained = SparkCodexTestRetainedTurns();
-      std::cout << "retained=" << retained << "\n";
+      std::cout << "drain_result=" << result << " retained=" << retained << " error=" << error << "\n";
       SparkCodexTestShutdown();
-      return retained == 0 ? 0 : 1;
+      return result == 0 && retained == 0 ? 0 : 1;
     }
     SparkCodexTestShutdown();
     result = SparkCodexTestRunPrompt(prompt.c_str(), 5000, output, sizeof(output), error, sizeof(error));
