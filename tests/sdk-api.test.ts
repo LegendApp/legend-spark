@@ -770,6 +770,10 @@ test("appearance preferences are validated on macOS and typed unsupported on Win
   expect(system.getSystemAvailability("appearancePreferences")).toEqual({ available: false, reason: "unsupported-platform" });
   await expect(system.getAppearancePreferences()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   expect(calls).toHaveLength(0);
+  // Only the getter is unsupported: the fixed event list still subscribes on Windows.
+  const windowsEvents = await system.onSystemEvent(() => {});
+  expect(calls.map(call => call.method)).toEqual(["observe"]);
+  await windowsEvents.remove();
 });
 test("Windows takes badge text but rejects badge counts, progress and Recent Jump List options before native code", async () => {
   platform.OS = "windows";
