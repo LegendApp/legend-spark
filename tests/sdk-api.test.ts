@@ -548,7 +548,7 @@ test("updater events carry display version and build, delta downloads and skippe
   const item = { type: "update", version: "1.3", build: "3" };
   for (const event of [{ ...item, state: "downloading" }, { ...item, state: "downloading", delta: "yes" }, { ...item, state: "skipped" }, { type: "update", state: "skipped", version: "1.3", major: false }, { type: "update", state: "available", version: "1.3" }, { ...item, state: "available", build: 3 }]) emit("NativeDesktopApp", "desktop", event);
   expect(listener).not.toHaveBeenCalled();
-  const valid = [{ ...item, state: "downloading", delta: true }, { ...item, state: "downloading", delta: false }, { ...item, state: "skipped", major: false }, { ...item, state: "skipped", major: true }];
+  const valid = [{ type: "update", state: "cancelled" }, { ...item, state: "downloading", delta: true }, { ...item, state: "downloading", delta: false }, { ...item, state: "skipped", major: false }, { ...item, state: "skipped", major: true }];
   for (const event of valid) emit("NativeDesktopApp", "desktop", event);
   expect(listener.mock.calls.map(([event]) => event)).toEqual(valid);
   sub.remove();

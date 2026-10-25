@@ -41,7 +41,7 @@ export interface CheckForUpdatesOptions { mode?: "interactive" | "background" }
 /** `version` is the display version; `build` is the CFBundleVersion Sparkle orders, skips and selects deltas by. */
 type UpdateItem = { type: "update"; version: string; build: string };
 export type UpdateEvent =
-  | { type: "update"; state: "checking" | "notAvailable" }
+  | { type: "update"; state: "checking" | "notAvailable" | "cancelled" }
   | UpdateItem & { state: "available" | "downloaded" | "installing" }
   /** `delta` is true while Sparkle downloads a delta archive for the installed build; a failed delta is followed by another event with `delta: false` for the full archive. */
   | UpdateItem & { state: "downloading"; delta: boolean }
@@ -109,7 +109,7 @@ export function onUpdateEvent(listener: (event: UpdateEvent) => void): Subscript
     if (event.type !== "update" || typeof event.state !== "string") return;
     const flag = itemFlags.get(event.state);
     const item = itemFlags.has(event.state) && typeof event.version === "string" && typeof event.build === "string" && (!flag || typeof event[flag] === "boolean");
-    const valid = ["checking", "notAvailable"].includes(event.state) || item || (event.state === "error" && typeof event.message === "string");
+    const valid = ["checking", "notAvailable", "cancelled"].includes(event.state) || item || (event.state === "error" && typeof event.message === "string");
     if (valid) listener(event as unknown as UpdateEvent);
   }, { types: ["update"] });
 }

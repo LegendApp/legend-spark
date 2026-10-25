@@ -13,6 +13,8 @@ const root = mkdtempSync(path.join(os.tmpdir(), "spark-sparkle-test-"));
 // Unique per run: the Sparkle client keeps preferences under the fixture identifier and URL caches under its executable name.
 const runId = path.basename(root).replace(/[^A-Za-z0-9]/g, "");
 const bundleIdentifier = `so.legend.spark.update-fixture.${runId}`;
+const defaultsDomain = `${bundleIdentifier}.preferences`;
+let overrideDefaults = false;
 const updater = path.join(root, `sparkle-updater-${runId}`);
 const app = path.join(root, "Fixture.app");
 let checked = false;
@@ -27,7 +29,7 @@ try {
   mkdirSync(path.join(app, "Contents/MacOS"), { recursive: true });
   copyFileSync("/bin/echo", path.join(app, "Contents/MacOS/Fixture"));
   async function bundle(version: string) {
-    writeJson(path.join(app, "Contents/Info.plist"), { CFBundleExecutable: "Fixture", CFBundleIdentifier: bundleIdentifier, CFBundleName: "Fixture", CFBundlePackageType: "APPL", CFBundleVersion: version, CFBundleShortVersionString: `1.${version}`, LSMinimumSystemVersion: "14.0", SUFeedURL: feedURL, SUPublicEDKey: key, SURequireSignedFeed: true, SUVerifyUpdateBeforeExtraction: true, SUEnableAutomaticChecks: false });
+    writeJson(path.join(app, "Contents/Info.plist"), { CFBundleExecutable: "Fixture", CFBundleIdentifier: bundleIdentifier, CFBundleName: "Fixture", CFBundlePackageType: "APPL", CFBundleVersion: version, CFBundleShortVersionString: `1.${version}`, LSMinimumSystemVersion: "14.0", SUFeedURL: feedURL, SUPublicEDKey: key, SURequireSignedFeed: true, SUVerifyUpdateBeforeExtraction: true, SUEnableAutomaticChecks: false, ...(overrideDefaults ? { SUDefaultsDomain: defaultsDomain } : {}) });
     await run(root, ["plutil", "-convert", "xml1", path.join(app, "Contents/Info.plist")], { capture: true });
     await run(root, ["codesign", "--force", "--sign", "-", app], { capture: true });
   }
@@ -89,7 +91,7 @@ try {
     checked = true;
     return (await promisify(execFile)(updater, [app, new URL(path.relative(root, feedFile), origin).href, mode, action], { timeout: 90000 })).stdout;
   }
-  async function check(feedFile: string, installed: string, mode: "background" | "interactive", action: "install" | "skip" | "dismiss" | "clear"): Promise<Output> {
+  async function check(feedFile: string, installed: string, mode: "background" | "interactive", action: "install" | "skip" | "dismiss" | "clear" | "cancel"): Promise<Output> {
     await bundle(installed);
     const lines = (await client(feedFile, mode, action)).trim().split("\n").map(line => JSON.parse(line) as Record<string, unknown>);
     const status = lines.pop()?.status as Output["status"] | undefined;
@@ -106,6 +108,7 @@ try {
   // Delta selection: build 1 has a published delta, so Sparkle downloads it first and reports the full-archive fallback when it fails.
   expect("delta from build 1", await check(result.feed, "1", "background", "install"), [available, { ...item, state: "downloading", delta: true }, { ...item, state: "downloading", delta: false }, failed], none);
   expect("no delta from build 0", await check(result.feed, "0", "interactive", "install"), [available, { ...item, state: "downloading", delta: false }, failed], none);
+  expect("download cancellation", await check(result.feed, "0", "interactive", "cancel"), [available, { ...item, state: "downloading", delta: false }, { type: "update", state: "cancelled" }], none);
   // Downgrade refusal: a feed whose newest signed build is older than the installed one offers nothing.
   for (const mode of ["background", "interactive"] as const) expect(`downgrade ${mode}`, await check(result.feed, "4", mode, "install"), [notAvailable], none);
   expect("current build", await check(result.feed, "3", "background", "install"), [notAvailable], none);
@@ -127,12 +130,14 @@ try {
   copyFileSync(third, path.join(major, "fixture-3.zip"));
   await run(root, [path.join(bin, "generate_appcast"), "--ed-key-file", keyFile, "--major-version", "3", "--maximum-deltas", "0", "--download-url-prefix", "https://example.com/major/", "-o", path.join(major, "appcast.xml"), major], { capture: true });
   await skips("major", path.join(major, "appcast.xml"), true);
+  overrideDefaults = true;
+  await skips("custom defaults domain", result.feed, false);
   server.close();
-  console.log("PASS: real SPUUpdater with signed feeds: delta selected for a build with a delta, full-archive fallback reported with delta false, full archive without one; older-only feed offers no update in background and interactive checks; Skip This Version and skip-major events match status builds, background checks honor them, clearSkippedUpdate and interactive checks (which offer the build) forget them");
+  console.log("PASS: real SPUUpdater with signed feeds: delta selected for a build with a delta, full-archive fallback reported with delta false, full archive without one; older-only feed offers no update in background and interactive checks; Skip This Version and skip-major events match status builds, background checks honor them, clearSkippedUpdate and interactive checks (which offer the build) forget them, including SUDefaultsDomain overrides; download and authorization cancellation report cancelled");
 } finally {
   // Remove the client's preferences (through cfprefsd, then the empty file it leaves) and URL caches.
-  if (checked) await run(root, ["defaults", "delete", bundleIdentifier], { capture: true });
-  for (const name of [bundleIdentifier, path.basename(updater)]) {
+  if (checked) for (const domain of [bundleIdentifier, ...(overrideDefaults ? [defaultsDomain] : [])]) await run(root, ["defaults", "delete", domain], { capture: true });
+  for (const name of [bundleIdentifier, defaultsDomain, path.basename(updater)]) {
     rmSync(path.join(os.homedir(), "Library/Preferences", `${name}.plist`), { force: true });
     for (const library of ["Caches", "HTTPStorages"]) rmSync(path.join(os.homedir(), "Library", library, name), { recursive: true, force: true });
   }

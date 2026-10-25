@@ -28,7 +28,7 @@ static NSString *UnavailableReason(void) {
   SPUUpdater *updater = self.started ? self.controller.updater : nil;
   SPUUpdaterSettings *settings = updater ? nil : [[SPUUpdaterSettings alloc] initWithHostBundle:NSBundle.mainBundle];
   NSDate *checked = updater.lastUpdateCheckDate;
-  NSMutableDictionary *status = [SparkSkippedUpdates(NSUserDefaults.standardUserDefaults) mutableCopy];
+  NSMutableDictionary *status = [SparkSkippedUpdates(SparkUpdateDefaults(NSBundle.mainBundle)) mutableCopy];
   [status addEntriesFromDictionary:@{ @"available": @YES, @"started": @(self.started), @"canCheck": @(updater.canCheckForUpdates),
     @"automaticallyChecks": @(updater ? updater.automaticallyChecksForUpdates : settings.automaticallyChecksForUpdates),
     @"checkIntervalSeconds": @(updater ? updater.updateCheckInterval : settings.updateCheckInterval),
@@ -52,7 +52,8 @@ static NSString *UnavailableReason(void) {
 }
 - (void)updater:(SPUUpdater *)updater didDownloadUpdate:(SUAppcastItem *)item { [self event:@"downloaded" item:item error:nil]; }
 - (void)updater:(SPUUpdater *)updater willInstallUpdate:(SUAppcastItem *)item { [self event:@"installing" item:item error:nil]; }
-- (void)updater:(SPUUpdater *)updater didAbortWithError:(NSError *)error { if (SparkReportsAbort(error)) [self event:@"error" item:nil error:error]; }
+- (void)userDidCancelDownload:(SPUUpdater *)updater { [self event:@"cancelled" item:nil error:nil]; }
+- (void)updater:(SPUUpdater *)updater didAbortWithError:(NSError *)error { NSDictionary *event = SparkUpdateAbortEvent(error); if (event) SparkEmit(event); }
 @end
 @implementation RNDesktopUpdates
 RCT_EXPORT_MODULE(NativeDesktopUpdates)
@@ -74,7 +75,7 @@ RCT_EXPORT_MODULE(NativeDesktopUpdates)
     NSString *reason = UnavailableReason();
     if (reason) { reject(@"E_UNAVAILABLE", [@"Updates require a configured standalone release app; current state: " stringByAppendingString:reason], nil); return; }
     if ([method isEqual:@"clearSkipped"]) {
-      SparkClearSkippedUpdates(NSUserDefaults.standardUserDefaults);
+      SparkClearSkippedUpdates(SparkUpdateDefaults(NSBundle.mainBundle));
       resolve(@"null"); return;
     }
     NSError *error = nil;

@@ -7,8 +7,11 @@
 // defaults (SPUSkippedUpdate.m); its API is private. A minor skip stores the
 // skipped CFBundleVersion; a major-upgrade skip stores the item's
 // minimumAutoupdateVersion plus the skipped CFBundleVersion.
-// Callers use standardUserDefaults, matching Sparkle's host domain only while
-// SUDefaultsDomain is unset. Spark does not support overriding that Info.plist key.
+static inline NSUserDefaults *SparkUpdateDefaults(NSBundle *host) {
+  id domain = [host objectForInfoDictionaryKey:@"SUDefaultsDomain"];
+  if (![domain isKindOfClass:NSString.class]) domain = [host isEqual:NSBundle.mainBundle] ? nil : host.bundleIdentifier;
+  return domain ? [[NSUserDefaults alloc] initWithSuiteName:domain] : NSUserDefaults.standardUserDefaults;
+}
 static inline NSDictionary *SparkSkippedUpdates(NSUserDefaults *defaults) {
   return @{ @"skippedBuild": [defaults stringForKey:@"SUSkippedVersion"] ?: NSNull.null,
             @"skippedMajorBuild": [defaults stringForKey:@"SUSkippedMajorSubreleaseVersion"] ?: NSNull.null };
@@ -27,5 +30,10 @@ static inline NSDictionary *SparkUpdateEvent(NSString *state, SUAppcastItem *ite
   if (error) event[@"message"] = error.localizedDescription;
   return event;
 }
-// Sparkle also aborts with SUNoUpdateError after updaterDidNotFindUpdate, which Spark already reports as notAvailable.
-static inline BOOL SparkReportsAbort(NSError *error) { return !([error.domain isEqual:SUSparkleErrorDomain] && error.code == SUNoUpdateError); }
+static inline NSDictionary *SparkUpdateAbortEvent(NSError *error) {
+  if ([error.domain isEqual:SUSparkleErrorDomain]) {
+    if (error.code == SUNoUpdateError) return nil; // Already reported by updaterDidNotFindUpdate.
+    if (error.code == SUInstallationCanceledError) return SparkUpdateEvent(@"cancelled", nil, nil);
+  }
+  return SparkUpdateEvent(@"error", nil, error);
+}

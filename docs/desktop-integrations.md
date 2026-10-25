@@ -232,8 +232,9 @@ Release intervals, so Spark rejects them with `E_INVALID_ARGUMENT`. Status repor
 the persisted interval and automatic-check preference before the updater starts
 (Sparkle's default interval is 86400 seconds), and `lastCheckedAt` once it has.
 
-Skip status and clearing use the app's standard defaults domain. Do not set
-Sparkle's `SUDefaultsDomain` Info.plist override; that configuration is unsupported.
+Skip status and clearing use Sparkle's host defaults domain, including an
+`SUDefaultsDomain` Info.plist override. Cancelling a download or installation
+at the authorization prompt emits `cancelled`, without an error message.
 
 ## Automated checks
 

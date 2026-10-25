@@ -2,7 +2,7 @@
 // check against a fixture host bundle and prints Spark's events (SparkUpdateState.h)
 // for the same delegate callbacks RNDesktopUpdates.mm uses, then Spark's skip status.
 // Downloads are redirected to a missing local file, so nothing is fetched or installed.
-// Usage: sparkle-updater <host.app> <feed file URL> <background|interactive> <install|skip|dismiss|clear>
+// Usage: sparkle-updater <host.app> <feed file URL> <background|interactive> <install|skip|dismiss|clear|cancel>
 #import <Foundation/Foundation.h>
 #import <Sparkle/Sparkle.h>
 #import "../packages/updates/macos/SparkUpdateState.h"
@@ -16,6 +16,7 @@ static void Print(NSDictionary *value) {
 @interface Harness : NSObject <SPUUserDriver, SPUUpdaterDelegate>
 @property NSString *feed;
 @property SPUUserUpdateChoice choice;
+@property BOOL cancelDownload;
 @property NSUserDefaults *defaults;
 @end
 @implementation Harness
@@ -31,7 +32,8 @@ static void Print(NSDictionary *value) {
 }
 - (void)updater:(SPUUpdater *)updater didDownloadUpdate:(SUAppcastItem *)item { Print(SparkUpdateEvent(@"downloaded", item, nil)); }
 - (void)updater:(SPUUpdater *)updater willInstallUpdate:(SUAppcastItem *)item { Print(SparkUpdateEvent(@"installing", item, nil)); }
-- (void)updater:(SPUUpdater *)updater didAbortWithError:(NSError *)error { if (SparkReportsAbort(error)) Print(SparkUpdateEvent(@"error", nil, error)); }
+- (void)userDidCancelDownload:(SPUUpdater *)updater { Print(SparkUpdateEvent(@"cancelled", nil, nil)); }
+- (void)updater:(SPUUpdater *)updater didAbortWithError:(NSError *)error { NSDictionary *event = SparkUpdateAbortEvent(error); if (event) Print(event); }
 - (void)updater:(SPUUpdater *)updater didFinishUpdateCycleForUpdateCheck:(SPUUpdateCheck)check error:(NSError *)error {
   Print(@{ @"status": SparkSkippedUpdates(self.defaults) });
   exit(0);
@@ -45,7 +47,7 @@ static void Print(NSDictionary *value) {
 - (void)showUpdateReleaseNotesFailedToDownloadWithError:(NSError *)error {}
 - (void)showUpdateNotFoundWithError:(NSError *)error acknowledgement:(void (^)(void))acknowledgement { acknowledgement(); }
 - (void)showUpdaterError:(NSError *)error acknowledgement:(void (^)(void))acknowledgement { acknowledgement(); }
-- (void)showDownloadInitiatedWithCancellation:(void (^)(void))cancellation {}
+- (void)showDownloadInitiatedWithCancellation:(void (^)(void))cancellation { if (self.cancelDownload) cancellation(); }
 - (void)showDownloadDidReceiveExpectedContentLength:(uint64_t)expectedContentLength {}
 - (void)showDownloadDidReceiveDataOfLength:(uint64_t)length {}
 - (void)showDownloadDidStartExtractingUpdate {}
@@ -58,15 +60,21 @@ static void Print(NSDictionary *value) {
 
 int main(int argc, char **argv) {
   @autoreleasepool {
-    if (argc != 5) { fprintf(stderr, "usage: sparkle-updater <host.app> <feed URL> <background|interactive> <install|skip|dismiss|clear>\n"); return 64; }
+    if (argc != 5) { fprintf(stderr, "usage: sparkle-updater <host.app> <feed URL> <background|interactive> <install|skip|dismiss|clear|cancel>\n"); return 64; }
     NSBundle *host = [NSBundle bundleWithPath:@(argv[1])];
     NSString *action = @(argv[4]);
     Harness *harness = [Harness new];
     harness.feed = @(argv[2]);
-    // Sparkle keeps a non-main host's preferences in a suite named by its bundle identifier.
-    harness.defaults = [[NSUserDefaults alloc] initWithSuiteName:host.bundleIdentifier];
+    NSDictionary *cancelled = SparkUpdateAbortEvent([NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationCanceledError userInfo:nil]);
+    if (![cancelled isEqual:@{ @"type": @"update", @"state": @"cancelled" }] ||
+        SparkUpdateAbortEvent([NSError errorWithDomain:SUSparkleErrorDomain code:SUNoUpdateError userInfo:nil]) ||
+        ![SparkUpdateAbortEvent([NSError errorWithDomain:@"other" code:SUInstallationCanceledError userInfo:nil])[@"state"] isEqual:@"error"]) {
+      fprintf(stderr, "Incorrect abort classification\n"); return 1;
+    }
+    harness.defaults = SparkUpdateDefaults(host);
     if ([action isEqual:@"clear"]) { SparkClearSkippedUpdates(harness.defaults); Print(@{ @"status": SparkSkippedUpdates(harness.defaults) }); return 0; }
-    harness.choice = [action isEqual:@"install"] ? SPUUserUpdateChoiceInstall : [action isEqual:@"skip"] ? SPUUserUpdateChoiceSkip : SPUUserUpdateChoiceDismiss;
+    harness.cancelDownload = [action isEqual:@"cancel"];
+    harness.choice = ([action isEqual:@"install"] || harness.cancelDownload) ? SPUUserUpdateChoiceInstall : [action isEqual:@"skip"] ? SPUUserUpdateChoiceSkip : SPUUserUpdateChoiceDismiss;
     SPUUpdater *updater = [[SPUUpdater alloc] initWithHostBundle:host applicationBundle:host userDriver:harness delegate:harness];
     NSError *error = nil;
     if (![updater startUpdater:&error]) { fprintf(stderr, "startUpdater: %s\n", error.description.UTF8String); return 1; }
