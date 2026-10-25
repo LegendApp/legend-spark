@@ -30,6 +30,8 @@ int main() {
   check(QuoteArgument(L"C:\\a\\b") == L"C:\\a\\b", "Interior backslashes are literal");
   check(CommandLine(L"C:\\App\\app.exe", {L"--spark-safe-mode", L"x y"}) == L"C:\\App\\app.exe --spark-safe-mode \"x y\"", "Command lines join quoted arguments");
 
+  check(RelaunchArguments({L"app.exe", L"--spark-safe-mode", L"file.txt", L"--spark-safe-mode", L"--other"}) == std::vector<std::wstring>({L"file.txt", L"--other"}), "Default relaunch leaves safe mode and preserves other arguments");
+  check(RelaunchArguments({L"app.exe"}).empty(), "A launch without arguments relaunches without arguments");
   check(SafeModeTrigger({L"app.exe", L"--spark-safe-mode"}, false) == L"flag", "The flag selects safe mode");
   check(SafeModeTrigger({L"app.exe", L"--spark-safe-mode"}, true) == L"flag", "The flag wins over the modifier");
   check(SafeModeTrigger({L"app.exe"}, true) == L"modifier", "Shift selects safe mode");

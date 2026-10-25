@@ -53,6 +53,12 @@ inline std::wstring CommandLine(std::wstring const &executable, std::vector<std:
   for (auto const &argument : arguments) { line.push_back(L' '); line += QuoteArgument(argument); }
   return line;
 }
+// Reuses arguments after the executable, excluding the safe-mode launch flag.
+inline std::vector<std::wstring> RelaunchArguments(std::vector<std::wstring> const &process) {
+  std::vector<std::wstring> arguments;
+  for (size_t i = 1; i < process.size(); ++i) if (process[i] != SafeModeFlag) arguments.push_back(process[i]);
+  return arguments;
+}
 // `flag`, `modifier` or empty for a normal launch.
 inline std::wstring SafeModeTrigger(std::vector<std::wstring> const &arguments, bool shiftHeld) {
   for (size_t i = 1; i < arguments.size(); ++i) if (arguments[i] == SafeModeFlag) return L"flag";

@@ -647,7 +647,11 @@ struct SparkDesktopApp {
           if (!relaunchChild) {
             std::vector<std::wstring> arguments;
             if (args.HasKey(L"arguments")) for (auto const &item : args.GetNamedArray(L"arguments")) arguments.push_back(std::wstring(item.GetString()));
-            else for (uint32_t i = 1; i < launchArguments.Size(); ++i) arguments.push_back(std::wstring(launchArguments.GetStringAt(i)));
+            else {
+              std::vector<std::wstring> process;
+              for (auto const &item : launchArguments) process.push_back(std::wstring(item.GetString()));
+              arguments = SparkLaunch::RelaunchArguments(process);
+            }
             wchar_t executable[32768]; const auto length = GetModuleFileNameW(nullptr, executable, 32768);
             if (!length || length >= 32768) winrt::throw_last_error();
             auto commandLine = SparkLaunch::CommandLine(executable, arguments);

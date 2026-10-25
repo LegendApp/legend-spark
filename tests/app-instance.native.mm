@@ -31,6 +31,8 @@ static BOOL acquire(NSString *directory, NSString *name) {
 int main(int argc, char **argv) { @autoreleasepool {
   NSString *role = argc > 1 ? @(argv[1]) : @"";
   if ([role isEqual:@"validate"]) {
+    check([SparkInstanceRelaunchArguments(@[@"app", @"--spark-safe-mode", @"file.txt", @"--spark-safe-mode", @"--other"]) isEqual:@[@"file.txt", @"--other"]], @"Default relaunch leaves safe mode and preserves other arguments");
+    check(SparkInstanceRelaunchArguments(@[@"app"]).count == 0, @"No arguments remain omitted");
     check(SparkInstanceValidLaunch(@{ @"arguments": @[@"a"], @"workingDirectory": @"/", @"files": @[], @"urls": @[] }), @"A complete launch is valid");
     for (id launch in @[@[], @{}, @{ @"arguments": @[@1], @"workingDirectory": @"/", @"files": @[], @"urls": @[] },
         @{ @"arguments": @[], @"workingDirectory": @1, @"files": @[], @"urls": @[] }, @{ @"arguments": @[], @"workingDirectory": @"/", @"files": @"x", @"urls": @[] },

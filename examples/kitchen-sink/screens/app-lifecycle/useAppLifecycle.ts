@@ -7,7 +7,7 @@ export type RelaunchMode = "same" | "safe" | "normal";
 export type RelaunchStatus = "idle" | "pending" | "approved" | "vetoed" | { error: string };
 type SecondInstance = app.AppEventMap["secondInstance"] & { key: number };
 
-// "same" lets the host reuse this launch's arguments; "normal" drops them, leaving safe mode.
+// "same" reuses ordinary arguments; "normal" clears all arguments. Both leave safe mode.
 const RELAUNCH: Record<RelaunchMode, app.RelaunchOptions> = { same: {}, safe: { arguments: ["--spark-safe-mode"] }, normal: { arguments: [] } };
 export const describeError = (error: unknown) => error instanceof SparkError ? `SparkError:${error.code} ${error.message}` : String(error);
 

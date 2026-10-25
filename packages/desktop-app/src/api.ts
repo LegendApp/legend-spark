@@ -15,7 +15,7 @@ export interface AppLaunch {
 }
 export interface AppContext { projectId: string; name: string; version: string; runtime: AppRuntime; launchArguments: readonly string[]; launch: AppLaunch }
 export interface RelaunchOptions {
-  /** Arguments after the executable for the new instance. Default: this launch's arguments. */
+  /** Arguments after the executable for the new instance. Default: this launch's arguments except --spark-safe-mode. */
   arguments?: readonly string[];
 }
 export type QuitResult = { quitRequested: true } | { quitRequested: false; reason: "vetoed" };
@@ -67,10 +67,12 @@ export function quit(): Promise<QuitResult> {
 export async function relaunch(options: RelaunchOptions = {}): Promise<QuitResult> {
   if (!record(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected relaunch options");
   for (const key of Object.keys(options)) if (key !== "arguments") throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown relaunch option: ${key}`);
-  const args = options.arguments;
+  const input = options.arguments;
+  if (input !== undefined && !Array.isArray(input)) throw new SparkError("E_INVALID_ARGUMENT", "Relaunch arguments must be an array");
+  const args = input === undefined ? undefined : [...input];
   if (args !== undefined && (!strings(args) || args.some(item => item.includes("\0")))) throw new SparkError("E_INVALID_ARGUMENT", "Relaunch arguments must be strings without NUL characters");
   await cleanOrphanGuards();
-  return callAppNative("relaunch", quitResult, args === undefined ? {} : { arguments: [...args] });
+  return callAppNative("relaunch", quitResult, args === undefined ? {} : { arguments: args });
 }
 export const hide = (): Promise<void> => command("hide");
 export const activate = (): Promise<void> => command("activate");

@@ -6,6 +6,8 @@ intent: >
   running app forward and lists that launch's arguments, file and URL under Second launches.
 checks: [LIFE-INSTANCE-01, LIFE-INSTANCE-02]
 tags: [app-lifecycle]
+# Requires manual signoff until the black-box lifecycle backend is available.
+manual: true
 platforms: [macos, windows]
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://app-lifecycle/launch" }

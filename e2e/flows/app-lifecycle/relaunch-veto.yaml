@@ -6,6 +6,8 @@ intent: >
   After turning the veto off, the app quits normally.
 checks: [LIFE-RELAUNCH-02]
 tags: [app-lifecycle]
+# Requires manual signoff until the black-box lifecycle backend is available.
+manual: true
 platforms: [macos, windows]
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://app-lifecycle/launch" }

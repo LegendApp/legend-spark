@@ -74,6 +74,7 @@ static NSString *LegendManagedWindowFrameAutosaveName(NSString *identifier)
 
 static NSArray<NSDictionary *> *LegendReadRestorableWindowOptions(void)
 {
+  if (LegendSafeMode() || LegendTestDriverActive()) return @[];
   NSArray *records = [NSUserDefaults.standardUserDefaults arrayForKey:LegendRestorableWindowOptionsDefaultsKey];
   if (![records isKindOfClass:NSArray.class]) {
     return @[];
@@ -125,7 +126,7 @@ static NSDictionary *LegendRestorableWindowOptions(NSDictionary *options)
 
 static void LegendWriteRestorableWindowOptions(NSArray<NSDictionary *> *options)
 {
-  if (LegendTestDriverActive()) {
+  if (LegendSafeMode() || LegendTestDriverActive()) {
     return;
   }
   NSMutableArray<NSString *> *records = [NSMutableArray new];
@@ -2630,7 +2631,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       return;
     }
     [mainWindow orderOut:nil];
-    if (!LegendTestDriverActive()) {
+    if (!LegendSafeMode() && !LegendTestDriverActive()) {
       [NSUserDefaults.standardUserDefaults removeObjectForKey:LegendMainWindowStartupSplitViewKey];
     }
     [self sendWindowEventWithName:@"onWindowClosed"
@@ -2673,8 +2674,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
 
     NSDictionary *options = [self parseObjectJSON:optionsJson];
-    // Driver mode saves no window chrome.
-    id startupSplitView = LegendTestDriverActive() ? nil : options[@"windowStyle"][@"startupSplitView"];
+    // Safe and driver modes save no window chrome.
+    id startupSplitView = (LegendSafeMode() || LegendTestDriverActive()) ? nil : options[@"windowStyle"][@"startupSplitView"];
     if ([startupSplitView isKindOfClass:NSDictionary.class]) {
       // Persist window chrome only, just like AppKit's saved frame. No document data.
       if (![startupSplitView isEqual:[NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey]]) {

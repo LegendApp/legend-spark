@@ -154,6 +154,14 @@ BOOL SparkInstanceForward(NSString *directory, NSString *name, NSDictionary *lau
   return acknowledged ? YES : SparkFail(error, @"The running instance did not accept this launch", sent ? (code ?: EPROTO) : code);
 }
 
+NSArray<NSString *> *SparkInstanceRelaunchArguments(NSArray<NSString *> *process) {
+  NSMutableArray<NSString *> *arguments = [NSMutableArray new];
+  for (NSUInteger i = 1; i < process.count; ++i) {
+    if (![process[i] isEqual:@"--spark-safe-mode"]) [arguments addObject:process[i]];
+  }
+  return arguments;
+}
+
 pid_t SparkInstanceSpawnRelaunch(NSArray<NSString *> *arguments, NSError **error) {
   NSString *executable = NSBundle.mainBundle.executablePath;
   if (!executable) { SparkFail(error, @"Unable to find this executable", ENOENT); return 0; }

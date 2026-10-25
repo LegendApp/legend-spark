@@ -6,6 +6,8 @@ intent: >
   nothing, so the next normal launch restores the resized frame.
 checks: [LIFE-SAFE-01, LIFE-SAFE-02]
 tags: [app-lifecycle]
+# Requires manual signoff until the black-box lifecycle backend is available.
+manual: true
 platforms: [macos, windows]
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://app-lifecycle/launch" }

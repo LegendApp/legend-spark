@@ -1,4 +1,6 @@
 import { beforeEach, expect, test, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { parseAllDocuments } from "yaml";
 const mocks = vi.hoisted(() => ({ call: vi.fn(), listeners: new Set<(event: any) => void>(), platform: { OS: "macos" } }));
 vi.mock("react-native", () => ({ Platform: mocks.platform, TurboModuleRegistry: { get: () => ({ call: mocks.call }) }, NativeEventEmitter: class { addListener(_: string, listener: (event: any) => void) { mocks.listeners.add(listener); return { remove: () => { mocks.listeners.delete(listener); } }; } } }));
 import { getAppContext, addAppListener, beforeQuit, quit, relaunch } from "../packages/desktop-app/src/api";
@@ -31,6 +33,19 @@ test("relaunch validates options before native work and reports the shared quit 
   expect(calls("relaunch")).toEqual([{ arguments: ["--spark-safe-mode"] }, {}]);
   mocks.call.mockResolvedValue("null"); await expect(relaunch()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   mocks.call.mockRejectedValue(Object.assign(Error("spawn failed"), { code: "E_IO" })); await expect(relaunch()).rejects.toMatchObject({ code: "E_NATIVE" });
+});
+test("relaunch snapshots and validates the owned argument array before yielding", async () => {
+  mocks.call.mockResolvedValue('{"quitRequested":true}');
+  const args = ["original"];
+  const pending = relaunch({ arguments: args });
+  args[0] = "changed\0argument";
+  args.push("later");
+  await expect(pending).resolves.toEqual({ quitRequested: true });
+  expect(calls("relaunch")).toEqual([{ arguments: ["original"] }]);
+  const deceptive = ["valid"];
+  deceptive[Symbol.iterator] = function* () { yield "invalid\0copy"; };
+  await expect(relaunch({ arguments: deceptive })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(calls("relaunch")).toHaveLength(1);
 });
 test("quit joins concurrent requests and waits for the native decision", async () => {
   let resolve!: (value: string) => void;
@@ -84,4 +99,12 @@ test("application window events follow logical IDs across native generations", (
   emit({ type: "closed" });
   expect(listener.mock.calls).toEqual([[{ type: "windowClosed", windowId: "editor" }], [{ type: "windowClosed", windowId: "editor" }]]);
   registration.remove();
+});
+
+test("lifecycle acceptance flows require manual signoff until their black-box backend exists", () => {
+  for (const file of ["second-instance", "relaunch", "relaunch-veto", "safe-mode"]) {
+    const documents = parseAllDocuments(readFileSync(new URL(`../e2e/flows/app-lifecycle/${file}.yaml`, import.meta.url), "utf8"));
+    expect(documents.flatMap(document => document.errors)).toEqual([]);
+    expect(documents[0].toJS()).toMatchObject({ manual: true, platforms: ["macos", "windows"] });
+  }
 });

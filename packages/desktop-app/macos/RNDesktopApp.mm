@@ -1,5 +1,6 @@
 #import "RNDesktopApp.h"
 #import "SparkDesktop.h"
+#import "SparkInstance.h"
 @implementation RNDesktopApp { NSMutableSet<NSString *> *_guardIds; }
 - (instancetype)init { if ((self = [super init])) _guardIds = [NSMutableSet new]; return self; }
 RCT_EXPORT_MODULE(NativeDesktopApp)
@@ -36,7 +37,7 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
       [NSRunLoop.mainRunLoop performBlock:^{ [NSApp terminate:nil]; }]; }
     else if ([method isEqual:@"relaunch"]) {
       NSArray *process = NSProcessInfo.processInfo.arguments;
-      NSArray *arguments = args[@"arguments"] ?: [process subarrayWithRange:NSMakeRange(1, process.count - 1)];
+      NSArray *arguments = args[@"arguments"] ?: SparkInstanceRelaunchArguments(process);
       if (![arguments isKindOfClass:NSArray.class] || [arguments indexOfObjectPassingTest:^BOOL(id item, NSUInteger index, BOOL *stop) { return ![item isKindOfClass:NSString.class]; }] != NSNotFound) { SparkInvalid(reject, @"Expected relaunch arguments"); return; }
       SparkRelaunch(arguments, ^(NSDictionary *result, NSError *error) { if (error) SparkReject(reject, error); else resolve(SparkJSON(result)); });
     }

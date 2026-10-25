@@ -53,9 +53,9 @@ test.skipIf(!darwin)("protocol: ping, navigate, openFile, waitFor, appearance, s
   const result = run("session");
   expect(result.stdout, result.stderr).toContain("session passed");
 }, 30000);
-test.skipIf(!darwin)("driver mode keeps the configured window size although a frame was saved, and saves none", () => {
+test.skipIf(!darwin)("safe and driver modes keep the configured window size although a frame was saved, and save none", () => {
   const seed = ["-NSWindow Frame spark.test.main", "100 100 1040 720 0 0 1728 1084 "];
-  for (const mode of ["normal", "driver"]) {
+  for (const mode of ["normal", "driver", "safe"]) {
     const result = spawnSync(windowState, [mode, directory, ...seed], { encoding: "utf8", timeout: 30000 });
     expect(result.stdout, result.stderr).toContain(`${mode} passed`);
   }
