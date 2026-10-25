@@ -146,11 +146,7 @@ macOS, answered from the view's current props: enabled unless `accessibilityStat
 accessibility trait, selected when `accessibilityState.selected`. Reading the props covers the first mount, recycled
 views and every update. Like the other patches, it checks the version and exact source, is idempotent, and replaces
 the file atomically. Existing runtimes need a native rebuild. `tests/accessibility-state-native.test.ts` compiles the
-patched methods against AppKit. In the Kitchen Sink, `e2e/flows/native-controls/buttons.yaml` checks the Pressables
-on Button styles with `assertA11y` (`enabled`, `selected`) as they are disabled, selected and enabled again. The
-accessibility audit ([e2e-flows.md](e2e-flows.md#accessibility-audit)) exempts disabled React Native text as it does
-disabled AppKit controls; `e2e/flows/accessibility/audit-native-controls.yaml` audits Button styles again with the
-Pressables disabled.
+patched methods against AppKit.
 
 ## Expo development terminal patch
 
