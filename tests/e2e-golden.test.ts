@@ -71,6 +71,11 @@ describe("compare", () => {
     expect(at(diff, 3, 3)).toEqual([120, 160, 255, 255]);
   });
 
+  test("masks outside the image mask nothing", () => {
+    const masks = [{ x: -2, y: 0, width: 1, height: 1 }, { x: 12, y: 0, width: 3, height: 3 }];
+    expect(compare(image(10, 10), image(10, 10), { tolerance: 2, masks }).stats.compared).toBe(100);
+  });
+
   test("PNGs round-trip", () => {
     const file = path.join(mkdtempSync(path.join(tmpdir(), "golden-png-")), "a.png"), original = fill(image(7, 5), 1, 1, 2, 2, [10, 20, 30, 128]);
     writePng(file, original);

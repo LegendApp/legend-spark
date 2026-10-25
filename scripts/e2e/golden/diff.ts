@@ -132,7 +132,9 @@ export function compare(actual: Image, expected: Image, options: CompareOptions)
   if (actual.width !== width || actual.height !== height) throw new Error(`cannot compare a ${actual.width}x${actual.height} image with a ${width}x${height} one`);
   const masked = new Uint8Array(width * height);
   for (const rect of options.masks) {
-    for (let y = Math.max(0, rect.y); y < Math.min(height, rect.y + rect.height); y++) masked.fill(1, y * width + Math.max(0, rect.x), y * width + Math.min(width, rect.x + rect.width));
+    const left = Math.max(0, rect.x), right = Math.min(width, rect.x + rect.width);
+    if (left >= right) continue;
+    for (let y = Math.max(0, rect.y); y < Math.min(height, rect.y + rect.height); y++) masked.fill(1, y * width + left, y * width + right);
   }
   const diff = new Uint8Array(width * height * 4);
   const paint = (pixel: number, [r, g, b]: number[]) => diff.set([r!, g!, b!, 255], pixel * 4);
