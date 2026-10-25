@@ -185,9 +185,9 @@ Labels are shown as given (include a colon if the locale uses one). A pop-up sel
 
 ### About panel
 
-AppKit owns the panel lifetime and can retain hidden panels when options change until the app exits, including across JavaScript reloads. Avoid changing About metadata on every call; repeated calls with the same public options do not guarantee panel reuse, particularly with `iconPath`.
+Spark owns one native macOS About panel. Repeated calls update and reuse it, including after it is closed; module cleanup closes and releases it during JavaScript reloads.
 
-`showAboutPanel(options?)` orders front the standard macOS About panel. `name`, `version` ("Version …"), `build` (in parentheses), `credits` (plain text), `copyright` and `iconPath` (an absolute image path) override the bundle's values; omitted fields keep them. It is not modal and resolves once shown. A missing icon file rejects E_NOT_FOUND and an unreadable one E_INVALID_DATA. The menu `about` role keeps showing the bundle's values; use an action item that calls `showAboutPanel` to show overrides.
+`showAboutPanel(options?)` brings the Spark-owned panel to the front. `name`, `version` ("Version …"), `build` (in parentheses), `credits` (plain text), `copyright` and `iconPath` (an absolute image path) override the bundle's values; omitted fields keep them. It is not modal and resolves once shown. A missing icon file rejects E_NOT_FOUND and an unreadable one E_INVALID_DATA. The menu `about` role opens AppKit's separate standard panel with the bundle's values; use an action item that calls `showAboutPanel` to show Spark's panel with overrides.
 
 ### Availability
 
