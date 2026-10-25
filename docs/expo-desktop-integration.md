@@ -1,6 +1,6 @@
 # Expo Desktop integration
 
-spark delegates project creation and native generation to the tested Expo Desktop release. The pinned CLI is `expo-desktop@1.0.0`; desktop native generation uses `expo-desktop-template-bare-minimum@54.81.1`. Config plugins are pinned to `expo-desktop-config-plugins@1.2.0`. Metro config is `54.81.0`; modules-core and stubs are `54.0.14`. Expo 54 / React Native 0.81 remain unchanged. Spark pins RN macOS `0.81.7` and RN Windows `0.81.35` in overrides as well as direct dependencies, preventing the upstream native template from installing conflicting desktop versions.
+spark delegates project creation and native generation to the tested Expo Desktop release. The pinned CLI is `expo-desktop@1.0.6`; desktop native generation uses `expo-desktop-template-bare-minimum@54.81.6`. Config plugins are pinned to `expo-desktop-config-plugins@1.3.2`. Metro config is `54.81.3`; modules-core is `54.0.14` and stubs are `54.0.15`. Expo 54 / React Native 0.81 remain unchanged. Spark pins RN macOS `0.81.7` and RN Windows `0.81.35` in overrides as well as direct dependencies, preventing the upstream native template from installing conflicting desktop versions.
 
 ## Ownership
 

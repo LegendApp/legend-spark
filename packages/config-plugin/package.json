@@ -10,7 +10,7 @@
     "*.d.cts"
   ],
   "dependencies": {
-    "expo-desktop-config-plugins": "1.2.0",
+    "expo-desktop-config-plugins": "1.3.2",
     "@legendapp/spark-desktop-host": "0.0.1-next.7",
     "@legendapp/spark-window-options": "0.0.1-next.7",
     "@expo/config-plugins": "54.0.5",

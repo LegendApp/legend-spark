@@ -422,7 +422,7 @@ export function goConfigurationIssues(config: any): string[] {
     issues.push("additional configuration plugins require a custom runtime");
   if (
     Object.keys(expo.macos ?? {}).some(
-      (key) => !["bundleIdentifier", "infoPlist"].includes(key),
+      (key) => !["bundleIdentifier", "version", "buildNumber", "infoPlist"].includes(key),
     )
   )
     issues.push("macOS native configuration requires a custom runtime");

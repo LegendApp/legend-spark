@@ -138,7 +138,7 @@
     "expo-font": "14.0.12",
     "expo-keep-awake": "15.0.8",
     "expo-desktop-modules-core": "54.0.14",
-    "expo-desktop-stubs": "54.0.14",
+    "expo-desktop-stubs": "54.0.15",
     "react-native-macos": "0.81.7",
     "react-native-windows": "0.81.35",
     "postcss": "8.5.31",

@@ -16,7 +16,8 @@ function initializeTemplate(root) {
   config.name = expo.name;
   config.projectId = expo.windows.projectGuid;
   config.expo = { ...expo, ...config.expo };
-  if (config.macos) config.macos = { ...expo.macos, ...config.macos, bundleIdentifier: expo.macos.bundleIdentifier };
+  const { version, ...macos } = expo.macos;
+  if (config.macos) config.macos = { ...macos, ...config.macos, bundleIdentifier: macos.bundleIdentifier };
   toExpo(config);
   fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n');
   prepareConfig(root);

@@ -25,7 +25,7 @@ for (const folder of ["blank-typescript", "windows", "universal"]) {
       writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: {
         name: "UpstreamName", platforms: ["ios", "android", "macos", "windows"],
         ios: { bundleIdentifier: "org.example.upstream" }, android: { package: "org.example.upstream" },
-        macos: { bundleIdentifier: "org.example.upstream" },
+        macos: { bundleIdentifier: "org.example.upstream", version: "0.0.1", buildNumber: "7" },
         windows: { projectGuid: "upstream-generated-guid", packageGuid: "upstream-package-guid", namespace: "org.example.upstream" },
       } }));
       initializeTemplate(root);
@@ -34,6 +34,7 @@ for (const folder of ["blank-typescript", "windows", "universal"]) {
       expect(initialized.projectId).toBe("upstream-generated-guid");
       expect(initialized.platforms).toEqual(config.platforms);
       if (config.macos) expect(initialized.macos.bundleIdentifier).toBe("org.example.upstream");
+      if (config.macos) expect(readConfig(root).expo.macos).toMatchObject({ version: config.version, buildNumber: "7" });
       expect(readConfig(root).expo.windows?.packageGuid).toBe("upstream-package-guid");
       initialized.name = "User renamed app";
       writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify(initialized));
@@ -49,13 +50,15 @@ for (const folder of ["blank-typescript", "windows", "universal"]) {
 test("all templates retain the tested desktop matrix", () => {
   for (const folder of ["blank-typescript", "windows", "universal"]) {
     const pkg = JSON.parse(readFileSync(path.join(templates, folder, "package.json"), "utf8"));
-    expect(pkg.dependencies["expo-desktop"]).toBe("1.0.0");
-    expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("54.81.1");
-    expect(pkg.dependencies["expo-desktop-prebuild-config"]).toBe("1.1.0");
-    expect(pkg.dependencies["expo-desktop-config-plugins"]).toBe("1.2.0");
-    expect(pkg.dependencies["expo-desktop-metro-config"]).toBe("54.81.0");
+    expect(pkg.dependencies["expo-desktop"]).toBe("1.0.6");
+    expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("54.81.6");
+    expect(pkg.dependencies["expo-desktop-prebuild-config"]).toBe("1.1.3");
+    expect(pkg.dependencies["expo-desktop-config-plugins"]).toBe("1.3.2");
+    expect(pkg.dependencies["expo-desktop-metro-config"]).toBe("54.81.3");
     expect(pkg.overrides["expo-desktop-modules-core"]).toBe("54.0.14");
-    expect(pkg.overrides["expo-desktop-stubs"]).toBe("54.0.14");
+    expect(pkg.overrides["expo-desktop-stubs"]).toBe("54.0.15");
+    const { expo } = JSON.parse(readFileSync(path.join(templates, folder, "app.json"), "utf8"));
+    expect(expo.macos).toMatchObject({ version: expo.version, buildNumber: "1" });
     expect(pkg.dependencies.expo).toBe("54.0.37");
     expect(pkg.overrides["@expo/cli"]).toBe("54.0.27");
     expect(pkg.dependencies["react-native"]).toBe("0.81.6");

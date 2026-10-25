@@ -112,7 +112,7 @@ function toExpo(value, target) {
     ...backend,
     name: value.name, slug: backend.slug ?? value.name.toLowerCase().replace(/[^a-z0-9-]/g, "-"), version: value.version,
     platforms: [selected], newArchEnabled: true,
-    ...(value.macos ? { macos: { ...value.macos, infoPlist: { CFBundleName: value.name, ...value.macos.infoPlist } } } : {}),
+    ...(value.macos ? { macos: { ...value.macos, version: value.version, buildNumber: value.macos.buildNumber ?? backend.ios?.buildNumber ?? "1", infoPlist: { CFBundleName: value.name, ...value.macos.infoPlist } } } : {}),
     ...(value.scheme !== undefined ? { scheme: value.scheme } : {}),
     extra: { ...backend.extra, spark: { ...extra, ...(platforms.length > 1 ? { supportedPlatforms: platforms } : {}) } },
     experiments: { ...backend.experiments, outOfTreePlatforms: true },

@@ -17,7 +17,7 @@ it.skipIf(process.env.SPARK_TEST_CUSTOMIZE !== '1' || process.platform !== 'darw
     const app = path.join(root, 'Test.app'), sourcePath = layout === 'monorepo' ? 'apps/demo/index.js' : 'index.js';
     mkdirSync(root, { recursive: true });
     symlinkSync(path.resolve('node_modules'), path.join(root, 'node_modules'));
-    writeJson(path.join(root, 'package.json'), { name: 'customize-test', private: true, main: 'index.js', dependencies: { '@legendapp/spark': VERSION, expo: '54.0.37', react: '19.1.4', 'react-native': '0.81.6', 'react-native-macos': '0.81.7', 'expo-desktop-metro-config': '54.81.0-beta.3' } });
+    writeJson(path.join(root, 'package.json'), { name: 'customize-test', private: true, main: 'index.js', dependencies: { '@legendapp/spark': VERSION, expo: '54.0.37', react: '19.1.4', 'react-native': '0.81.6', 'react-native-macos': '0.81.7', 'expo-desktop-metro-config': '54.81.3' } });
     const files = ['package.json', 'desktop.config.json', 'metro.config.js', 'index.js', 'pixel.png'];
     writeJson(path.join(root, 'desktop.config.json'), { name: 'Customize Test', version: '1.0.0', projectId: 'test.spark.customize', macos: { bundleIdentifier: 'test.spark.customize' }, platforms: ['macos'], customize: { repository: 'test/app', files: layout === 'monorepo' ? ['apps/demo/index.js', 'apps/demo/pixel.png', 'packages/shared'] : files, ...(layout === 'monorepo' ? { sourceRoot: '../..' } : {}) } });
     writeFileSync(path.join(root, 'metro.config.js'), 'const { makeMetroConfig } = require("expo-desktop-metro-config"); const { withDesktop } = require("@legendapp/spark/metro"); module.exports=withDesktop(makeMetroConfig(__dirname), {runtimes:false});\n');

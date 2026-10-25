@@ -13,6 +13,7 @@ test("canonical desktop config drives Go and generated Expo configuration", () =
   writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify(value));
   writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { name: "stale" } }));
   expect(readAppConfig(root).expo.name).toBe("Demo");
+  expect(readAppConfig(root).expo.macos).toMatchObject({ version: "1.0.0", buildNumber: "1" });
   expect(JSON.parse(projectEnvironment(root).SPARK_WINDOW_CONFIG!)).toEqual(nativeWindowOptions(value.window));
   expect(goConfigurationIssues(readAppConfig(root))).toEqual([]);
   prepareConfig(root);
@@ -66,4 +67,10 @@ test("both shipped schemas share canonical window fields and require macOS only 
   expect(() => toExpo({ ...base, macos: { ...base.macos, typo: true } })).toThrow("Unknown macos");
   expect(() => toExpo({ ...base, documentTypes: [{ name: "Doc", contentTypes: ["public.text"], typo: true }] })).toThrow("Unknown documentType");
   expect(() => toExpo({ ...base, signing: { macos: { teamID: "typo" } } })).toThrow("Unknown signing");
+});
+
+test("generated macOS versions use the canonical version and preserve build numbers", () => {
+  expect(goConfigurationIssues(toExpo({ ...base, macos: { ...base.macos, buildNumber: "23" } }))).toEqual([]);
+  expect(toExpo({ ...base, expo: { ios: { buildNumber: "12" } } }).expo.macos).toMatchObject({ version: base.version, buildNumber: "12" });
+  expect(toExpo({ ...base, macos: { ...base.macos, buildNumber: "23" }, expo: { ios: { buildNumber: "12" } } }).expo.macos).toMatchObject({ version: base.version, buildNumber: "23" });
 });

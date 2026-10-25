@@ -6,6 +6,10 @@
     "platforms": [
       "macos"
     ],
-    "icon": "./assets/icon.png"
+    "icon": "./assets/icon.png",
+    "macos": {
+      "version": "0.0.1",
+      "buildNumber": "1"
+    }
   }
 }
