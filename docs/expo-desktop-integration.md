@@ -126,6 +126,15 @@ the other patches, it checks the version and exact source, is idempotent, and re
 atomically. Existing runtimes need a native rebuild. `tests/rtl-text-input-alignment-native.test.ts`
 compiles the patch's helpers and checks text and placeholders in `NSTextField` and `NSTextView`.
 
+## RN macOS TextInput accessibility patch
+
+`react-native-macos@0.81.7` Fabric sets a TextInput's `accessibilityLabel` on the backed text input view. A multiline
+input's is `RCTWrappedTextView`, a plain view around a scroll view, while the `NSTextView` inside it is the
+accessibility element, so VoiceOver announced a labelled multiline input without its label.
+`text-input-accessibility.cjs` keeps the label on that text view. Like the other patches, it checks the version and
+exact source, is idempotent, and replaces the file atomically; existing runtimes need a native rebuild.
+`tests/text-input-accessibility.test.ts` covers the patch.
+
 ## RN macOS accessibility state patch
 
 `react-native-macos@0.81.7` Fabric applies `accessibilityState` only on iOS: in `RCTViewComponentView.mm` it is inside
