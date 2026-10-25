@@ -480,11 +480,11 @@ Committed goldens:
 
 | Golden | Screen | Source |
 |---|---|---|
-| `macos/light/en/infra-shell-catalog` | Launch catalog (`infra-shell-root`) | `ks:capture --wait-for infra-shell-root --appearance light --locale en` |
-| `macos/dark/en/infra-shell-catalog` | The same, dark | `--appearance dark --locale en` |
+| `macos/light/en/infra-shell-catalog` | Launch catalog (`infra-shell-root`) | `e2e/flows/infra/catalog-driver.yaml` against the release build |
+| `macos/dark/en/infra-shell-catalog` | The same, dark | The same |
 
-They come from the development build, so the sidebar subtitle reads `dev · <project ID>`.
-A flow that compares them must mask that line (`mask: [{ id: infra-shell-subtitle }]`), as
+The sidebar subtitle names the build (`release` or `dev`) and the project ID, so a flow that compares them must mask
+that line (`mask: [{ id: infra-shell-subtitle }]`), as
 `e2e/flows/infra/catalog-driver.yaml` does.
 
 The Arabic catalog has no golden yet: scroll content renders mirrored
