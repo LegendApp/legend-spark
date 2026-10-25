@@ -290,6 +290,8 @@ struct TurnState {
   size_t preAckBytes = 0;
   bool preAckLimitExceeded = false;
 };
+// Turn ids are only unique within one app-server process, so turn state is keyed by process generation.
+using TurnKey = std::pair<uint64_t, std::string>;
 
 class CodexProcessSupervisor {
 public:
@@ -351,7 +353,12 @@ public:
       }
       struct RunGuard {
         CodexProcessSupervisor* owner;
-        ~RunGuard() { std::lock_guard lock(owner->mutex_); --owner->activeRuns_; owner->condition_.notify_all(); }
+        ~RunGuard() {
+          std::lock_guard lock(owner->mutex_);
+          // Turns left from ended processes can only be claimed by an active run.
+          if (--owner->activeRuns_ == 0) std::erase_if(owner->turns_, [&](const auto& turn) { return turn.first.first != owner->processGeneration_; });
+          owner->condition_.notify_all();
+        }
       } runGuard{this};
       auto throwIfCancelled = [&]() {
         std::lock_guard lock(mutex_);
@@ -480,9 +487,13 @@ public:
       try {
         NSDictionary* turnResponse = request(@"turn/start", turnParams, deadline, acceptedCancellationGeneration, runProcessGeneration);
 #if defined(SPARK_CODEX_TESTING)
-        if (const char* delay = std::getenv("CODEX_TEST_DELAY_AFTER_TURN_RESPONSE_MS")) {
-          const int milliseconds = std::max(0, std::min(1000, std::atoi(delay)));
-          std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+        if (const char* accept = std::getenv("CODEX_TEST_ACCEPT_TURN_AFTER_EXIT")) {
+          // "next" also waits for a later process to start and end.
+          const bool next = std::string(accept) == "next";
+          std::unique_lock lock(mutex_);
+          condition_.wait_until(lock, deadline, [&]() {
+            return processGeneration_ != runProcessGeneration && (!next || (processGeneration_ == 0 && nextProcessGeneration_ > runProcessGeneration));
+          });
         }
 #endif
         throwIfCancelled();
@@ -495,13 +506,18 @@ public:
               "Codex app-server returned an invalid turn response. Update Codex, then reopen the app.");
         }
         std::lock_guard lock(mutex_);
-        if (processGeneration_ != runProcessGeneration) throw std::runtime_error("Codex app-server restarted before the turn was accepted.");
-        TurnState& state = turns_[turnId];
+        auto accepted = turns_.find({runProcessGeneration, turnId});
+        if (accepted == turns_.end()) {
+          // An ended process keeps the turns it reported; without one, nothing can finish this turn.
+          if (processGeneration_ != runProcessGeneration) throw std::runtime_error("Codex app-server restarted before the turn was accepted.");
+          accepted = turns_.emplace(TurnKey{runProcessGeneration, turnId}, TurnState()).first;
+        }
+        TurnState& state = accepted->second;
         state.threadId = threadId;
         preAckBytes_ -= state.preAckBytes;
         state.preAckBytes = 0;
         state.acknowledged = true;
-        --pendingTurnStarts_;
+        if (processGeneration_ == runProcessGeneration) --pendingTurnStarts_;
         pendingTurnStart = false;
       } catch (...) {
         finishPendingTurnStart();
@@ -511,25 +527,21 @@ public:
 
       TurnState completed;
       {
+        // Ending a process finishes its turns (completed ones keep their result), so `done` covers exits too.
+        const TurnKey key{runProcessGeneration, turnId};
         std::unique_lock lock(mutex_);
-        const bool finished = condition_.wait_until(lock, deadline, [&]() {
-          const auto state = turns_.find(turnId);
-          return processGeneration_ != runProcessGeneration || cancelGeneration_ != cancelGeneration ||
-              (state != turns_.end() && state->second.done);
+        condition_.wait_until(lock, deadline, [&]() {
+          const auto state = turns_.find(key);
+          return cancelGeneration_ != cancelGeneration || (state != turns_.end() && state->second.done);
         });
-        auto state = turns_.find(turnId);
+        if (const auto state = turns_.find(key); state != turns_.end()) {
+          completed = std::move(state->second);
+          turns_.erase(state);
+        }
+        retireTurnLocked(runProcessGeneration, turnId);
         if (cancelGeneration_ != cancelGeneration) {
           throw std::runtime_error("Codex request was cancelled.");
-        } else if (processGeneration_ != runProcessGeneration) {
-          const std::string detail = processError_.empty() ? "Codex app-server restarted while the request was running." : processError_;
-          throw std::runtime_error(actionableError(detail));
-        } else if (finished && state != turns_.end() && state->second.done) {
-          completed = state->second;
-          turns_.erase(state);
-          retireTurnLocked(turnId);
-        } else {
-          turns_.erase(turnId);
-          retireTurnLocked(turnId);
+        } else if (!completed.done) {
           lock.unlock();
           interruptTurn(threadId, turnId, runProcessGeneration);
           const int seconds = static_cast<int>(timeoutMs / 1000.0);
@@ -590,18 +602,11 @@ public:
       pid_ = -1;
       stdinFd_ = -1;
       initialized_ = false;
-      processGeneration_ = 0;
       processError_ = "Codex app-server was stopped.";
-      responses_.clear();
-      ignoredResponseIds_.clear();
+      endGenerationLocked(processGeneration_, processError_);
       fallbackPids.assign(fallbackPids_.begin(), fallbackPids_.end());
       fallbackPids_.clear();
       useExecFallback_ = false;
-      for (auto& [turnId, state] : turns_) {
-        state.error = processError_;
-        state.done = true;
-      }
-      condition_.notify_all();
     }
     if (stdinFd >= 0) {
       close(stdinFd);
@@ -627,8 +632,25 @@ public:
 #endif
 
 private:
-  void retireTurnLocked(const std::string& turnId) {
-    if (turnId.empty() || !retiredTurnIds_.insert(turnId).second) return;
+  // Ends a process generation without discarding its turns: completed turns keep their result for the run
+  // that collects them, and unfinished turns fail with the reason.
+  void endGenerationLocked(uint64_t generation, const std::string& reason) {
+    processGeneration_ = 0;
+    for (auto& [key, state] : turns_) {
+      if (key.first != generation) continue;
+      preAckBytes_ -= state.preAckBytes;
+      state.preAckBytes = 0;
+      if (!state.done) {
+        state.error = reason;
+        state.done = true;
+      }
+    }
+    pendingTurnStarts_ = 0;
+    condition_.notify_all();
+  }
+
+  void retireTurnLocked(uint64_t generation, const std::string& turnId) {
+    if (generation != processGeneration_ || turnId.empty() || !retiredTurnIds_.insert(turnId).second) return;
     retiredTurnOrder_.push_back(turnId);
     while (retiredTurnOrder_.size() > 512) {
       retiredTurnIds_.erase(retiredTurnOrder_.front());
@@ -636,9 +658,9 @@ private:
     }
   }
 
-  TurnState* pendingOrActiveTurnLocked(const std::string& turnId) {
+  TurnState* pendingOrActiveTurnLocked(uint64_t generation, const std::string& turnId) {
     if (turnId.empty() || retiredTurnIds_.contains(turnId)) return nullptr;
-    auto found = turns_.find(turnId);
+    auto found = turns_.find({generation, turnId});
     if (found != turns_.end()) return &found->second;
     if (pendingTurnStarts_ == 0) return nullptr;
     while (turns_.size() >= 128) {
@@ -652,7 +674,7 @@ private:
     }
     TurnState state;
     state.sequence = ++nextTurnSequence_;
-    return &turns_.emplace(turnId, std::move(state)).first->second;
+    return &turns_.emplace(TurnKey{generation, turnId}, std::move(state)).first->second;
   }
 
   void setPreAckTextLocked(TurnState& state, std::string TurnState::*field, const std::string& value) {
@@ -1019,18 +1041,23 @@ private:
       userAgent_.clear();
       processError_.clear();
       stderrTail_.clear();
-      responses_.clear();
       ignoredResponseIds_.clear();
-      turns_.clear();
-      preAckBytes_ = 0;
-      pendingTurnStarts_ = 0;
       retiredTurnIds_.clear();
       retiredTurnOrder_.clear();
     }
 
-    std::thread([this, fd = outputPipe[0], generation]() { readStdout(fd, generation); }).detach();
     std::thread([this, fd = errorPipe[0], generation]() { readStderr(fd, generation); }).detach();
-    std::thread([this, pid, generation]() {
+    std::thread([this, pid, generation, outputFd = outputPipe[0]]() {
+      // Handle the exit only after every line the app-server wrote has been handled, so a reply or
+      // turn/completed written just before exiting is never dropped.
+      std::thread reader([this, outputFd, generation]() { readStdout(outputFd, generation); });
+      siginfo_t exited{};
+      while (waitid(P_PID, pid, &exited, WEXITED | WNOWAIT) < 0 && errno == EINTR) {
+      }
+      // Leftover members of the app-server's process group could hold stdout open; the unreaped leader
+      // keeps the group id from being reused.
+      kill(-pid, SIGTERM);
+      reader.join();
       int status = 0;
       while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
       }
@@ -1057,13 +1084,7 @@ private:
       pid_ = -1;
       stdinFd_ = -1;
       initialized_ = false;
-      processGeneration_ = 0;
-      responses_.clear();
-      ignoredResponseIds_.clear();
-      turns_.clear();
-      preAckBytes_ = 0;
-      pendingTurnStarts_ = 0;
-      condition_.notify_all();
+      endGenerationLocked(processGeneration_, "Codex app-server restarted while the request was running.");
     }
     if (stdinFd >= 0) {
       close(stdinFd);
@@ -1084,12 +1105,8 @@ private:
       pid_ = -1;
       stdinFd_ = -1;
       initialized_ = false;
-      processGeneration_ = 0;
       processError_ = reason;
-      turns_.clear();
-      preAckBytes_ = 0;
-      pendingTurnStarts_ = 0;
-      condition_.notify_all();
+      endGenerationLocked(generation, reason);
     }
     if (stdinFd >= 0) close(stdinFd);
     if (pid > 0) kill(-pid, SIGTERM);
@@ -1117,22 +1134,20 @@ private:
     std::string responseLine;
     {
       std::unique_lock lock(mutex_);
-      const bool received = condition_.wait_until(lock, deadline, [&]() {
-        return responses_.contains(requestId) || processGeneration_ != generation ||
-            (cancellationGeneration != UINT64_MAX && cancelGeneration_ != cancellationGeneration);
+      const auto cancelled = [&]() { return cancellationGeneration != UINT64_MAX && cancelGeneration_ != cancellationGeneration; };
+      condition_.wait_until(lock, deadline, [&]() {
+        return responses_.contains(requestId) || processGeneration_ != generation || cancelled();
       });
-      if (!received) {
+      // Responses are keyed by unique request ids and survive restarts; the waiter always removes its own.
+      if (const auto response = responses_.find(requestId); response != responses_.end()) {
+        responseLine = std::move(response->second);
+        responses_.erase(response);
+      } else {
         ignoredResponseIds_.insert(requestId);
-        throw std::runtime_error("Codex app-server did not respond in time.");
       }
-      if (cancellationGeneration != UINT64_MAX && cancelGeneration_ != cancellationGeneration) {
-        throw std::runtime_error("Codex request was cancelled.");
-      }
-      if (processGeneration_ != generation && !responses_.contains(requestId)) {
-        throw std::runtime_error(processError_.empty() ? "Codex app-server exited unexpectedly." : processError_);
-      }
-      responseLine = std::move(responses_[requestId]);
-      responses_.erase(requestId);
+      if (cancelled()) throw std::runtime_error("Codex request was cancelled.");
+      if (responseLine.empty() && processGeneration_ == generation) throw std::runtime_error("Codex app-server did not respond in time.");
+      if (responseLine.empty()) throw std::runtime_error(processError_.empty() ? "Codex app-server exited unexpectedly." : processError_);
     }
     return parseJsonObject(responseLine, "Codex app-server returned invalid JSON");
   }
@@ -1322,7 +1337,7 @@ private:
           const std::string text = toString(stringValue(item[@"text"]));
           std::lock_guard lock(mutex_);
           if (processGeneration_ == generation && !turnId.empty()) {
-            if (TurnState* state = pendingOrActiveTurnLocked(turnId)) setPreAckTextLocked(*state, &TurnState::output, text);
+            if (TurnState* state = pendingOrActiveTurnLocked(generation, turnId)) setPreAckTextLocked(*state, &TurnState::output, text);
           }
         }
       } else if ([method isEqualToString:@"error"]) {
@@ -1332,7 +1347,7 @@ private:
         const bool willRetry = boolValue(params[@"willRetry"]);
         std::lock_guard lock(mutex_);
         if (processGeneration_ == generation && !turnId.empty() && !willRetry) {
-          if (TurnState* state = pendingOrActiveTurnLocked(turnId)) setPreAckTextLocked(*state, &TurnState::error, errorMessage);
+          if (TurnState* state = pendingOrActiveTurnLocked(generation, turnId)) setPreAckTextLocked(*state, &TurnState::error, errorMessage);
         }
       } else if ([method isEqualToString:@"turn/completed"]) {
         NSDictionary* turn = dictionaryValue(params[@"turn"]);
@@ -1352,7 +1367,7 @@ private:
         }
         std::lock_guard lock(mutex_);
         if (processGeneration_ == generation && !turnId.empty()) {
-          TurnState* existing = pendingOrActiveTurnLocked(turnId); if (existing == nullptr) return;
+          TurnState* existing = pendingOrActiveTurnLocked(generation, turnId); if (existing == nullptr) return;
           TurnState& state = *existing;
           if (!output.empty()) {
             setPreAckTextLocked(state, &TurnState::output, output);
@@ -1386,7 +1401,8 @@ private:
       return;
     }
     processError_ = actionableError(message);
-    for (auto& [turnId, state] : turns_) {
+    for (auto& [key, state] : turns_) {
+      if (key.first != generation) continue;
       state.error = processError_;
       state.done = true;
     }
@@ -1404,7 +1420,6 @@ private:
     stdinFd_ = -1;
     pid_ = -1;
     initialized_ = false;
-    processGeneration_ = 0;
     std::string detail;
     if (WIFEXITED(status)) {
       detail = "Codex app-server exited with status " + std::to_string(WEXITSTATUS(status)) + ".";
@@ -1417,10 +1432,7 @@ private:
       detail += " " + stderrTail_;
     }
     processError_ = actionableError(detail);
-    turns_.clear();
-    preAckBytes_ = 0;
-    pendingTurnStarts_ = 0;
-    condition_.notify_all();
+    endGenerationLocked(generation, detail);
   }
 
   static void throwForResponseError(NSDictionary* response, const std::string& context) {
@@ -1438,7 +1450,7 @@ private:
   std::map<int64_t, std::string> responses_;
   std::set<int64_t> ignoredResponseIds_;
   std::set<pid_t> fallbackPids_;
-  std::map<std::string, TurnState> turns_;
+  std::map<TurnKey, TurnState> turns_;
   std::set<std::string> retiredTurnIds_;
   std::deque<std::string> retiredTurnOrder_;
   std::timed_mutex lifecycleMutex_;

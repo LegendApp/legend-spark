@@ -21,6 +21,9 @@ def reply(message, result):
     print(json.dumps({"id": message["id"], "result": result}), flush=True)
 
 msg = read()
+if mode == "protocol-restart" and count > 0:
+    print("not json", flush=True)
+    sys.exit(0)
 mark("initialize")
 if mode == "cancel-init": time.sleep(20)
 reply(msg, {"userAgent": "fake"})
@@ -39,15 +42,13 @@ if msg is None: sys.exit(0)
 if msg.get("method") != "turn/start": sys.exit(3)
 mark("turn")
 if mode == "cancel-turn": time.sleep(20)
-if mode == "preack":
+if mode in ("preack", "protocol-restart"):
     print(json.dumps({"method": "turn/completed", "params": {"turn": {"id": "turn-1", "status": "completed", "items": [{"type": "agentMessage", "text": "preack"}]}}}), flush=True)
     reply(msg, {"turn": {"id": "turn-1"}})
-    time.sleep(0.2)
     sys.exit(0)
 if mode == "postack":
     reply(msg, {"turn": {"id": "turn-1"}})
     print(json.dumps({"method": "turn/completed", "params": {"turn": {"id": "turn-1", "status": "completed", "items": [{"type": "agentMessage", "text": "postack"}]}}}), flush=True)
-    time.sleep(0.2)
     sys.exit(0)
 if mode == "oversize-preack":
     large = "x" * (9 * 1024 * 1024)
@@ -55,28 +56,30 @@ if mode == "oversize-preack":
     print(json.dumps({"method": "error", "params": {"turnId": "turn-1", "error": {"message": large}, "willRetry": False}}), flush=True)
     reply(msg, {"turn": {"id": "turn-1"}})
     print(json.dumps({"method": "turn/completed", "params": {"turn": {"id": "turn-1", "status": "completed", "items": [{"type": "agentMessage", "text": "ok"}]}}}), flush=True)
-    time.sleep(0.2)
     sys.exit(0)
 if mode in ("late", "restart", "write-restart", "cancel-restart"):
     print(json.dumps({"method": "turn/completed", "params": {"turn": {"id": "turn-1", "status": "completed", "items": [{"type": "agentMessage", "text": "done"}]}}}), flush=True)
     reply(msg, {"turn": {"id": "turn-1"}})
-    if mode == "late":
-        time.sleep(0.1)
-        print(json.dumps({"method": "item/completed", "params": {"turnId": "turn-1", "item": {"type": "agentMessage", "text": "orphan"}}}), flush=True)
-        for index in range(1000):
-            print(json.dumps({"method": "item/completed", "params": {"turnId": f"unknown-{index}", "item": {"type": "agentMessage", "text": "orphan"}}}), flush=True)
-        with open(marker, "w") as f: f.write("late")
-    continue_server = True
-    while continue_server:
+    # Late mode sends its orphans once the next request shows the first turn was collected.
+    orphans_pending = mode == "late"
+    turn_number = 1
+    while True:
         next_msg = read()
         if next_msg is None: break
         if next_msg.get("method") == "initialize":
             reply(next_msg, {"userAgent": "fake"}); read(); continue
         if next_msg.get("method") == "thread/start":
+            if orphans_pending:
+                orphans_pending = False
+                print(json.dumps({"method": "item/completed", "params": {"turnId": "turn-1", "item": {"type": "agentMessage", "text": "orphan"}}}), flush=True)
+                for index in range(1000):
+                    print(json.dumps({"method": "item/completed", "params": {"turnId": f"unknown-{index}", "item": {"type": "agentMessage", "text": "orphan"}}}), flush=True)
             reply(next_msg, {"thread": {"id": "thread-1"}, "model": "fake"}); continue
         if next_msg.get("method") == "turn/start":
-            print(json.dumps({"method": "turn/completed", "params": {"turn": {"id": "turn-1", "status": "completed", "items": [{"type": "agentMessage", "text": "done"}]}}}), flush=True)
-            reply(next_msg, {"turn": {"id": "turn-1"}})
+            turn_number += 1
+            turn_id = f"turn-{turn_number}"
+            print(json.dumps({"method": "turn/completed", "params": {"turn": {"id": turn_id, "status": "completed", "items": [{"type": "agentMessage", "text": "done"}]}}}), flush=True)
+            reply(next_msg, {"turn": {"id": turn_id}})
             continue
         sys.exit(4)
     sys.exit(0)

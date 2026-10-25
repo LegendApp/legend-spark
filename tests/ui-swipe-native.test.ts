@@ -9,8 +9,8 @@ beforeAll(() => {
   if (process.platform !== "darwin") return;
   directory = mkdtempSync(path.join(os.tmpdir(), "spark-swipe-test-"));
   const root = path.resolve(import.meta.dirname, "..");
-  const source = readFileSync(path.join(root, "packages/ui/macos/swipe-actions/RNSwipeActions.mm"), "utf8")
-    .split("\n").filter(line => !line.startsWith("#import")).join("\n");
+  const source = ["RNSparkLayoutDirection.h", "swipe-actions/RNSwipeActions.mm"].map(name => readFileSync(path.join(root, "packages/ui/macos", name), "utf8")
+    .split("\n").filter(line => !line.startsWith("#import")).join("\n")).join("\n");
   const input = path.join(directory, "Swipe.mm");
   executable = path.join(directory, "test");
   writeFileSync(input, readFileSync(path.join(root, "tests/ui-swipe.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));
@@ -18,6 +18,6 @@ beforeAll(() => {
 }, 30000);
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
 
-test.skipIf(process.platform !== "darwin").each(["normal", "cancel", "recycle", "replace", "hit", "repeat", "one-open", "rubber", "child-layout", "narrow", "clip", "button-click", "click-close", "click-routing"])("AppKit swipe lifecycle: %s", scenario => {
+test.skipIf(process.platform !== "darwin").each(["normal", "cancel", "recycle", "replace", "hit", "repeat", "one-open", "rubber", "child-layout", "narrow", "clip", "button-click", "click-close", "click-routing", "rtl"])("AppKit swipe lifecycle: %s", scenario => {
   expect(execFileSync(executable, [scenario], { encoding: "utf8", timeout: 15000 })).toContain(`PASS ${scenario}`);
 });

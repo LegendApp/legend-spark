@@ -63,6 +63,11 @@ module.exports = function withSparkDesktop(config) {
     require("./autolinking.cjs").installAutolinkingPatch(mod.modRequest.projectRoot);
     require("./fabric-lifecycle.cjs").installSurfaceLifecyclePatch(mod.modRequest.projectRoot);
     require("./keyboard-events.cjs").installKeyboardEventsPatch(mod.modRequest.projectRoot);
+    require("./rtl-scroll-view.cjs").installRTLScrollViewPatch(mod.modRequest.projectRoot);
+    require("./rtl-text-alignment.cjs").installRTLTextAlignmentPatch(mod.modRequest.projectRoot);
+    require("./rtl-text-input-alignment.cjs").installRTLTextInputAlignmentPatch(mod.modRequest.projectRoot);
+    require("./text-input-accessibility.cjs").installTextInputAccessibilityPatch(mod.modRequest.projectRoot);
+    require("./accessibility-state.cjs").installAccessibilityStatePatch(mod.modRequest.projectRoot);
     // The beta template passes the resolved package to use_react_native!, but
     // post_install otherwise resets Xcode script paths to ../node_modules.
     mod.modResults.contents = mod.modResults.contents.replace(
@@ -76,7 +81,8 @@ module.exports = function withSparkDesktop(config) {
     })))).replace(/#\{/g, "\\#{");
     mod.modResults.contents = mod.modResults.contents.replaceAll('"#{config[:reactNativePath]}-macos"', macOSPath);
     const selectionFile = statePath(mod.modRequest.projectRoot, "native-selection.json", "macos");
-    const included = fs.existsSync(selectionFile) ? JSON.parse(fs.readFileSync(selectionFile, "utf8")).included : [];
+    const { included, excluded } = fs.existsSync(selectionFile) ? JSON.parse(fs.readFileSync(selectionFile, "utf8")) : { included: [], excluded: [] };
+    mod.modResults.contents = require("./autolinking.cjs").excludeNativeModules(mod.modResults.contents, excluded);
     const updatePackage = included.find(pkg => pkg.name === "@legendapp/spark-updates");
     // Pin the spec and archive with the SDK, avoiding a mutable CocoaPods index.
     const sparkleMarker = "# spark: Sparkle pod";

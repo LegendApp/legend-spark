@@ -32,4 +32,11 @@ function installAutolinkingPatch(root) {
     fs.renameSync(temporary, file); // Do not modify package-cache hardlinks.
   }
 }
-module.exports = { patchAutolinkingSource, installAutolinkingPatch };
+// Expo autolinking ignores an app-level `ios: null` override when the package's own
+// react-native.config.js declares iOS, so pass the native selection's exclusions to its CLI.
+function excludeNativeModules(podfile, excluded) {
+  const call = /use_native_modules!\(config_command(?: \+ \[[^\]]*\])?\)/;
+  if (!call.test(podfile)) throw new Error("The macOS Podfile no longer calls use_native_modules!(config_command); review spark's native selection.");
+  return podfile.replace(call, `use_native_modules!(config_command + ${JSON.stringify(excluded.flatMap(name => ["--exclude", name]))})`);
+}
+module.exports = { patchAutolinkingSource, installAutolinkingPatch, excludeNativeModules };

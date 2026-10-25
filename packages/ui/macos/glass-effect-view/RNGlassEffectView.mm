@@ -8,14 +8,21 @@
 @property (nonatomic, strong) NSColor *tintColor;
 @end
 
+// Fabric frames React children from the top-left, so their container must be flipped.
+@interface SparkGlassContentView : NSView
+@end
+@implementation SparkGlassContentView
+- (BOOL)isFlipped { return YES; }
+@end
+
 @implementation SparkGlassView {
-  NSView *_contentContainer;
+  SparkGlassContentView *_contentContainer;
   NSView *_glassEffectView;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
     _glassStyle = @"regular";
-    _contentContainer = [[NSView alloc] initWithFrame:self.bounds];
+    _contentContainer = [[SparkGlassContentView alloc] initWithFrame:self.bounds];
     _contentContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     if (@available(macOS 26.0, *)) {
       NSGlassEffectView *glass = [[NSGlassEffectView alloc] initWithFrame:self.bounds];
@@ -36,12 +43,9 @@
   _contentContainer.frame = self.bounds;
   _glassEffectView.frame = self.bounds;
 }
-- (void)insertReactSubview:(NSView *)subview atIndex:(NSInteger)index {
-  [super insertReactSubview:subview atIndex:index];
-  [_contentContainer addSubview:subview];
-}
 - (void)didUpdateReactSubviews {
-  // React children are hosted by the native glass content view.
+  // The glass content view hosts React children in React order; reactSubviews is nil before the first child.
+  _contentContainer.subviews = self.reactSubviews ?: @[];
 }
 - (void)setGlassStyle:(NSString *)style {
   _glassStyle = [style copy];

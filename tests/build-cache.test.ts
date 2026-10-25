@@ -183,6 +183,8 @@ test("dev -> release -> dev reuses the dev app despite release preparation and m
   configure(true);
   await build(root, "release");
   expect(commandCount("xcodebuild")).toBe(2);
+  // Xcode's bundle phase runs Metro from the server root, which can be a parent workspace.
+  expect(commands.run.mock.calls.find(([, argv]) => argv[0] === "xcodebuild" && argv.includes("Release"))![2].env.ENTRY_FILE).toBe(path.join(root, "index.ts"));
   expect(readJson(path.join(root, ".spark/native-preparation.json")).fingerprint).not.toBe(readJson(path.join(root, ".spark/dev-build.json")).preparation.fingerprint);
   configure();
   rmSync(path.join(root, "macos"), { recursive: true });

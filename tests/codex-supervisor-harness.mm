@@ -39,6 +39,26 @@ int main(int argc, char** argv) {
     std::cout << "result=" << result << " output=" << output << " error=" << error << "\n";
     return result == 0 ? 0 : 1;
   }
+  if (mode == "protocol-restart") {
+    // A later process's protocol failure must not fail the first process's finished turn. Retry until the
+    // second process starts, in case a run lands on the first one while it exits.
+    if (!waitForMarker("turn")) return 1;
+    const std::string counter = std::string(std::getenv("CODEX_TEST_MARKER")) + ".count";
+    for (int attempt = 0; attempt < 100; ++attempt) {
+      char laterOutput[128] = {};
+      char laterError[512] = {};
+      SparkCodexTestRunPrompt("later", 5000, laterOutput, sizeof(laterOutput), laterError, sizeof(laterError));
+      std::ifstream file(counter);
+      std::string count;
+      file >> count;
+      if (count == "2") break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    run.join();
+    std::cout << "result=" << result << " output=" << output << " error=" << error << "\n";
+    SparkCodexTestShutdown();
+    return result == 0 && std::string(output) == "preack" ? 0 : 1;
+  }
   if (mode == "oversize-preack") {
     run.join();
     std::cout << "result=" << result << " error=" << error << "\n";
@@ -48,11 +68,12 @@ int main(int argc, char** argv) {
     run.join();
     if (result != 0) return 1;
     if (mode == "late") {
-      std::this_thread::sleep_for(std::chrono::milliseconds(400));
+      // The fake answers this run only after writing its orphan notifications, so they are handled by the time it returns.
+      result = SparkCodexTestRunPrompt("drain", 5000, output, sizeof(output), error, sizeof(error));
       const size_t retained = SparkCodexTestRetainedTurns();
-      std::cout << "retained=" << retained << "\n";
+      std::cout << "drain_result=" << result << " retained=" << retained << " error=" << error << "\n";
       SparkCodexTestShutdown();
-      return retained == 0 ? 0 : 1;
+      return result == 0 && retained == 0 ? 0 : 1;
     }
     SparkCodexTestShutdown();
     result = SparkCodexTestRunPrompt(prompt.c_str(), 5000, output, sizeof(output), error, sizeof(error));

@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test.skipIf(process.platform !== "darwin")("native audio status reads are pure and observation stops with ownership", () => {
+test.skipIf(process.platform !== "darwin")("native audio status reads are pure and observation stops with ownership", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-audio-native-"));
   try {
     const implementation = readFileSync(path.resolve(import.meta.dirname, "../packages/audio/macos/RNSparkAudio.mm"), "utf8")
@@ -83,7 +83,7 @@ int main() { @autoreleasepool {
   puts("Native audio observation tests passed");
 } return 0; }
 `);
-    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "AVFoundation", "-framework", "CoreMedia", "-framework", "MediaPlayer", input, "-o", executable], { timeout: 20000 });
-    expect(execFileSync(executable, { encoding: "utf8", timeout: 15000 })).toContain("Native audio observation tests passed");
+    await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "AVFoundation", "-framework", "CoreMedia", "-framework", "MediaPlayer", input, "-o", executable], { timeout: 20000 });
+    expect(await runOk(executable, [], { timeout: 15000 })).toContain("Native audio observation tests passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 40000);

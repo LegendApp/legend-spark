@@ -374,7 +374,8 @@ async function buildUnlocked(
       "build",
     ],
     {
-      env: { RCT_NEW_ARCH_ENABLED: "1", ENTRY_FILE: entryFile(root), ...(productionGraph ? { SPARK_RUNTIME_SOURCES: stateFile(root, "analysis/runtime-sources.json") } : {}) },
+      // Absolute, like analysis: Metro resolves a relative entry from its server root.
+      env: { RCT_NEW_ARCH_ENABLED: "1", ENTRY_FILE: path.resolve(root, entryFile(root)), ...(productionGraph ? { SPARK_RUNTIME_SOURCES: stateFile(root, "analysis/runtime-sources.json") } : {}) },
       label: `Building ${mode === "go" ? "Spark Runner" : mode} runtime (${configuration}, ${runtime.arch})`,
     },
   );

@@ -53,25 +53,25 @@ diff --git a/packages/core/ios/ThreadedRuntimeSurfaceView.mm b/packages/core/ios
 index 0764a63..ff00d43 100644
 --- a/packages/core/ios/ThreadedRuntimeSurfaceView.mm
 +++ b/packages/core/ios/ThreadedRuntimeSurfaceView.mm
-@@ -26,7 +26,11 @@ - (instancetype)initWithFrame:(CGRect)frame
+@@ -26,7 +26,9 @@ - (instancetype)initWithFrame:(CGRect)frame
      _mode = @"";
      _runtimeName = ThreadedRuntimeSurfaceDefaultRuntimeName;
      _surfaceKey = @"";
-+    #if TARGET_OS_OSX
-+    self.backgroundColor = NSColor.clearColor;
-+#else
++#if !TARGET_OS_OSX
      self.backgroundColor = UIColor.clearColor;
 +#endif
    }
    return self;
  }
-@@ -196,7 +200,12 @@ - (void)ensureSurface
+@@ -196,7 +198,14 @@ - (void)ensureSurface
    _surfaceView = [[RCTSurfaceHostingView alloc] initWithSurface:_surface
                                                  sizeMeasureMode:RCTSurfaceSizeMeasureModeWidthExact |
                                                                  RCTSurfaceSizeMeasureModeHeightExact];
-+  #if TARGET_OS_OSX
-+  _surfaceView.wantsLayer = YES;
-+  _surfaceView.layer.backgroundColor = NSColor.clearColor.CGColor;
++#if TARGET_OS_OSX
++  // RCTSurfaceHostingView starts white. RCTUIView copies a background color over drawRect:'s rect, which on macOS is
++  // not clipped to the view: it can be the enclosing clip view's whole visible rect. Any color, clear included, then
++  // covers or erases a ScrollView's content around the surface, so on macOS neither view has one (nil draws nothing).
++  _surfaceView.backgroundColor = nil;
 +#else
    _surfaceView.backgroundColor = UIColor.clearColor;
 +#endif

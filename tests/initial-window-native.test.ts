@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-test.skipIf(process.platform !== "darwin")("initial AppKit window options size the outer frame and retain its top edge", () => {
+test.skipIf(process.platform !== "darwin")("initial AppKit window options size the outer frame and retain its top edge", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-initial-window-"));
   try {
     const source = readFileSync("packages/desktop-app/macos/SparkWindow.mm", "utf8").replace('#import "SparkDesktop.h"', `#import <AppKit/AppKit.h>
@@ -43,7 +43,7 @@ int main() { @autoreleasepool {
   puts("Initial outer frame passed");
 } }
 `);
-    execFileSync("clang++", ["-fobjc-arc", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", input, "-o", output]);
-    expect(execFileSync(output, { encoding: "utf8", timeout: 10000 })).toContain("Initial outer frame passed");
+    await runOk("clang++", ["-fobjc-arc", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", input, "-o", output]);
+    expect(await runOk(output, [], { timeout: 10000 })).toContain("Initial outer frame passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
-});
+}, 25000);

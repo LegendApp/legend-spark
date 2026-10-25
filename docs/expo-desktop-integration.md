@@ -81,6 +81,73 @@ compatibility. Existing runtimes need a native rebuild. Review/remove this patch
 when upgrading RN macOS. `bun scripts/test-keyboard-events.ts` builds and exercises
 the native regression; see [macOS evidence](macos-readiness-2026-09-18.md#webview-keyboard-follow-up).
 
+## RN macOS RTL ScrollView patch
+
+In RTL, `react-native-macos@0.81.7` Fabric flips every ScrollView's content container
+with a `scale(-1, 1)` layer transform. The matching flip of the scroll view itself,
+which cancels it on iOS, is iOS-only, so scroll content renders mirrored on macOS.
+Mirroring the NSScrollView as well is not an option: AppKit scrolls `NSClipView` by its
+bounds origin and routes clicks, wheel deltas and scroller drags without layer transforms.
+
+`rtl-scroll-view.cjs` flips nothing on macOS. Yoga already places RTL content. Scroll
+offsets are reported and applied as plain left-edge offsets, with no RTL conversion. A
+scroll view that becomes RTL starts at its content's right end (the RTL leading edge), and
+keeps its distance from that end when its content or viewport size changes, as the mirrored
+iOS offset does. Like the
+other patches, it checks the version and exact source, is idempotent, and replaces the
+file atomically. Existing runtimes need a native rebuild. `tests/rtl-scroll-view-native.test.ts`
+compiles the patched methods against AppKit.
+
+## RN macOS RTL text alignment patch
+
+`react-native-macos@0.81.7` Fabric passes natural `textAlign` (`"auto"` or unset) to TextKit
+as `NSTextAlignmentNatural`. TextKit resolves that from the user's language and the app's
+localization, not from the Yoga layout direction. So in an RTL subtree of an app that isn't
+localized for an RTL language (such as `direction: "rtl"`), text in a full-width box aligns
+left, even when it's Arabic.
+
+`rtl-text-alignment.cjs` resolves natural alignment from the text's layout direction: right in
+RTL, left in LTR. `"left"` and `"right"` keep the upstream behavior, which iOS shares: they
+swap in RTL. `"center"` and `"justify"` are unchanged. Text attributes without a layout
+direction, such as TextInput's, are unchanged too. Like the other patches, it checks the
+version and exact source, is idempotent, and replaces the file atomically. Existing runtimes
+need a native rebuild. `tests/rtl-text-alignment-native.test.ts` compiles the patched and the
+upstream code and lays text out with TextKit.
+
+## RN macOS RTL TextInput alignment patch
+
+A `react-native-macos@0.81.7` TextInput has no layout direction on macOS: its text attributes
+carry none, and the `semanticContentAttribute` that makes UIKit's natural alignment follow it
+is iOS-only. So a TextInput with natural `textAlign` drew its text and placeholder from the
+left in an RTL layout. `rtl-text-input-alignment.cjs` aligns them, single-line and multiline,
+to the leading edge of the input's layout direction, and realigns them when that changes. An
+explicit `textAlign` is unchanged, as upstream: unlike Text's, it does not swap in RTL. Like
+the other patches, it checks the version and exact source, is idempotent, and replaces the file
+atomically. Existing runtimes need a native rebuild. `tests/rtl-text-input-alignment-native.test.ts`
+compiles the patch's helpers and checks text and placeholders in `NSTextField` and `NSTextView`.
+
+## RN macOS TextInput accessibility patch
+
+`react-native-macos@0.81.7` Fabric sets a TextInput's `accessibilityLabel` on the backed text input view. A multiline
+input's is `RCTWrappedTextView`, a plain view around a scroll view, while the `NSTextView` inside it is the
+accessibility element, so VoiceOver announced a labelled multiline input without its label.
+`text-input-accessibility.cjs` keeps the label on that text view. Like the other patches, it checks the version and
+exact source, is idempotent, and replaces the file atomically; existing runtimes need a native rebuild.
+`tests/text-input-accessibility.test.ts` covers the patch.
+
+## RN macOS accessibility state patch
+
+`react-native-macos@0.81.7` Fabric applies `accessibilityState` only on iOS: in `RCTViewComponentView.mm` it is inside
+`#if !TARGET_OS_OSX`. So a disabled `Pressable` (`disabled`, `accessibilityState.disabled`) with an
+`accessibilityRole` told VoiceOver it was enabled, a selected one (`accessibilityState.selected`) that it was not
+selected, and a view without a role reported `isAccessibilityEnabled` NO, as a plain `NSView` does, enabled or not.
+`accessibility-state.cjs` adds `isAccessibilityEnabled` and `isAccessibilitySelected` to `RCTViewComponentView` on
+macOS, answered from the view's current props: enabled unless `accessibilityState.disabled` or the not-enabled
+accessibility trait, selected when `accessibilityState.selected`. Reading the props covers the first mount, recycled
+views and every update. Like the other patches, it checks the version and exact source, is idempotent, and replaces
+the file atomically. Existing runtimes need a native rebuild. `tests/accessibility-state-native.test.ts` compiles the
+patched methods against AppKit.
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.
@@ -120,7 +187,6 @@ spark should retain runtime selection and compatibility policy while handing sta
 Validated on macOS on 2026-09-13: 131 unit tests (564 assertions), workspace TypeScript, all three template consumers including direct upstream creation, iOS/Android/Windows native generation, and all five universal Settings bundles. The Windows preparation check also passed for both the starter and the added native-greeting module, including prebuilt incompatibility detection. Windows native compilation and execution still require a Windows machine.
 
 Validated the Expo terminal patch on macOS on 2026-09-14: workspace TypeScript and 163 unit tests passed. A packed kitchen-sink consumer started the real Expo terminal, opened Spark Runner, switched to the missing-development-build state and back without compiling, reloaded through Expo, and launched DevTools. Native configuration invalidation blocked bundles with HTTP 409 and disconnected the owned Hermes runtime; restoring configuration restarted Expo. Fast Refresh delivered source edits, with zero idle updates over 12 seconds. Ctrl+C closed the session. Tests cover simulated Windows key selection, IPC dispatch, build-error recovery, version/source mismatch rejection, and worker preload isolation; native Windows launch and an actual build through the new key remain unverified.
-
 
 Validated shared development sessions on macOS on 2026-09-14: TypeScript and 168 unit tests (750 assertions) passed. `test:universal:dev` served all five Settings graphs from one Expo process, preserved the platform UI/Uniwind backends, blocked only the incompatible host desktop's bundle, delivered one source edit to iOS and web HMR clients, restarted with desktop still incompatible, and removed the session/server on shutdown. Expo `--clear`, `--offline`, `--go`, and `-p` were exercised. `test:add-desktop` also passed; an additional live shared session preserved the adopted app's original entry, custom Metro resolver, plugin output, and all-platform manifest. These checks do not claim native app execution.
 
