@@ -4,7 +4,7 @@ import Native from "./NativeDesktopProcesses";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { SparkError, invokeNative, nativeError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
-import type { ProcessOptions, RunCommandOptions, ProcessInput, ProcessResult, ProcessHandle } from "./types";
+import type { ProcessOptions, RunCommandOptions, ProcessInput, ProcessResult, ProcessHandle, TerminalSize } from "./types";
 export type * from "./types";
 export function getProcessAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
@@ -33,6 +33,12 @@ export async function resolveCommand(name: string): Promise<string | null> {
   if (value === null) return null;
   try { return nativePath(value, Platform.OS); } catch (cause) { throw new SparkError("E_INVALID_DATA", "Resolved command path is invalid", { cause }); }
 }
+function terminalSize(value: unknown): TerminalSize {
+  object(value, ["cols", "rows"]);
+  const { cols, rows } = value;
+  if (!Number.isInteger(cols) || !Number.isInteger(rows) || (cols as number) < 1 || (rows as number) < 1 || (cols as number) > 0xffff || (rows as number) > 0xffff) invalid("Terminal cols and rows must be integers from 1 to 65535");
+  return { cols: cols as number, rows: rows as number };
+}
 function inputBytes(input: ProcessInput): Uint8Array {
   if (typeof input === "string") return new TextEncoder().encode(input);
   if (!(input instanceof Uint8Array)) invalid("Process input must be UTF-8 text or Uint8Array");
@@ -46,7 +52,7 @@ function result(value: unknown, aborted: boolean, limit: number): ProcessResult 
 }
 let sequence = 0;
 export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
-  object(options, ["target", "args", "cwd", "env", "input", "timeoutMs", "signal", "captureLimitBytes", "onOutput"]);
+  object(options, ["target", "args", "cwd", "env", "input", "timeoutMs", "signal", "captureLimitBytes", "onOutput", "pty"]);
   object(options.target, ["type", "path", "name"]);
   const { target, signal, onOutput } = options;
   let executable: string;
@@ -62,9 +68,11 @@ export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
   if (options.timeoutMs !== undefined && (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 0xfffffffe)) invalid("timeoutMs must be an integer from 1 to 4294967294");
   const captureLimitBytes = options.captureLimitBytes ?? 8 * 1024 * 1024;
   if (!Number.isInteger(captureLimitBytes) || captureLimitBytes < 0 || captureLimitBytes > 8 * 1024 * 1024) invalid("captureLimitBytes must be an integer from 0 to 8388608");
+  const pty = options.pty === undefined ? undefined : terminalSize(options.pty);
+  if (pty && Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_OPTION", "Process terminals are available on macOS");
   if (onOutput !== undefined && typeof onOutput !== "function") invalid("onOutput must be a function");
   if (signal !== undefined && (!signal || typeof signal.aborted !== "boolean" || typeof signal.addEventListener !== "function" || typeof signal.removeEventListener !== "function")) invalid("Expected an AbortSignal");
-  const wire = { executable, command: target.type === "command", args: options.args ?? [], cwd, env: options.env ?? {}, bytes: options.input === undefined ? undefined : inputBytes(options.input), timeoutMs: options.timeoutMs, captureLimitBytes, streamOutput: !!onOutput };
+  const wire = { executable, command: target.type === "command", args: options.args ?? [], cwd, env: options.env ?? {}, bytes: options.input === undefined ? undefined : inputBytes(options.input), timeoutMs: options.timeoutMs, captureLimitBytes, streamOutput: !!onOutput, pty };
   if (signal?.aborted) throw new SparkError("E_ABORTED", "Process launch was aborted");
   const availability = getProcessAvailability();
   if (!availability.available) throw new SparkError(availability.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", "Process execution is unavailable");
@@ -122,6 +130,12 @@ export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
       return closingInput ??= command("closeInput", { id }).catch(error => { closingInput = undefined; throw error; });
     },
     terminate,
+    async resize(size) {
+      const { cols, rows } = terminalSize(size);
+      if (!pty) throw new SparkError("E_UNSUPPORTED_OPTION", "Process has no terminal");
+      if (ended) throw new SparkError("E_CLOSED", "Process terminal is closed");
+      return command("resize", { id, cols, rows });
+    },
   };
 }
 export async function runCommand(options: RunCommandOptions): Promise<ProcessResult> {

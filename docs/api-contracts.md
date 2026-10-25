@@ -302,7 +302,7 @@ runCommand(options: RunCommandOptions): Promise<ProcessResult>;
 resolveCommand(command: string): Promise<string | null>;
 ```
 
-Use a discriminated executable target: absolute executable/helper reference vs PATH-resolved command. Put environment, cwd, input, timeout, signal, output callbacks and output limits in named options. Keep direct argument arrays, not implicit shell parsing. A handle supports write, closeInput, terminate and exited. Result distinguishes exit code, termination, timeout and truncation; no ambiguous `signal: boolean`. Stream bytes; optionally decode text according to a declared encoding. Command-runner convenience and mocks use the same sequential/concurrent and failure policy. No separate public command-runner abstraction unless injection actually needs it.
+Use a discriminated executable target: absolute executable/helper reference vs PATH-resolved command. Put environment, cwd, input, timeout, signal, output callbacks and output limits in named options. Keep direct argument arrays, not implicit shell parsing. A handle supports write, closeInput, terminate, resize and exited. On macOS, `pty: { cols, rows }` runs the child as the session leader of a pseudo-terminal: output is one `stdout` stream, `resize` delivers SIGWINCH, a written Ctrl+C delivers SIGINT, and `closeInput` sends end-of-file (Ctrl+D). Other platforms reject `pty` with `E_UNSUPPORTED_OPTION`. Result distinguishes exit code, termination, timeout and truncation; no ambiguous `signal: boolean`. Stream bytes; optionally decode text according to a declared encoding. Command-runner convenience and mocks use the same sequential/concurrent and failure policy. No separate public command-runner abstraction unless injection actually needs it.
 
 ### Audio and auth
 

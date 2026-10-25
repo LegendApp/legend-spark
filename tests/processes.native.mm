@@ -15,6 +15,8 @@ static void SparkReject(RCTPromiseRejectBlock reject, NSError *error) { reject(@
 static RNDesktopProcesses *module;
 static int stage = 0;
 static NSMutableData *streamed;
+static BOOL resized, interrupted;
+static BOOL Streamed(NSString *text) { return [[[NSString alloc] initWithData:streamed encoding:NSUTF8StringEncoding] containsString:text]; }
 static void Check(BOOL value, NSString *message) { if (!value) { NSLog(@"FAIL %@", message); exit(1); } }
 static void Call(NSString *method, NSDictionary *args, void (^done)(id)) {
   NSMutableDictionary *metadata = [args mutableCopy]; NSData *bytes = metadata[@"bytes"]; [metadata removeObjectForKey:@"bytes"];
@@ -36,13 +38,23 @@ static void Next() {
   } else if (stage == 5) {
     // Root exit must kill descendants holding pipe handles, or completion hangs.
     Call(@"spawn", @{ @"id": key, @"executable": @"/bin/sh", @"args": @[@"-c", @"sleep 30 & exit 0"], @"captureLimitBytes": @0 }, nil);
+  } else if (stage == 6) {
+    // A terminal child sees its size, gets SIGWINCH on resize and SIGINT from a written Ctrl+C.
+    streamed = [NSMutableData new];
+    Call(@"spawn", @{ @"id": key, @"executable": @"/bin/sh", @"args": @[@"-c", @"trap 'stty size' WINCH; trap 'exit 3' INT; test -t 0 && test -t 2 && stty size; while :; do sleep 0.05; done"], @"pty": @{ @"cols": @120, @"rows": @40 }, @"captureLimitBytes": @4096, @"streamOutput": @YES }, nil);
   } else { puts("Process native checks passed"); exit(0); }
 }
 int main() { @autoreleasepool {
   module = [RNDesktopProcesses new];
   module.binaryEvent = ^(NSDictionary *event, dispatch_block_t delivered) {
     if (delivered) delivered();
-    if ([event[@"type"] isEqual:@"processOutput"]) { [streamed appendData:event[@"bytes"]]; return; }
+    if ([event[@"type"] isEqual:@"processOutput"]) {
+      [streamed appendData:event[@"bytes"]];
+      NSString *key = [NSString stringWithFormat:@"native-%d", stage];
+      if (stage == 6 && !resized && Streamed(@"40 120")) { resized = YES; Call(@"resize", @{ @"id": key, @"cols": @200, @"rows": @50 }, nil); }
+      if (stage == 6 && !interrupted && Streamed(@"50 200")) { interrupted = YES; Call(@"write", @{ @"id": key, @"bytes": [NSData dataWithBytes:"\x03" length:1] }, nil); }
+      return;
+    }
     if (![event[@"type"] isEqual:@"processExit"]) return;
     NSDictionary *result = event[@"result"];
     if (stage == 1) {
@@ -55,7 +67,11 @@ int main() { @autoreleasepool {
     } else if (stage == 3 || stage == 4) {
       Check([result[@"terminated"] boolValue] && [result[@"terminationSignal"] intValue] == SIGTERM, [NSString stringWithFormat:@"termination signal at stage %d: %@", stage, result]);
       Check([result[@"timedOut"] boolValue] == (stage == 3), @"timeout distinction");
-    } else Check(![result[@"terminated"] boolValue] && [result[@"exitCode"] intValue] == 0, @"descendant cleanup");
+    } else if (stage == 5) Check(![result[@"terminated"] boolValue] && [result[@"exitCode"] intValue] == 0, @"descendant cleanup");
+    else {
+      Check([result[@"exitCode"] intValue] == 3, [NSString stringWithFormat:@"pty interrupt exit: %@ %@", result, [[NSString alloc] initWithData:streamed encoding:NSUTF8StringEncoding]]);
+      Check([[[NSString alloc] initWithData:result[@"stdout"] encoding:NSUTF8StringEncoding] containsString:@"50 200"] && [result[@"stderr"] length] == 0, @"pty output is captured as stdout");
+    }
     Next();
   };
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ NSLog(@"FAIL process fixture timed out"); exit(1); });

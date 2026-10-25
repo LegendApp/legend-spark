@@ -108,3 +108,23 @@ test("malformed launch acknowledgement retains a rollback failure", async () => 
   } });
   expect(mocks.listeners.size).toBe(0);
 });
+test("terminal processes send their size and resize through the native terminal", async () => {
+  const child = await spawn({ ...options, pty: { cols: 120, rows: 40 } });
+  expect(JSON.parse(mocks.call.mock.calls.at(-1)![1])).toMatchObject({ pty: { cols: 120, rows: 40 } });
+  await child.resize({ cols: 200, rows: 50 });
+  expect(mocks.call.mock.calls.at(-1)!.slice(0, 2)).toEqual(["resize", JSON.stringify({ id: child.id, cols: 200, rows: 50 })]);
+  await expect(child.resize({ cols: 0, rows: 50 })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  exit(child.id);
+  await expect(child.resize({ cols: 80, rows: 24 })).rejects.toMatchObject({ code: "E_CLOSED" });
+});
+test("terminal options are validated and typed unsupported where no terminal exists", async () => {
+  await expect(spawn({ ...options, pty: { cols: 1.5, rows: 40 } })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(spawn({ ...options, pty: { cols: 80, rows: 24, shell: true } as never })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  const child = await spawn(options);
+  const calls = mocks.call.mock.calls.length;
+  await expect(child.resize({ cols: 80, rows: 24 })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(mocks.call.mock.calls).toHaveLength(calls);
+  exit(child.id);
+  mocks.platform.OS = "windows";
+  await expect(spawn({ target: { type: "command", name: "cmd" }, pty: { cols: 80, rows: 24 } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+});

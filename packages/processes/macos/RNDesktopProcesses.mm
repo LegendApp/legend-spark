@@ -4,7 +4,9 @@
 #import <signal.h>
 #import <AppKit/AppKit.h>
 #import <spawn.h>
+#import <sys/ioctl.h>
 #import <sys/wait.h>
+#import <util.h>
 #import <vector>
 static NSString *ResolveCommandPath(NSString *command)
 {
@@ -52,6 +54,7 @@ static NSString *ResolveCommandPath(NSString *command)
 @property BOOL truncated;
 @property BOOL ended;
 @property BOOL inputClosed;
+@property BOOL pty;
 @property dispatch_queue_t inputQueue;
 @end
 @implementation SparkProcess
@@ -117,11 +120,20 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
       if (captureLimit > 8 * 1024 * 1024) { SparkInvalid(reject, @"Invalid capture limit"); return; }
       NSData *initialInput = args[@"bytes"];
       if (args[@"bytes"] && ![initialInput isKindOfClass:NSData.class]) { SparkInvalid(reject, @"Invalid process input"); return; }
+      NSDictionary *pty = args[@"pty"];
+      if (pty && (![pty isKindOfClass:NSDictionary.class] || [pty[@"cols"] integerValue] < 1 || [pty[@"cols"] integerValue] > UINT16_MAX || [pty[@"rows"] integerValue] < 1 || [pty[@"rows"] integerValue] > UINT16_MAX)) { SparkInvalid(reject, @"Invalid terminal size"); return; }
       process = [SparkProcess new];
       process.inputQueue = dispatch_queue_create("desktop.process.input", DISPATCH_QUEUE_SERIAL);
       NSMutableDictionary *environment = [NSProcessInfo.processInfo.environment mutableCopy]; [environment addEntriesFromDictionary:args[@"env"] ?: @{}];
-      NSPipe *input = [NSPipe pipe], *output = [NSPipe pipe], *errorPipe = [NSPipe pipe];
-      process.input = input.fileHandleForWriting;
+      int controller = -1, terminal = -1;
+      if (pty) {
+        struct winsize size = { .ws_row = (unsigned short)[pty[@"rows"] integerValue], .ws_col = (unsigned short)[pty[@"cols"] integerValue] };
+        if (openpty(&controller, &terminal, NULL, NULL, &size) != 0) { SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]); return; }
+        fcntl(controller, F_SETFD, FD_CLOEXEC);
+        process.pty = YES;
+      }
+      NSPipe *input = pty ? nil : [NSPipe pipe], *output = pty ? nil : [NSPipe pipe], *errorPipe = pty ? nil : [NSPipe pipe];
+      process.input = pty ? [[NSFileHandle alloc] initWithFileDescriptor:dup(controller) closeOnDealloc:YES] : input.fileHandleForWriting;
       // Create the process group atomically, before executable code can fork.
       // NSTask + setpgid after launch has a race and cannot provide this contract.
       posix_spawnattr_t attributes; posix_spawnattr_init(&attributes);
@@ -129,12 +141,21 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
       // inherit that state or cooperative SIGTERM degrades into forced SIGKILL.
       sigset_t mask, defaults; sigemptyset(&mask); sigfillset(&defaults);
       posix_spawnattr_setsigmask(&attributes, &mask); posix_spawnattr_setsigdefault(&attributes, &defaults);
-      posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
-      posix_spawnattr_setpgroup(&attributes, 0);
+      // A terminal child leads its own session: opening the terminal in that session
+      // makes it the controlling terminal, so resize and Ctrl+C deliver signals.
+      // The session id doubles as the process group id that termination targets.
+      posix_spawnattr_setflags(&attributes, (pty ? POSIX_SPAWN_SETSID : POSIX_SPAWN_SETPGROUP) | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
+      if (!pty) posix_spawnattr_setpgroup(&attributes, 0);
       posix_spawn_file_actions_t actions; posix_spawn_file_actions_init(&actions);
-      posix_spawn_file_actions_adddup2(&actions, input.fileHandleForReading.fileDescriptor, STDIN_FILENO);
-      posix_spawn_file_actions_adddup2(&actions, output.fileHandleForWriting.fileDescriptor, STDOUT_FILENO);
-      posix_spawn_file_actions_adddup2(&actions, errorPipe.fileHandleForWriting.fileDescriptor, STDERR_FILENO);
+      if (pty) {
+        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, ptsname(controller), O_RDWR, 0);
+        posix_spawn_file_actions_adddup2(&actions, STDIN_FILENO, STDOUT_FILENO);
+        posix_spawn_file_actions_adddup2(&actions, STDIN_FILENO, STDERR_FILENO);
+      } else {
+        posix_spawn_file_actions_adddup2(&actions, input.fileHandleForReading.fileDescriptor, STDIN_FILENO);
+        posix_spawn_file_actions_adddup2(&actions, output.fileHandleForWriting.fileDescriptor, STDOUT_FILENO);
+        posix_spawn_file_actions_adddup2(&actions, errorPipe.fileHandleForWriting.fileDescriptor, STDERR_FILENO);
+      }
       if (args[@"cwd"]) posix_spawn_file_actions_addchdir_np(&actions, [args[@"cwd"] fileSystemRepresentation]);
       NSArray *arguments = [@[executable] arrayByAddingObjectsFromArray:args[@"args"] ?: @[]];
       NSMutableArray *variables = [NSMutableArray new];
@@ -145,13 +166,16 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
       pid_t pid = 0;
       int error = posix_spawn(&pid, executable.fileSystemRepresentation, &actions, &attributes, argv.data(), envp.data());
       posix_spawn_file_actions_destroy(&actions); posix_spawnattr_destroy(&attributes);
+      // Closing the terminal before the child opens it would reset its size.
+      if (pty) close(terminal);
       [input.fileHandleForReading closeFile]; [output.fileHandleForWriting closeFile]; [errorPipe.fileHandleForWriting closeFile];
-      if (error) { [process.input closeFile]; [output.fileHandleForReading closeFile]; [errorPipe.fileHandleForReading closeFile]; SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:error userInfo:nil]); return; }
+      NSFileHandle *controllerHandle = pty ? [[NSFileHandle alloc] initWithFileDescriptor:controller closeOnDealloc:YES] : nil;
+      if (error) { [process.input closeFile]; [controllerHandle closeFile]; [output.fileHandleForReading closeFile]; [errorPipe.fileHandleForReading closeFile]; SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:error userInfo:nil]); return; }
       process.pid = pid; process.running = YES;
       self.processes[key] = process;
       NSMutableData *stdoutData = [NSMutableData new], *stderrData = [NSMutableData new];
       dispatch_group_t group = dispatch_group_create();
-      NSArray *streams = @[output.fileHandleForReading, errorPipe.fileHandleForReading];
+      NSArray *streams = pty ? @[controllerHandle] : @[output.fileHandleForReading, errorPipe.fileHandleForReading];
       for (NSUInteger index = 0; index < streams.count; index++) {
         NSFileHandle *handle = streams[index]; NSMutableData *buffer = index ? stderrData : stdoutData;
         NSString *stream = index ? @"stderr" : @"stdout";
@@ -204,6 +228,16 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
       if ([method isEqual:@"terminate"]) {
         if (![self terminate:process]) { SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]); return; }
       }
+      else if ([method isEqual:@"resize"]) {
+        NSInteger cols = [args[@"cols"] integerValue], rows = [args[@"rows"] integerValue];
+        if (!process.pty) { reject(@"E_UNSUPPORTED_OPTION", @"Process has no terminal", nil); return; }
+        if (cols < 1 || cols > UINT16_MAX || rows < 1 || rows > UINT16_MAX) { SparkInvalid(reject, @"Invalid terminal size"); return; }
+        dispatch_async(process.inputQueue, ^{
+          struct winsize size = { .ws_row = (unsigned short)rows, .ws_col = (unsigned short)cols };
+          if (process.inputClosed || ioctl(process.input.fileDescriptor, TIOCSWINSZ, &size) != 0) { reject(@"E_CLOSED", @"Process terminal is closed", nil); return; }
+          resolve(binary ? NSNull.null : @"null");
+        }); return;
+      }
       else if ([method isEqual:@"write"] || [method isEqual:@"closeInput"]) {
         NSData *data = [method isEqual:@"write"] ? args[@"bytes"] : nil;
         if ([method isEqual:@"write"] && !data) { SparkInvalid(reject, @"Invalid process input"); return; }
@@ -212,7 +246,11 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
             if ([method isEqual:@"write"]) {
               if (process.inputClosed) { reject(@"E_CLOSED", @"Process input is closed", nil); return; }
               [process.input writeData:data];
-            } else if (!process.inputClosed) { [process.input closeFile]; process.inputClosed = YES; }
+            } else if (!process.inputClosed) {
+              // The reader keeps the terminal open, so closing the writer would not reach the child.
+              if (process.pty) [process.input writeData:[NSData dataWithBytes:"\x04" length:1]];
+              [process.input closeFile]; process.inputClosed = YES;
+            }
             resolve(binary ? NSNull.null : @"null");
           } @catch (NSException *exception) { reject(@"E_CLOSED", @"Process input is closed", nil); }
         }); return;
