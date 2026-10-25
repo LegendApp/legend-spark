@@ -13,7 +13,7 @@
     "postinstall": "node node_modules/@legendapp/spark/init-template.cjs"
   },
   "dependencies": {
-    "@legendapp/spark": "0.0.1-next.7",
+    "@legendapp/spark": "0.0.1-next.8",
     "expo": "54.0.37",
     "expo-desktop": "1.0.6",
     "expo-desktop-prebuild-config": "1.1.3",

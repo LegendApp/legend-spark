@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.0.1-next.8 — preview
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- Add next.8 upgrade notes
+- chore: bump expo-desktop SDK 54 packages to latest patch
+- fix: keep unset NODE_OPTIONS empty during PnP creation
+- fix: support stable npm and GitHub releases
+- fix: derive the npm release channel from the version
+- fix: publish npm packages straight to their release channel
+- fix: support create-spark under Yarn PnP
+- test(windows): define safe mode in close-guard fixture
+- docs(dialogs): Describe owned About panel lifetime
+- fix(dialogs): Reuse About panel and unblock pending flows
+- test(app): verify relaunch preserves pending quit decisions
+- fix(updates): respect defaults domains and report cancellation
+- test(e2e): say only the appearance getter is unsupported on Windows
+- fix(kitchen-sink): reset a window override that lands after the screen closes
+- fix(system): report light appearance when AppleInterfaceStyle is absent
+- Appearance and accessibility preference events, per-window override screen (#97) (#345)
+- test(system): cover Dock badge count formatting and clearing
+- System: Ship Dock progress and badge counts on macOS only
+- fix(kitchen-sink): own a pending Dock menu so unmount and Remove clean it up
+- fix(updates): align public delta configuration and defer e2e claims
+- docs(dialogs): Qualify About panel reuse behavior
+- fix(app): preserve safe-mode state and snapshot relaunch arguments
+- fix(dialogs): Clarify accessory values and reject blank labels
+- fix(menus): validate alternates after native composition
+- [KS] Menus: keep localized native root titles; exact Shift shortcuts (#449, #450) (#455)
+- fix(menus): take a shortcut over from a host item AppKit withholds it for (#446) (#452)
+- [KS] Menu API audit: alternates, open/close events, Help search (#74) (#217)
+- [KS] API: Dock and taskbar progress, badge counts, Jump List recent items (#123) (#315)
+- [KS] API: single-instance lock, second-instance forwarding, relaunch, safe mode (#60) (#241)
+- [KS] Dialogs API: accessory controls, suppression, text prompt, About panel (#108) (#249)
+- feat(updates): delta updates, downgrade protection, skip version (#148) (#220)
+- test: allow npm release fixture lifecycle script
+- test(e2e): re-approve the Kitchen Sink goldens from this branch's release build
+- fix(kitchen-sink): ellipsize a long breadcrumb link instead of clipping it
+- Kitchen Sink: screens for existing APIs, with their visual flows and goldens
+- docs: keep the published versus local Runner guidance for the Kitchen Sink
+- fix(e2e): connect to the test driver by retrying, not by watching for its socket
+- test(e2e): approve the catalog goldens from the release Kitchen Sink
+- fix(cli): find workspace packages in the release analysis's source map
+- test(native): leave the Kitchen Sink app controller out of the reduced app
+- test(e2e): check that flows' ${FIXTURES} paths exist, and add the launch-state fixture
+- fix(e2e): ignore golden masks that lie outside the image
+- test(e2e): plan the infra flows, the only ones on this branch
+- test: run native and CLI subprocesses async with exit diagnostics; CI-measured timeouts (#297) (#300)
+- [KS] Release safety: keep the test driver out of consumer release builds (#274, #340) (#349)
+- [KS] Driver backend: launchApp clearState, arguments, env, openFile (#246) (#263)
+- [KS] Runner: in-app driver backend adapter (#226) (#244)
+- [KS] Visual golden pipeline (#53) (#239)
+- [KS] In-app test driver: window capture (#52) (#236)
+- feat(e2e): release gate: e2e/gate.yaml, budgets, sign-offs, bun run gate (#54) (#233)
+- feat(e2e): runner core: executor, selectors, waits, restoration, artifacts, reports (#225)
+- feat(e2e): check coverage: registry covers, e2e:coverage (#48) (#224)
+- [KS] Kitchen Sink app shell: catalog, deep links, testIDs, legend-apps screens (#56) (#221)
+- feat(e2e): YAML flow format: schema, parser, validator, linter (#218)
+- docs: drop Kitchen Sink flow references that this branch doesn't have
+- fix(codex): keep other processes' turns on a protocol failure
+- fix(macos): keep a multiline TextInput's accessibility label on its text view (#351)
+- fix(cli): link release builds reproducibly (#459) (#481)
+- Fix blank ScrollView content around a ThreadedReactSurface on macOS (#396) (#488)
+- [KS] Move remaining tests off sync spawns to the async subprocess helper (#303) (#327)
+- Load settings windows API through one shared import (#385) (#387)
+- ci: cap the macOS test step and allow for loaded runners (#375) (#384)
+- [KS] RN macOS: report accessibilityState disabled and selected (#350) (#372)
+- [KS] RN TextInput: natural alignment follows the layout direction on macOS (#354) (#360)
+- test: run native and CLI subprocesses async with exit diagnostics; CI-measured timeouts (#297) (#300)
+- [KS] Spark AppKit views follow RTL layout direction (#256) (#290)
+- [KS] Sidebar rows fit and mirror; capture row selection correctly (#264, #265) (#286)
+- fix(ui): lay out GlassView children top-down on macOS (#254) (#276)
+- [KS] Fix Sidebar crash on mount: null oldProps in RNSidebar (#252) (#266)
+- fix(codex): keep turns received before app-server exit (#262)
+- fix(macos): align natural RTL text to the leading edge (#245) (#251)
+- fix(macos): render RTL ScrollView content unmirrored (#234) (#242)
+- fix(cli): pass the native selection to the Podfile autolinker; absolute Xcode entry file (#222) (#229)
+- [markdown] expose the Markdown flavor prop (#500)
+- fix: commit .spark/version in generated apps
+- fix: drop unused libsql and Turso binaries from the op-sqlite archive
+
 ## 0.0.1-next.7 — preview
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified

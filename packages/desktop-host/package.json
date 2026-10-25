@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-desktop-host",
-  "version": "0.0.1-next.7",
+  "version": "0.0.1-next.8",
   "license": "MIT",
   "files": [
     "AppDelegate.mm",
@@ -8,7 +8,7 @@
     "SparkCustomize.mm"
   ],
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.1-next.7"
+    "@legendapp/spark-desktop-app": "0.0.1-next.8"
   },
   "private": true
 }
