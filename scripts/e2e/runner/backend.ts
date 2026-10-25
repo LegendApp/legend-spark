@@ -18,7 +18,8 @@ export type QueryScope = { window?: string; within?: Element };
 /** A resolved target: the element and the point to act on (its center, or the selector's `point`). */
 export type Target = { element: Element; point: Point };
 
-export type ArtifactKind = "screenshot" | "elements" | "logs" | "trace" | "recording" | "output";
+/** `golden` is the expected image of a failed assertScreenshot and `diff` its diff image. */
+export type ArtifactKind = "screenshot" | "golden" | "diff" | "elements" | "logs" | "trace" | "recording" | "output";
 export type Artifact = { kind: ArtifactKind; path: string; backend?: string };
 
 export type Session = {
@@ -79,9 +80,17 @@ export interface Backend {
   query?(atom: Atom, scope: QueryScope): Promise<Element[]>;
   readonly queryKeys?: ReadonlySet<AtomKey>;
   windows?(): Promise<WindowInfo[]>;
+  /**
+   * Captures a window (the main window when `window` is undefined) as a PNG at `file`. The runner runs takeScreenshot
+   * and assertScreenshot with it, on a backend of the kind the catalog asks for (driver).
+   */
+  screenshot?(file: string, window: WindowInfo | undefined): Promise<Capture>;
   /** Writes failure evidence it can produce (screenshot, logs, driver trace) into `dir`. */
   collect?(dir: string): Promise<Artifact[]>;
 }
+
+/** Where a screenshot came from: the captured area in the coordinate space of element frames, and its pixels per point. */
+export type Capture = { frame: Rect; scale: number };
 
 export type BackendFactory = (options: { app?: string }) => Backend;
 
@@ -92,7 +101,7 @@ export type Candidate = Omit<Element, "key" | "parent">;
 
 /** A typed flow failure. Handlers throw `new Failure("assertion", …)` when what they check is not true. */
 export class Failure extends Error {
-  constructor(readonly kind: FailureKind, message: string, readonly details: { candidates?: Candidate[]; matches?: Candidate[] } = {}) {
+  constructor(readonly kind: FailureKind, message: string, readonly details: { candidates?: Candidate[]; matches?: Candidate[]; artifacts?: Artifact[] } = {}) {
     super(message);
     this.name = "Failure";
   }

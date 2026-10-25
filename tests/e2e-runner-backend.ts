@@ -18,7 +18,7 @@ export const WINDOW: WindowInfo = { id: "w1", title: "Kitchen Sink", key: true, 
 
 type Options = {
   name?: string; kind?: Backend["kind"]; platform?: Platform; matrix?: string[];
-  elements?: TimedElement[]; windows?: WindowInfo[]; commands?: Record<string, CommandHandler>; collect?: boolean;
+  elements?: TimedElement[]; windows?: WindowInfo[]; commands?: Record<string, CommandHandler>; collect?: boolean; screenshot?: Backend["screenshot"];
 };
 
 export class MemoryBackend implements Backend {
@@ -30,6 +30,7 @@ export class MemoryBackend implements Backend {
   /** Calls in order: start/stop, handler invocations, restorations. */
   readonly log: string[] = [];
   readonly sessions: Session[] = [];
+  readonly screenshot?: Backend["screenshot"];
   items: TimedElement[];
   private readonly windowList: WindowInfo[];
   private readonly collects: boolean;
@@ -42,6 +43,7 @@ export class MemoryBackend implements Backend {
     this.items = options.elements ?? [];
     this.windowList = options.windows ?? [WINDOW];
     this.collects = options.collect ?? true;
+    this.screenshot = options.screenshot;
     this.commands = {
       tapOn: async (_args, context) => { this.log.push(`tapOn ${(await context.target()).element.key}`); await this.clock.sleep(50); },
       setAppearance: async (args, context) => {

@@ -7,6 +7,7 @@ import { NESTED, SELECTOR_PROPS } from "../format/primitives.ts";
 import {
   Failure, RETRYABLE, type Artifact, type Backend, type Candidate, type CommandContext, type FailureKind, type Matrix, type Target, type WindowInfo,
 } from "./backend.ts";
+import { assertScreenshot, takeScreenshot, type GoldenResult } from "./screenshot.ts";
 import { candidate, center, describe, filterElements, locate, nearby, parseSelector, parseWindow, pickWindows, type Finder, type Located, type Selector } from "./selectors.ts";
 
 export const DEFAULT_TIMEOUT_MS = 5000;
@@ -46,6 +47,8 @@ export type FlowResult = {
   errors: string[];
   /** Files the flow produced on purpose (takeScreenshot). */
   artifacts: Artifact[];
+  /** Every assertScreenshot that captured, in order. */
+  goldens: GoldenResult[];
   /** Measurements recorded by backends, by metric name, in recording order. */
   metrics: Record<string, number[]>;
 };
@@ -97,14 +100,17 @@ class CommandError extends Error {
 const toFailure = (error: unknown) => error instanceof Failure ? error : new Failure("error", error instanceof Error ? error.message : String(error));
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 
+/** Commands the runner implements on top of `Backend.screenshot`. */
+const SCREENSHOT = new Set(["takeScreenshot", "assertScreenshot"]);
+
 /** Which backend may run a catalog command: driver commands need a driver backend; lifecycle commands take either kind. */
 function route(name: string, backends: Backend[]): Backend {
   const spec = COMMANDS[name]!;
   const kinds = spec.driver ? ["driver"] : spec.group === "lifecycle" ? ["black-box", "driver"] : ["black-box"];
   const eligible = backends.filter(backend => kinds.includes(backend.kind));
   if (!eligible.length) throw new Failure("unsupported", `${name} needs a ${kinds.join(" or ")} backend (active: ${backends.map(backend => `${backend.name} (${backend.kind})`).join(", ")})`);
-  const backend = eligible.find(candidate => Object.hasOwn(candidate.commands, name));
-  if (!backend) throw new Failure("unsupported", `${name} is not supported by backend ${eligible.map(candidate => candidate.name).join(", ")}`);
+  const backend = eligible.find(candidate => SCREENSHOT.has(name) ? !!candidate.screenshot : Object.hasOwn(candidate.commands, name));
+  if (!backend) throw new Failure("unsupported", `${name} is not supported by backend ${eligible.map(candidate => candidate.name).join(", ")}${SCREENSHOT.has(name) ? " (no screenshot())" : ""}`);
   return backend;
 }
 
@@ -152,11 +158,11 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   const began = clock.now();
   const flowTimeout = flow.header.timeout === undefined ? DEFAULT_FLOW_TIMEOUT_MS : ms(flow.header.timeout);
   const deadline = began + flowTimeout;
-  const steps: StepResult[] = [], errors: string[] = [], outputs: Artifact[] = [];
+  const steps: StepResult[] = [], errors: string[] = [], outputs: Artifact[] = [], goldens: GoldenResult[] = [];
   const metrics: Record<string, number[]> = {};
   const restores: Array<{ label: string; undo: () => Promise<void> }> = [];
   const result = (status: FlowResult["status"], extra: Partial<FlowResult> = {}): FlowResult =>
-    ({ ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, metrics, ...extra });
+    ({ ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, goldens, metrics, ...extra });
   if (flow.header.platforms && !flow.header.platforms.includes(platform)) return result("skipped", { skipReason: `platforms: ${flow.header.platforms.join(", ")} (running ${platform})` });
 
   const outputDir = path.join(dir, "output");
@@ -261,6 +267,8 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
         (metrics[name] ??= []).push(value);
       },
     };
+    if (command.name === "takeScreenshot") return takeScreenshot(backend, args, context);
+    if (command.name === "assertScreenshot") return assertScreenshot(backend, args, context, { root: rootOf(absolute), dir, record: result => goldens.push(result) });
     await backend.commands[command.name]!(args, context);
   }
 
@@ -307,7 +315,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
     const { failure: cause, command, callers } = error instanceof CommandError ? error : { failure: toFailure(error), command: undefined, callers: [] };
     failure = {
       kind: cause.kind, message: cause.message, command: command?.name, location: command?.location ?? headerLocation, stack: callers,
-      candidates: cause.details.candidates ?? [], matches: cause.details.matches ?? [], artifacts: await collect(),
+      candidates: cause.details.candidates ?? [], matches: cause.details.matches ?? [], artifacts: [...cause.details.artifacts ?? [], ...await collect()],
     };
   }
 
@@ -361,7 +369,7 @@ export async function runFlows(files: string[], options: RunOptions): Promise<Fl
     if (!checked.value) {
       const { file: at, line, column } = checked.diagnostics[0]!;
       const result: FlowResult = {
-        id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], metrics: {},
+        id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], goldens: [], metrics: {},
         failure: { kind: "format", message: `${file} is not a valid flow`, location: { file: at, line, column }, stack: [], candidates: [], matches: [], artifacts: [], diagnostics: checked.diagnostics.map(formatDiagnostic) },
       };
       options.onEvent?.({ event: "flow-end", result });

@@ -5396,7 +5396,7 @@
             }
           },
           "takeScreenshot": {
-            "description": "[driver] [maestro] Capture the app in-process (driver capture, no screen-recording permission).",
+            "description": "[driver] [maestro] Capture the app in-process (driver capture, no screen-recording permission) to output/<name>.png.",
             "if": {
               "type": "object"
             },
@@ -5405,7 +5405,8 @@
               "properties": {
                 "name": {
                   "type": "string",
-                  "minLength": 1
+                  "pattern": "^[A-Za-z0-9_-]{1,100}$",
+                  "description": "a file name of 1-100 letters, digits, _ and -"
                 },
                 "window": {
                   "$ref": "#/definitions/window"
@@ -5424,11 +5425,12 @@
             },
             "else": {
               "type": "string",
-              "minLength": 1
+              "pattern": "^[A-Za-z0-9_-]{1,100}$",
+              "description": "a file name of 1-100 letters, digits, _ and -"
             }
           },
           "assertScreenshot": {
-            "description": "[driver] Capture in-process and compare with golden/<platform>/<appearance>/<locale>/<golden>.png.",
+            "description": "[driver] Capture in-process and compare with golden/<platform>/<appearance>/<locale>/<golden>.png: at most `threshold` of the pixels (default 0%) may differ by more than `tolerance` (CIEDE2000, default 2), ignoring anti-aliasing and masks (elements, or `maskRects` in points from the image's top-left).",
             "if": {
               "type": "object"
             },
@@ -5437,7 +5439,8 @@
               "properties": {
                 "golden": {
                   "type": "string",
-                  "minLength": 1
+                  "pattern": "^[A-Za-z0-9_-]{1,100}$",
+                  "description": "a file name of 1-100 letters, digits, _ and -"
                 },
                 "window": {
                   "$ref": "#/definitions/window"
@@ -5447,10 +5450,43 @@
                   "pattern": "^\\d+(\\.\\d+)?%$",
                   "description": "a percentage such as 0.1%"
                 },
+                "tolerance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
                 "mask": {
                   "type": "array",
                   "items": {
                     "$ref": "#/definitions/selector"
+                  },
+                  "minItems": 1
+                },
+                "maskRects": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "w": {
+                        "type": "number"
+                      },
+                      "h": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                      "w",
+                      "h"
+                    ],
+                    "additionalProperties": false
                   },
                   "minItems": 1
                 },
@@ -5468,7 +5504,8 @@
             },
             "else": {
               "type": "string",
-              "minLength": 1
+              "pattern": "^[A-Za-z0-9_-]{1,100}$",
+              "description": "a file name of 1-100 letters, digits, _ and -"
             }
           },
           "startRecording": {
