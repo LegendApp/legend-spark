@@ -7,7 +7,8 @@ import NativeSplitView from "./SidebarSplitViewNativeComponent";
 export type SidebarSplitViewAppearance = "system" | "light" | "dark";
 export type SidebarSplitViewTitlebarMaterial = "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
 export interface SidebarSplitViewPaneMetrics { contentHeight: number; contentWidth: number; sidebarHeight: number; sidebarWidth: number; listHeight?: number; listWidth?: number }
-export interface SidebarSplitViewResizeEvent extends SidebarSplitViewPaneMetrics { listHeight: number; listWidth: number; contentX: number; listX: number; height: number; phase: "provisional" | "ready" }
+export interface SidebarSplitViewPaneOrigins { sidebarX: number; sidebarY: number; contentX: number; contentY: number; listX: number; listY: number }
+export interface SidebarSplitViewResizeEvent extends SidebarSplitViewPaneMetrics, SidebarSplitViewPaneOrigins { listHeight: number; listWidth: number; height: number; phase: "provisional" | "ready" }
 export interface SplitViewTitleBarOverlay { color: string; opacity?: number }
 export interface SplitViewTitleBarOptions {
   content?: { height?: number; material?: SidebarSplitViewTitlebarMaterial; overlay?: SplitViewTitleBarOverlay };
@@ -39,7 +40,8 @@ function metrics(value: SidebarSplitViewPaneMetrics) {
   for (const key of ["contentHeight", "contentWidth", "sidebarHeight", "sidebarWidth"] as const) finite(value[key], key);
   for (const key of ["listHeight", "listWidth"] as const) if (value[key] !== undefined) finite(value[key], key);
 }
-const paneKeys = ["contentHeight", "contentWidth", "sidebarHeight", "sidebarWidth", "listHeight", "listWidth"] as const;
+const paneKeys = ["contentHeight", "contentWidth", "sidebarHeight", "sidebarWidth", "listHeight", "listWidth", "sidebarX", "sidebarY", "contentX", "contentY", "listX", "listY"] as const;
+const originKeys = ["sidebarX", "sidebarY", "contentX", "contentY", "listX", "listY"] as const;
 function keys(value: unknown, allowed: readonly string[]) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new SparkError("E_INVALID_ARGUMENT", "Expected title-bar options");
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown title-bar option: ${key}`);
@@ -65,14 +67,14 @@ export function SidebarSplitView({ sidebar, content, list, children, appearance:
   if (!["none", "glass", "titlebar", "headerView", "hudWindow", "sidebar", "windowBackground"].includes(material)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid title-bar material");
   callback(onResize, "resize"); callback(onSidebarCollapsedChange, "sidebar collapsed change");
   const control = useControl({ ref, onError }, getSplitViewAvailability());
-  const [paneMetrics, setPaneMetrics] = useState<SidebarSplitViewPaneMetrics | undefined>(() => initialPaneMetrics ? { ...initialPaneMetrics } : undefined);
-  function resize(event: NativeSyntheticEvent<SidebarSplitViewPaneMetrics & { contentX: number; listX: number; height: number; isLayoutReady: boolean }>) {
+  const [paneMetrics, setPaneMetrics] = useState<SidebarSplitViewPaneMetrics & Partial<SidebarSplitViewPaneOrigins> | undefined>(() => initialPaneMetrics ? { ...initialPaneMetrics } : undefined);
+  function resize(event: NativeSyntheticEvent<SidebarSplitViewPaneMetrics & SidebarSplitViewPaneOrigins & { height: number; isLayoutReady: boolean }>) {
     if (!control.active()) return;
     let value: SidebarSplitViewResizeEvent;
     try {
-      const data = event?.nativeEvent; metrics(data); finite(data.listHeight, "list height"); finite(data.listWidth, "list width"); finite(data.contentX, "content x", -Infinity); finite(data.listX, "list x", -Infinity); finite(data.height, "height");
+      const data = event?.nativeEvent; metrics(data); finite(data.listHeight, "list height"); finite(data.listWidth, "list width"); for (const key of originKeys) finite(data[key], key, -Infinity); finite(data.height, "height");
       if (typeof data.isLayoutReady !== "boolean") throw new Error("Expected layout readiness");
-      value = { contentHeight: data.contentHeight, contentWidth: data.contentWidth, sidebarHeight: data.sidebarHeight, sidebarWidth: data.sidebarWidth, listHeight: data.listHeight, listWidth: data.listWidth, contentX: data.contentX, listX: data.listX, height: data.height, phase: data.isLayoutReady ? "ready" : "provisional" };
+      value = { contentHeight: data.contentHeight, contentWidth: data.contentWidth, sidebarHeight: data.sidebarHeight, sidebarWidth: data.sidebarWidth, listHeight: data.listHeight, listWidth: data.listWidth, sidebarX: data.sidebarX, sidebarY: data.sidebarY, contentX: data.contentX, contentY: data.contentY, listX: data.listX, listY: data.listY, height: data.height, phase: data.isLayoutReady ? "ready" : "provisional" };
     } catch (cause) { control.error(new SparkError("E_INVALID_DATA", "Invalid split-view layout", { cause })); return; }
     setPaneMetrics(current => current && paneKeys.every(key => current[key] === value[key]) ? current : value);
     onResize?.(value);
@@ -87,8 +89,8 @@ export function SidebarSplitView({ sidebar, content, list, children, appearance:
   return <NativeSplitView {...props} ref={control.ref} appearance={theme} contentMinWidth={contentMinWidth} sidebarMinWidth={sidebarMinWidth} sidebarWidth={sidebarWidth} hasList={hasList} listMinWidth={listMinWidth} listWidth={listWidth} sidebarCollapsed={sidebarCollapsed} onSplitViewDidResize={resize} onSidebarCollapsedChange={collapsedChange}
     contentTitlebarHeight={titleBar.content?.height ?? 0} contentTitlebarMaterial={material} contentTitlebarOverlayColor={titleBar.content?.overlay?.color} contentTitlebarOverlayOpacity={titleBar.content?.overlay?.opacity ?? (titleBar.content?.overlay ? 1 : 0)}
     sidebarTitlebarOverlayColor={titleBar.sidebar?.overlay?.color} sidebarTitlebarOverlayOpacity={titleBar.sidebar?.overlay?.opacity ?? (titleBar.sidebar?.overlay ? 1 : 0)}>
-    <View key="sidebar" style={{ position: "absolute", top: 0, left: 0, minWidth: 0, height: paneMetrics?.sidebarHeight, width: paneMetrics?.sidebarWidth ?? (sidebarCollapsed ? 0 : sidebarWidth ?? sidebarMinWidth) }}>{sidebar}</View>
-    <View key="content" style={{ position: "absolute", top: 0, left: 0, minWidth: 0, overflow: "hidden", height: paneMetrics?.contentHeight, width: paneMetrics?.contentWidth }}>{content}</View>
-    {hasList ? <View key="list" style={{ position: "absolute", top: 0, left: 0, minWidth: 0, height: paneMetrics?.listHeight, width: paneMetrics?.listWidth ?? listWidth ?? listMinWidth }}>{list}</View> : null}
+    <View key="sidebar" style={{ position: "absolute", top: paneMetrics?.sidebarY ?? 0, left: paneMetrics?.sidebarX ?? 0, minWidth: 0, height: paneMetrics?.sidebarHeight, width: paneMetrics?.sidebarWidth ?? (sidebarCollapsed ? 0 : sidebarWidth ?? sidebarMinWidth) }}>{sidebar}</View>
+    <View key="content" style={{ position: "absolute", top: paneMetrics?.contentY ?? 0, left: paneMetrics?.contentX ?? 0, minWidth: 0, overflow: "hidden", height: paneMetrics?.contentHeight, width: paneMetrics?.contentWidth }}>{content}</View>
+    {hasList ? <View key="list" style={{ position: "absolute", top: paneMetrics?.listY ?? 0, left: paneMetrics?.listX ?? 0, minWidth: 0, height: paneMetrics?.listHeight, width: paneMetrics?.listWidth ?? listWidth ?? listMinWidth }}>{list}</View> : null}
   </NativeSplitView>;
 }

@@ -43,14 +43,18 @@ class SidebarSplitViewEventEmitter : public ViewEventEmitter {
       double contentHeight;
     double contentWidth;
     double contentX;
+    double contentY;
     double height;
     bool isLayoutReady;
     bool isVertical;
     double listHeight;
     double listWidth;
     double listX;
+    double listY;
     double sidebarHeight;
     double sidebarWidth;
+    double sidebarX;
+    double sidebarY;
     };
   void onSidebarCollapsedChange(OnSidebarCollapsedChange value) const;
 
@@ -203,5 +207,35 @@ int main(){@autoreleasepool{
  [v mountChildComponentView:sidebar index:0];[v mountChildComponentView:content index:1];[v layout];spin();checkCollapsed(false);assert(changes.empty());
  controller.splitViewItems[0].collapsed=!controller.splitViewItems[0].collapsed;spin();[v layout];checkCollapsed(true);assert(changes==std::vector<bool>{true});
  puts("PASS full component recycle resets prop/native state and next lifetime emits once");
+ {
+   // Fabric measures panes from the origins JS lays them out at, so those must be the AppKit origins.
+   resizes.clear();
+   RNSidebarSplitViewComponent *placed=[[RNSidebarSplitViewComponent alloc]initWithFrame:NSMakeRect(0,0,1000,600)];
+   NSWindow *fullSize=[[NSWindow alloc]initWithContentRect:NSMakeRect(0,0,1000,600) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable|NSWindowStyleMaskFullSizeContentView backing:NSBackingStoreBuffered defer:NO];
+   fullSize.toolbar=[[NSToolbar alloc]initWithIdentifier:@"probe"];fullSize.toolbarStyle=NSWindowToolbarStyleUnified;fullSize.contentView=placed;
+   [placed updateEventEmitter:std::make_shared<SidebarSplitViewEventEmitter>()];
+   [placed updateProps:std::make_shared<SidebarSplitViewProps>() oldProps:placed->_props];
+   RCTViewComponentView *placedSidebar=[RCTViewComponentView new],*placedContent=[RCTViewComponentView new];
+   [placed mountChildComponentView:placedSidebar index:0];[placed mountChildComponentView:placedContent index:1];
+   [placed layout];spin();
+   const auto reported=resizes.back();
+   NSView *placedSidebarContainer=[placed valueForKey:@"sidebarContainer"],*placedContentContainer=[placed valueForKey:@"contentContainer"];
+   NSPoint sidebarOrigin=[placedSidebarContainer convertRect:placedSidebarContainer.bounds toView:placed].origin;
+   NSPoint contentOrigin=[placedContentContainer convertRect:placedContentContainer.bounds toView:placed].origin;
+   printf("Sidebar origin=(%.1f, %.1f) content origin=(%.1f, %.1f)\n",sidebarOrigin.x,sidebarOrigin.y,contentOrigin.x,contentOrigin.y);
+   assert(fabs(reported.sidebarX-sidebarOrigin.x)<0.5 && fabs(reported.sidebarY-sidebarOrigin.y)<0.5);
+   assert(fabs(reported.contentX-contentOrigin.x)<0.5 && fabs(reported.contentY-contentOrigin.y)<0.5);
+   auto layOut=[&](RCTViewComponentView *pane,double x,double y,double width,double height){
+     LayoutMetrics metrics{};metrics.frame=facebook::react::Rect{facebook::react::Point{(Float)x,(Float)y},facebook::react::Size{(Float)width,(Float)height}};
+     [pane updateLayoutMetrics:metrics oldLayoutMetrics:EmptyLayoutMetrics];
+     return [pane convertRect:pane.bounds toView:placed].origin;
+   };
+   NSPoint sidebarOnScreen=layOut(placedSidebar,reported.sidebarX,reported.sidebarY,reported.sidebarWidth,reported.sidebarHeight);
+   NSPoint contentOnScreen=layOut(placedContent,reported.contentX,reported.contentY,reported.contentWidth,reported.contentHeight);
+   assert(NSEqualPoints(sidebarOnScreen,sidebarOrigin) && NSEqualPoints(contentOnScreen,contentOrigin));
+   [placed layout];spin();
+   assert(NSEqualPoints([placedContent convertRect:placedContent.bounds toView:placed].origin,contentOrigin));
+   puts("PASS panes report their AppKit origins and stay there when Fabric applies them");
+ }
  puts("Full source AppKit component probe passed (generated event declarations; Fabric superclass shim)");
 }}
