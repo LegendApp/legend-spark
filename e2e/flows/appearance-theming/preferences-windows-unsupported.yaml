@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: Appearance preferences are typed unsupported on Windows
+intent: >
+  On Windows the Appearance preferences screen reports getSystemAvailability("appearancePreferences") as
+  unsupported-platform, and reading the preferences rejects SparkError:E_UNSUPPORTED_PLATFORM, which the
+  screen shows. Subscribing to system events still succeeds: the screen reports it is listening, though
+  Windows never sends systemColorsChanged or accessibilityDisplayChanged. Implementation: #342.
+checks: [APPR-UNSUP-01]
+tags: [appearance-theming]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://appearance-theming/preferences" }
+- extendedWaitUntil: { visible: { id: appearance-theming-preferences-root }, timeout: 10s }
+- assertText: { id: appearance-theming-preferences-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- extendedWaitUntil: { visible: { id: appearance-theming-preferences-error }, timeout: 10s }
+- assertText: { id: appearance-theming-preferences-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- extendedWaitUntil: { visible: { id: appearance-theming-preferences-listening }, timeout: 10s }

@@ -782,6 +782,31 @@ test("system feature availability is truthful per platform", () => {
   expect(system.getSystemAvailability("appBadge")).toEqual({ available: false, reason: "unsupported-platform" });
   expect(() => system.getSystemAvailability("dock" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
 });
+const PREFERENCES = { appearance: "dark", automaticAppearance: true, accentColor: "#007aff", highlightColor: "#b3d7ff", increaseContrast: false, reduceTransparency: true,
+  reduceMotion: false, differentiateWithoutColor: false, invertColors: false, keyboardNavigation: true };
+test("appearance preferences are validated on macOS and typed unsupported on Windows before any native call", async () => {
+  handlers.set("NativeDesktopSystem.preferences", () => PREFERENCES);
+  expect(await system.getAppearancePreferences()).toEqual(PREFERENCES);
+  expect(calls.at(-1)).toMatchObject({ method: "preferences", args: {} });
+  for (const bad of [{ appearance: "auto" }, { accentColor: "#007AFF" }, { highlightColor: "blue" }, { reduceMotion: 1 }, { keyboardNavigation: undefined }]) {
+    handlers.set("NativeDesktopSystem.preferences", () => ({ ...PREFERENCES, ...bad }));
+    await expect(system.getAppearancePreferences()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  expect(system.getSystemAvailability("appearancePreferences")).toEqual({ available: true });
+  const events: unknown[] = [];
+  const subscription = await system.onSystemEvent(event => events.push(event));
+  emit("NativeDesktopApp", "desktop", { type: "systemColorsChanged" }); emit("NativeDesktopApp", "desktop", { type: "accessibilityDisplayChanged" });
+  expect(events).toEqual([{ type: "systemColorsChanged" }, { type: "accessibilityDisplayChanged" }]);
+  await subscription.remove();
+  platform.OS = "windows"; calls.length = 0;
+  expect(system.getSystemAvailability("appearancePreferences")).toEqual({ available: false, reason: "unsupported-platform" });
+  await expect(system.getAppearancePreferences()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(calls).toHaveLength(0);
+  // Only the getter is unsupported: the fixed event list still subscribes on Windows.
+  const windowsEvents = await system.onSystemEvent(() => {});
+  expect(calls.map(call => call.method)).toEqual(["observe"]);
+  await windowsEvents.remove();
+});
 test("Windows takes badge text but rejects badge counts, progress and Recent Jump List options before native code", async () => {
   platform.OS = "windows";
   await system.setAppBadge("New"); await system.setAppBadge("");
