@@ -1,0 +1,21 @@
+area: native-controls
+prefix: CTRL
+checks:
+  CTRL-SIDEBAR-01:
+    title: The Sidebar data items, dynamic heights and React rows screens mount and match their approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #252; #264; #265"
+    covers:
+      - ./ui/sidebar#Sidebar
+      - ./ui/sidebar#SidebarItem
+  CTRL-VISUAL-01:
+    title: The Split view, SF Symbols, Search field and Glass screens match their approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227; #253; #254"
+    covers:
+      - ./ui/split-view#SidebarSplitView
+      - ./ui/symbol#SFSymbol
+      - ./ui/search#TextInputSearch
+      - ./ui/glass#GlassView

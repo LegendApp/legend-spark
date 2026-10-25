@@ -1,14 +1,19 @@
 import { createElement, type ComponentType } from "react";
 import { View } from "react-native";
 import { AREAS, type Area, type AreaId } from "./areas";
+import type { Locale } from "./i18n";
 
 export type Screen = {
   /** Lowercase kebab-case; the deep link is spark-ks://<area>/<id>. */
   id: string;
+  /** English; `titles` and `summaries` have them in every other language the shell speaks. */
   title: string;
+  titles: Translations;
   summary: string;
+  summaries: Translations;
   component: ComponentType;
 };
+type Translations = Record<Exclude<Locale, "en">, string>;
 /** A registered screen. Render `Root`: its root view carries `testID` (`<area>-<screen>-root`). */
 export type CatalogScreen = Screen & { testID: string; Root: ComponentType };
 export type AreaScreens = { area: AreaId; screens: readonly Screen[] };
@@ -20,6 +25,9 @@ export type Catalog = {
 };
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function screenTitle(screen: Screen, locale: Locale): string { return locale === "en" ? screen.title : screen.titles[locale]; }
+export function screenSummary(screen: Screen, locale: Locale): string { return locale === "en" ? screen.summary : screen.summaries[locale]; }
 
 /** The test driver waits for this ID to confirm a navigated screen has rendered. */
 export function screenRootTestID(area: string, screen: string) { return `${area}-${screen}-root`; }

@@ -16,10 +16,13 @@ export function subscribe(listener: () => void) {
   return () => { listeners.delete(listener); };
 }
 
+// Web links reach the app as universal links, which System integration > Sharing & Spotlight shows; they are not catalog routes.
+const isWebLink = (url: string) => /^https?:/i.test(url);
+
 /** Routes the launch URL and every later spark-ks:// open to the catalog. */
 export function listenForDeepLinks(onError: (error: unknown) => void): { remove(): void } {
   let live = false, removed = false;
-  const subscription = links.addEventListener("url", event => { live = true; openLink(event.url); });
+  const subscription = links.addEventListener("url", event => { if (isWebLink(event.url)) return; live = true; openLink(event.url); });
   // A live open that arrives first is newer than the launch URL.
   links.getInitialURL().then(url => { if (url && !live && !removed) openLink(url); }, onError);
   return { remove() { removed = true; subscription.remove(); } };
