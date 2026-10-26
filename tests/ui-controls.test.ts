@@ -9,7 +9,7 @@ vi.mock("../packages/ui/src/SparkTextInputNativeComponent", () => ({ default: "S
 vi.mock("../packages/ui/src/SparkSelectNativeComponent", () => ({ default: "SparkSelect" }));
 vi.mock("../packages/ui/src/native-select/NativeSelectNativeComponent", () => ({ default: "NativeSelect" }));
 vi.mock("../packages/ui/src/native-select/NativeSegmentedControlNativeComponent", () => ({ default: "NativeSegmentedControl" }));
-import { Button, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index";
+import { Button, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index.macos";
 import { TextInput as MobileTextInput } from "../packages/ui/src/mobile-input";
 import { Button as WebButton, TextInput as WebTextInput, Select as WebSelect } from "../packages/ui/src/index.web";
 import { selectionIndex } from "../packages/ui/src/select";
