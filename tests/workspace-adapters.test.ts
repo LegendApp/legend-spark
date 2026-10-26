@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { installWorkspaceAdapters } from "../scripts/install-workspace-adapters.ts";
 import { createPatch } from "diff";
+import { transformSync } from "@babel/core";
 function fixture() {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-workspace-adapter-"));
   const pkg = path.join(root, "node_modules/probe"); mkdirSync(pkg, { recursive: true });
@@ -71,22 +72,28 @@ test("manifest patches survive receipt stamping, interruption, and repeated inst
   } finally { f.close(); }
 });
 
-test("Windows platform discovery skips its CLI off Windows and preserves it on Windows", () => {
+test.each(["", 'if (process.platform !== "win32") { module.exports = {}; return; }\n'])("Windows platform discovery parses in Expo and skips its CLI off Windows (previous guard: %j)", previousGuard => {
   const f = fixture();
   try {
     const directory = path.join(f.root, "node_modules/react-native-windows");
     mkdirSync(directory);
     const file = path.join(directory, "react-native.config.js");
-    const installedConfig = readFileSync("node_modules/react-native-windows/react-native.config.js", "utf8");
-    const upstream = installedConfig.slice(installedConfig.indexOf("const cli ="));
-    writeFileSync(file, upstream);
+    const upstream = `const cli = require("@react-native-windows/cli");
+module.exports = {
+  platforms: { windows: { npmPackageName: "react-native-windows" } },
+  healthChecks: cli.getHealthChecks(),
+};
+`;
+    writeFileSync(file, previousGuard + upstream);
     linkSync(file, path.join(f.root, "cached-windows-config.js"));
     installWorkspaceAdapters(f.root);
     const adapted = readFileSync(file, "utf8");
     expect(adapted).not.toBe(upstream);
     installWorkspaceAdapters(f.root);
     expect(readFileSync(file, "utf8")).toBe(adapted);
-    expect(readFileSync(path.join(f.root, "cached-windows-config.js"), "utf8")).toBe(upstream);
+    expect(readFileSync(path.join(f.root, "cached-windows-config.js"), "utf8")).toBe(previousGuard + upstream);
+    // Expo's config loader parses CommonJS as a module before evaluating it.
+    expect(() => transformSync(adapted, { configFile: false, babelrc: false, sourceType: "module" })).not.toThrow();
     const evaluate = new Function("module", "process", "require", adapted);
     for (const platform of ["darwin", "linux"]) {
       const module = { exports: {} };

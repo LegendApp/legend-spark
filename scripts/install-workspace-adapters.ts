@@ -19,10 +19,11 @@ export function installWorkspaceAdapters(root: string) {
   const file = path.join(root, "node_modules/react-native-windows/react-native.config.js");
   if (existsSync(file)) {
     const source = readFileSync(file, "utf8");
-    const guard = 'if (process.platform !== "win32") { module.exports = {}; return; }\n';
+    const guard = 'if (process.platform !== "win32") { module.exports = {}; } else {\n';
     if (!source.startsWith(guard)) {
+      const upstream = source.replace(/^if \(process\.platform !== "win32"\) \{ module\.exports = \{\}; return; \}\n/, "");
       const temporary = `${file}.spark-${process.pid}.tmp`;
-      writeFileSync(temporary, guard + source);
+      writeFileSync(temporary, guard + upstream + "\n}\n");
       renameSync(temporary, file);
     }
   }
