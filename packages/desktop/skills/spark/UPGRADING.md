@@ -289,7 +289,7 @@ tags.
 Publishing: each release now publishes straight to its channel (stable ->
 latest, preview -> next). Existing apps are unaffected.
 
-## 0.0.1-next.9 (draft, unreleased)
+## 0.0.1-next.9
 
 New starters write pnpm overrides only to `pnpm-workspace.yaml`, supported by
 pnpm 10, 11 and 12. pnpm 12 rejects the duplicate `pnpm.overrides` previously
