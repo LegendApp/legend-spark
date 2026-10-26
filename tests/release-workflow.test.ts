@@ -241,6 +241,19 @@ test("generated notes require changes after filtering release bookkeeping", asyn
   } finally { f.cleanup(); }
 });
 
+test("stable promotion without new commits notes the promoted preview", async () => {
+  const f = fixture();
+  try {
+    f.git("reset", "--hard", "v0.0.1-next.2");
+    f.write("packages/desktop/skills/spark/UPGRADING.md", "# Upgrading Spark apps\n\n## 0.0.1\n\nReviewed stable upgrade notes.\n");
+    f.git("add", "."); f.git("commit", "-m", "release: stable upgrade notes");
+    f.git("update-ref", "refs/remotes/origin/main", "HEAD");
+    f.setFailures(false, true, false);
+    expect(await releaseWorkflow(f.root, { resume: false, latest: false, stable: true }, f.execute, async () => {}, () => path.join(f.root, ".spark/runner"))).toBe(2);
+    expect(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8")).toContain("\n## 0.0.1\n\nmacOS 14+ (Apple Silicon) supported; Windows preview, not yet verified\n\n- First stable release, promoting 0.0.1-next.2\n");
+  } finally { f.cleanup(); }
+});
+
 test("failed checks, pending notarization and interrupted promotion resume one version, commit and archive", async () => {
   const f = fixture();
   try {
@@ -276,6 +289,8 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(f.commands.find(args => args.includes("tests/packed-consumer.integration.ts"))).toEqual([process.execPath, "tests/packed-consumer.integration.ts", "--archive", path.join(f.root, "artifacts/releases/0.0.1-next.3/spark.tgz")]);
     expect(await f.release(true)).toBe(0);
     expect(f.commands.filter(args => args.includes("release:publish"))).toHaveLength(2);
+    // release:publish pushes main and the tag only after npm publication.
+    expect(f.commands.some(args => args[0] === "git" && args[1] === "push")).toBe(false);
   } finally { f.cleanup(); }
 });
 

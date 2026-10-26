@@ -39,18 +39,15 @@ await releaseCommand(root, async () => {
   };
   const published = [];
   for (const [index, name] of publishedPackages.entries()) published.push(await alreadyPublished(VERSION, archives[index]!, registryCommand, name));
-  const ref = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/ref/tags/${tag}`], { capture: true }));
-  let commit = ref.object;
-  if (commit.type === "tag") commit = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/tags/${commit.sha}`], { capture: true })).object;
-  if (commit.type !== "commit" || commit.sha !== revision) throw new Error("Release tag does not point at the staged source revision");
-  // Never overwrite assets or move existing tags. A retry verifies the existing
-  // public release's commit and every asset before continuing to npm publication.
+  // Nothing becomes public before npm has both packages: the release stays a draft and
+  // main and the tag stay local until then. Never overwrite assets or move existing tags;
+  // a retry verifies the existing release and every asset before continuing.
   let existing: any;
   try { existing = JSON.parse(await run(root, ["gh", "release", "view", tag, "--repo", repo, "--json", "isDraft,assets"], { capture: true })); }
   catch {
     const notes = path.join(folder, "release-notes.md");
     writeFileSync(notes, releaseNotes(readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), VERSION) + "\n\nRequires Node 24.19.0 or newer. Runner downloads automatically on first desktop launch.\n");
-    await run(root, ["gh", "release", "create", tag, "--repo", repo, "--verify-tag", "--draft", ...releaseFlags, "--title", `Spark ${VERSION}`, "--notes-file", notes]);
+    await run(root, ["gh", "release", "create", tag, "--repo", repo, "--target", "main", "--draft", ...releaseFlags, "--title", `Spark ${VERSION}`, "--notes-file", notes]);
     await run(root, ["gh", "release", "upload", tag, "--repo", repo, ...Object.keys(release.sha256).map(name => path.join(folder, name)), path.join(folder, "checksums.txt"), path.join(folder, "release.json")]);
     existing = { isDraft: true };
   }
@@ -72,7 +69,6 @@ await releaseCommand(root, async () => {
     const asset = assets.find((item: any) => item.name === name);
     if (!asset || asset.digest !== `sha256:${expected}`) throw new Error(`GitHub asset is missing or has a different digest: ${name}. Preserve the release and repair the upload explicitly.`);
   }
-  if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", ...releaseFlags]);
   // npm web authentication needs the terminal; piping output disables its prompt.
   // Publish straight to the release channel: the SDK moves before the creator that pins it.
   for (const [index, name] of publishedPackages.entries()) {
@@ -94,5 +90,11 @@ await releaseCommand(root, async () => {
     }
     await waitForReleaseTags(VERSION, latest, registryCommand, undefined, name);
   }
+  await run(root, ["git", "push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`]);
+  const ref = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/ref/tags/${tag}`], { capture: true }));
+  let commit = ref.object;
+  if (commit.type === "tag") commit = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/tags/${commit.sha}`], { capture: true })).object;
+  if (commit.type !== "commit" || commit.sha !== revision) throw new Error("Release tag does not point at the staged source revision");
+  if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", ...releaseFlags]);
   console.log(`Published ${tag} under ${latest ? "latest" : "next"}. Native UI and clean-machine Runner acceptance remain separate evidence.`);
 });

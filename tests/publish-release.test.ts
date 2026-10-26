@@ -5,7 +5,7 @@ import path from "node:path";
 const state = vi.hoisted(() => ({
   release: {} as any, commands: [] as string[][], checks: new Map<string, number>(),
   failCreate: false, visible: true, retry: false, draft: false, latest: true,
-  newRelease: false, tagError: "",
+  newRelease: false, tagError: "", failPush: false,
   tags: {} as Record<string, Record<string, string>>,
 }));
 vi.mock("../scripts/release-env.ts", () => ({ loadReleaseEnv: vi.fn() }));
@@ -54,7 +54,10 @@ vi.mock("../packages/cli/src/process.ts", () => ({ spawnProcess: (argv: string[]
   };
 } }));
 vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, argv: string[]) => {
-  if (argv[0] === "git") return argv[1] === "rev-parse" ? state.release.revision : "";
+  if (argv[0] === "git") {
+    if (argv[1] === "push") { state.commands.push(argv); if (state.failPush) throw new Error("push rejected"); }
+    return argv[1] === "rev-parse" ? state.release.revision : "";
+  }
   if (argv.includes("visibility")) return '{"visibility":"PUBLIC"}';
   if (argv[1] === "api" && argv[2]?.includes("git/ref")) return JSON.stringify({ object: { type: "commit", sha: state.release.revision } });
   if (argv[1] === "api") {
@@ -75,14 +78,15 @@ vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, a
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-test.each(["success", "next only", "draft", "stable", "stable draft", "stable next draft", "new preview", "new stable", "E404 tags", "E401 tags", "create failure", "not visible", "retry", "invalid creator", "no terminal"])("release publication publishes to its channel: %s", async scenario => {
+test.each(["success", "next only", "draft", "stable", "stable draft", "stable next draft", "new preview", "new stable", "E404 tags", "E401 tags", "create failure", "not visible", "push failure", "retry", "invalid creator", "no terminal"])("release publication publishes to its channel: %s", async scenario => {
   vi.resetModules();
   state.commands = [];
   state.checks.clear();
   state.failCreate = scenario === "create failure";
   state.visible = scenario !== "not visible";
   state.retry = scenario === "retry";
-  state.newRelease = scenario.startsWith("new ");
+  state.newRelease = scenario.startsWith("new ") || scenario === "push failure";
+  state.failPush = scenario === "push failure";
   state.draft = scenario.includes("draft") || state.newRelease;
   state.latest = scenario !== "next only" && scenario !== "stable next draft";
   state.tagError = scenario.endsWith(" tags") ? scenario.slice(0, 4) : "";
@@ -114,10 +118,18 @@ test.each(["success", "next only", "draft", "stable", "stable draft", "stable ne
   }
   const api = () => state.commands.filter(argv => argv[0] === "gh").map(argv => argv[2]);
   const distTags = () => state.commands.filter(argv => argv[1] === "dist-tag").map(argv => argv.slice(3));
+  // Nothing goes public on GitHub (main, tag, release) until npm has both packages.
+  const order = () => state.commands.map(argv => argv[0] === "git" ? "push" : argv[0] === "npm" && argv[1] === "publish" ? `npm ${path.basename(argv[2]!)}` : argv[1] === "release" && argv[2] !== "view" ? argv[2] : undefined).filter(Boolean);
+  if (state.failPush) {
+    await expect(publication).rejects.toThrow("push rejected");
+    expect(order()).toEqual(["create", "upload", "npm spark.tgz", "npm create-spark.tgz", "push"]);
+    return;
+  }
   if (state.failCreate || !state.visible) {
     await expect(publication).rejects.toThrow(state.failCreate ? "npm publish @legendapp/create-spark exited 1" : "not visible yet");
     // The SDK is already on its channel; the creator that pins it is not.
     expect(distTags()).toEqual([]);
+    expect(order().filter(step => step === "push" || step === "edit")).toEqual([]);
     expect(state.tags["@legendapp/spark"]).toEqual({ next: "0.0.1-next.2", latest: "0.0.1-next.3" });
     expect(state.tags["@legendapp/create-spark"]).toEqual({ next: "0.0.1-next.2", latest: state.failCreate ? "0.0.1-next.1" : "0.0.1-next.3" });
   } else {
@@ -131,6 +143,8 @@ test.each(["success", "next only", "draft", "stable", "stable draft", "stable ne
     expect(edits).toHaveLength(state.draft ? 1 : 0);
     const creates = state.commands.filter(argv => argv[1] === "release" && argv[2] === "create");
     expect(creates).toHaveLength(state.newRelease ? 1 : 0);
+    for (const argv of creates) expect(argv).toContain("--draft");
+    expect(order()).toEqual([...state.newRelease ? ["create", "upload"] : [], ...state.retry ? [] : ["npm spark.tgz", "npm create-spark.tgz"], "push", ...state.draft ? ["edit"] : []]);
     for (const argv of [...creates, ...edits]) {
       expect(argv).toContain(version.includes("-") ? "--prerelease" : "--prerelease=false");
       expect(argv).toContain(version.includes("-") ? "--latest=false" : "--latest");
