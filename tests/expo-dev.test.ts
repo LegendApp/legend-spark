@@ -245,6 +245,14 @@ test("Expo's real key handler routes desktop actions over IPC and retains reload
   } finally { if (child.exitCode === null) child.kill(); }
 }, 20000);
 
+test("Expo's localhost server stays reachable on 127.0.0.1", async () => {
+  const child = spawnProcess(["node", "--require", preload, "-e", "const server = require('node:net').createServer().listen(0, 'localhost', () => { console.log(server.address().address); server.close(); process.disconnect(); });"], {
+    cwd: root, env: { ...process.env, SPARK_PLATFORM: "macos" }, stdout: "pipe", stderr: "pipe", serialization: "json", ipc() {},
+  });
+  expect((await new Response(child.stdout).text()).trim()).toBe("127.0.0.1");
+  expect(await child.exited).toBe(0);
+});
+
 test("Metro child processes ignore the inherited preload", async () => {
   const child = spawnProcess(["node", "--require", preload, "-e", "console.log('worker ready')"], {
     cwd: os.tmpdir(), env: { ...process.env, SPARK_EXPO_PRELOADED: "1" }, stdout: "pipe", stderr: "pipe",

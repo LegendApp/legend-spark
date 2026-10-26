@@ -6,6 +6,9 @@ const { preparePatch } = require('./expo-dev-patch.cjs');
 if (!process.env.SPARK_EXPO_PRELOADED) {
   process.env.SPARK_EXPO_PRELOADED = '1';
   if (!process.send) throw new Error('Start the Spark Expo integration through spark dev.');
+  // Expo 55 binds --localhost to "localhost", which Node resolves to ::1 first;
+  // desktop runtimes and Spark's Metro clients connect to 127.0.0.1.
+  require('node:dns').setDefaultResultOrder('ipv4first');
   const patches = preparePatch(process.cwd());
   const load = Module._extensions['.js'];
   Module._extensions['.js'] = function(module, filename) {
