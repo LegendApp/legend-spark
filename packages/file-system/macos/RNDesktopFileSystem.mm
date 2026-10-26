@@ -170,19 +170,28 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
         NSString *watchID = args[@"id"];
         if (self.watches[watchID] || self.recursiveWatches[watchID]) { SparkInvalid(reject, @"Watch id already exists"); return; }
         if ([args[@"recursive"] boolValue]) {
-          BOOL directory = NO;
-          if (![fm fileExistsAtPath:url.path isDirectory:&directory] || !directory) { SparkInvalid(reject, @"Recursive watch requires an existing directory"); return; }
+          NSString *existing = url.path;
+          NSMutableArray<NSString *> *missing = [NSMutableArray new];
+          struct stat info;
+          while (stat(existing.fileSystemRepresentation, &info) != 0) {
+            if (errno != ENOENT) { SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]); return; }
+            [missing insertObject:existing.lastPathComponent atIndex:0];
+            existing = existing.stringByDeletingLastPathComponent;
+          }
+          if (!S_ISDIR(info.st_mode)) { SparkInvalid(reject, @"Recursive watch requires a directory"); return; }
           SparkRecursiveWatch *watch = [SparkRecursiveWatch new];
           // Keep real filesystem paths: Foundation can strip /private while a path
           // exists, then preserve it after deletion, breaking event comparisons.
-          char *resolved = realpath(url.fileSystemRepresentation, NULL);
+          char *resolved = realpath(existing.fileSystemRepresentation, NULL);
           if (!resolved) { SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]); return; }
-          watch.path = [NSString stringWithUTF8String:resolved]; free(resolved);
+          NSString *ancestor = [NSString stringWithUTF8String:resolved]; free(resolved);
+          watch.path = ancestor;
+          for (NSString *component in missing) watch.path = [watch.path stringByAppendingPathComponent:component];
           __weak RNDesktopFileSystem *weakSelf = self;
           watch.changed = ^{ [weakSelf sendEventWithName:@"change" body:@{ @"id": watchID, @"path": url.path }]; };
           FSEventStreamContext context = {0, (__bridge void *)watch, NULL, NULL, NULL};
           // Observe the parent too, keeping deletion/replacement of the root visible.
-          NSArray *roots = @[[watch.path stringByDeletingLastPathComponent]];
+          NSArray *roots = @[[ancestor stringByDeletingLastPathComponent]];
           watch.stream = FSEventStreamCreate(NULL, RecursiveChanges, &context, (__bridge CFArrayRef)roots, kFSEventStreamEventIdSinceNow, 0.05,
             kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagWatchRoot | kFSEventStreamCreateFlagNoDefer);
           if (!watch.stream) { reject(@"E_WATCH", @"Could not create directory watcher", nil); return; }
