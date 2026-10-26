@@ -13,7 +13,7 @@ export function creatorArguments(args: string[]) {
       const value = arg === "--spark-version" ? args[++index] : arg.startsWith("--spark-version=") ? arg.slice(16) : arg.slice(2);
       if (!value || value.startsWith("-")) throw new Error("--spark-version requires a version or tag");
       requested = value;
-    } else forwarded.push(arg);
+    } else if (arg !== "--") forwarded.push(arg);
   }
   return { requested, forwarded };
 }
@@ -48,7 +48,16 @@ export function rerunCommand(spec: string, args: string[], env: Record<string, s
 }
 
 export async function rerunNewerCreator(requested: string | undefined, args: string[], fetcher: typeof fetch = fetch, env: Record<string, string | undefined> = process.env) {
-  if (env.SPARK_CREATOR_RERUN || (requested && exactVersion.test(requested))) return undefined;
+  const channel = VERSION.match(/-([^.]+)/)?.[1] ?? "latest";
+  if (env.SPARK_CREATOR_RERUN || (requested && requested !== channel) || args.some(arg => arg === "--spark-version" || arg.startsWith("--spark-version="))) return undefined;
+  // Managers do not always expose the original spec. Honor it when available;
+  // otherwise only refresh the bundled creator's default channel.
+  const selections = [...args, ...Object.entries(env).filter(([key]) => /^(npm_config_(user_agent|argv|package)|pnpm_config_(argv|package)|npx_package)$/i.test(key)).map(([, value]) => value ?? "")];
+  for (const selection of selections) {
+    for (const spec of selection.matchAll(/(?:@legendapp\/(?:create-)?spark|create-spark)[@/]([^\s"',\]\\]+)/g)) {
+      if (spec[1] !== channel) return undefined;
+    }
+  }
   let tags: Record<string, string>, valid: (version: string) => string | null, gt: (a: string, b: string) => boolean;
   try {
     const response = await fetcher("https://registry.npmjs.org/-/package/@legendapp%2fcreate-spark/dist-tags", { signal: AbortSignal.timeout(1_500) });
@@ -56,10 +65,8 @@ export async function rerunNewerCreator(requested: string | undefined, args: str
     tags = await response.json() as Record<string, string>;
     ({ valid, gt } = createRequire(createRequire(import.meta.url).resolve("npm/package.json"))("semver"));
   } catch { return undefined; }
-  // Without a flag, the user asked for latest; a prerelease creator may also come from @next.
-  const channels = requested ? [requested] : VERSION.includes("-") ? ["latest", "next"] : ["latest"];
-  const newer = channels.map(tag => tags[tag]).filter(version => version && valid(version) && gt(version, VERSION)).sort((a, b) => gt(a, b) ? -1 : 1)[0];
-  if (!newer) return undefined;
+  const newer = tags[channel];
+  if (!newer || !valid(newer) || !gt(newer, VERSION) || (newer.match(/-([^.]+)/)?.[1] ?? "latest") !== channel) return undefined;
   const argv = rerunCommand(`@legendapp/create-spark@${newer}`, args, env);
   console.log(`Running @legendapp/create-spark@${newer}; this creator is ${VERSION}.`);
   try {
