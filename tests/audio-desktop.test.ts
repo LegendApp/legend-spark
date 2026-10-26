@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const { call, listeners } = vi.hoisted(() => ({ call: vi.fn(), listeners: new Set<(value: unknown) => void>() }));
 vi.mock("react-native", () => ({ NativeEventEmitter: class { addListener(_name: string, listener: (value: unknown) => void) { listeners.add(listener); return { remove() { listeners.delete(listener); } }; } } }));
 vi.mock("../packages/audio/src/NativeSparkAudio", () => ({ default: { call } }));
-import { createAudioPlayer } from "../packages/audio/src/desktop";
+import { createAudioPlayer } from "../packages/audio/src/index.macos";
 beforeEach(() => { listeners.clear(); call.mockReset(); call.mockImplementation(async (method: string) => method === "awaitReady" ? "true" : "null"); });
 afterEach(() => vi.useRealTimers());
 test("desktop player validates transport readiness and awaits failed-load cleanup", async () => {
