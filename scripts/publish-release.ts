@@ -39,6 +39,13 @@ await releaseCommand(root, async () => {
   };
   const published = [];
   for (const [index, name] of publishedPackages.entries()) published.push(await alreadyPublished(VERSION, archives[index]!, registryCommand, name));
+  // main is pushed only after npm, so it must still fast-forward then. Once npm is
+  // live, a resume continues regardless and the push below handles a moved main.
+  if (published.includes(false)) {
+    await run(root, ["git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main"]);
+    try { await run(root, ["git", "merge-base", "--is-ancestor", "refs/remotes/origin/main", "HEAD"], { capture: true }); }
+    catch { throw new Error("origin/main has commits this release lacks. Nothing was published; rebase the release onto origin/main and prepare it again."); }
+  }
   // Nothing becomes public before npm has both packages: the release stays a draft and
   // main and the tag stay local until then. Never overwrite assets or move existing tags;
   // a retry verifies the existing release and every asset before continuing.
@@ -90,11 +97,19 @@ await releaseCommand(root, async () => {
     }
     await waitForReleaseTags(VERSION, latest, registryCommand, undefined, name);
   }
-  await run(root, ["git", "push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`]);
+  // If main moved after npm went live, still publish the tag and release so Runner
+  // downloads work, then leave main to the maintainer.
+  let mainPushed = true;
+  try { await run(root, ["git", "push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`]); }
+  catch {
+    mainPushed = false;
+    await run(root, ["git", "push", "origin", `refs/tags/${tag}`]);
+  }
   const ref = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/ref/tags/${tag}`], { capture: true }));
   let commit = ref.object;
   if (commit.type === "tag") commit = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/tags/${commit.sha}`], { capture: true })).object;
   if (commit.type !== "commit" || commit.sha !== revision) throw new Error("Release tag does not point at the staged source revision");
   if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", ...releaseFlags]);
+  if (!mainPushed) throw new Error(`Published ${tag}, but origin/main moved and was not updated. Rebase the release commit onto origin/main and push main: git pull --rebase origin main && git push origin HEAD:main`);
   console.log(`Published ${tag} under ${latest ? "latest" : "next"}. Native UI and clean-machine Runner acceptance remain separate evidence.`);
 });
