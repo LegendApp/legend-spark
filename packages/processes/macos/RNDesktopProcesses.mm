@@ -6,9 +6,11 @@
 #import <libproc.h>
 #import <spawn.h>
 #import <sys/ioctl.h>
+#import <sys/proc.h>
 #import <sys/wait.h>
 #import <util.h>
 #import <vector>
+#import <chrono>
 static NSString *ResolveCommandPath(NSString *command)
 {
   NSString *homeDirectory = NSHomeDirectory();
@@ -56,26 +58,45 @@ static NSString *ResolveCommandPath(NSString *command)
 @property BOOL ended;
 @property BOOL inputClosed;
 @property BOOL pty;
-@property BOOL pendingLine;
 @property dispatch_queue_t inputQueue;
+@property dispatch_queue_t signalQueue;
 @end
 @implementation SparkProcess
-- (void)writeInput:(NSData *)data {
-  [self.input writeData:data];
-  if (data.length) self.pendingLine = ((const char *)data.bytes)[data.length - 1] != '\n';
-}
 @end
 // Terminal job control moves background jobs into their own process groups,
 // so a terminal child is signalled as its whole session.
 static BOOL SignalProcess(SparkProcess *process, int signal)
 {
-  if (kill(-process.pid, signal) != 0 && errno != ESRCH) return NO;
-  if (process.pty) {
-    std::vector<pid_t> pids(proc_listallpids(NULL, 0) + 64);
+  if (!process.pty) return kill(-process.pid, signal) == 0 || errno == ESRCH;
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  int capacity = proc_listallpids(NULL, 0);
+  if (capacity <= 0) return NO;
+  std::vector<pid_t> pids(capacity + 64);
+  while (YES) {
     int count = proc_listallpids(pids.data(), (int)(pids.size() * sizeof(pid_t)));
-    for (int index = 0; index < count; index++) if (getsid(pids[index]) == process.pid) kill(pids[index], signal);
+    if (count <= 0) return NO;
+    if (count >= pids.size()) {
+      if (std::chrono::steady_clock::now() >= deadline) { errno = ETIMEDOUT; return NO; }
+      pids.resize(pids.size() * 2);
+      continue;
+    }
+    BOOL remaining = NO;
+    for (int index = 0; index < count; index++) {
+      if (pids[index] <= 0 || getsid(pids[index]) != process.pid) continue;
+      struct proc_bsdshortinfo info = {};
+      if (proc_pidinfo(pids[index], PROC_PIDT_SHORTBSDINFO, 0, &info, sizeof(info)) != sizeof(info)) {
+        if (errno == ESRCH) { remaining = YES; continue; }
+        return NO;
+      }
+      // The root stays unreaped during cleanup; zombies cannot fork or hold terminal handles.
+      if (info.pbsi_status == SZOMB) continue;
+      remaining = YES;
+      if (kill(pids[index], signal) != 0 && errno != ESRCH) return NO;
+    }
+    if (signal != SIGKILL || !remaining) return YES;
+    if (std::chrono::steady_clock::now() >= deadline) { errno = ETIMEDOUT; return NO; }
+    usleep(10000);
   }
-  return YES;
 }
 @interface RNDesktopProcesses ()
 @property NSMutableDictionary<NSString *, SparkProcess *> *processes;
@@ -92,14 +113,18 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
   }
   return self;
 }
-- (void)stopAll { for (SparkProcess *process in self.processes.allValues) if (process.running) SignalProcess(process, SIGKILL); }
+- (void)stopAll {
+  for (SparkProcess *process in self.processes.allValues) dispatch_async(process.signalQueue, ^{
+    if (process.running && !SignalProcess(process, SIGKILL)) NSLog(@"Process cleanup failed: %s", strerror(errno));
+  });
+}
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 
 - (BOOL)terminate:(SparkProcess *)process {
   if (process.running) {
     if (!SignalProcess(process, SIGTERM)) return NO;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-      if (process.running) SignalProcess(process, SIGKILL);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), process.signalQueue, ^{
+      if (process.running && !SignalProcess(process, SIGKILL)) NSLog(@"Process cleanup failed: %s", strerror(errno));
     });
   }
   return YES;
@@ -142,6 +167,7 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
       if (pty && (![pty isKindOfClass:NSDictionary.class] || [pty[@"cols"] integerValue] < 1 || [pty[@"cols"] integerValue] > UINT16_MAX || [pty[@"rows"] integerValue] < 1 || [pty[@"rows"] integerValue] > UINT16_MAX)) { SparkInvalid(reject, @"Invalid terminal size"); return; }
       process = [SparkProcess new];
       process.inputQueue = dispatch_queue_create("desktop.process.input", DISPATCH_QUEUE_SERIAL);
+      process.signalQueue = dispatch_queue_create("desktop.process.signal", DISPATCH_QUEUE_SERIAL);
       NSMutableDictionary *environment = [NSProcessInfo.processInfo.environment mutableCopy]; [environment addEntriesFromDictionary:args[@"env"] ?: @{}];
       int controller = -1, terminal = -1;
       if (pty) {
@@ -221,11 +247,14 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
         });
       }
       dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        int status = 0; while (waitpid(process.pid, &status, 0) < 0 && errno == EINTR) {}
-        dispatch_sync(dispatch_get_main_queue(), ^{
+        // Reserve the root PID/session ID until descendant cleanup finishes.
+        siginfo_t info = {}; while (waitid(P_PID, process.pid, &info, WEXITED | WNOWAIT) < 0 && errno == EINTR) {}
+        dispatch_sync(process.signalQueue, ^{
           // Descendants must not keep the output pipes (and exited promise) alive.
-          SignalProcess(process, SIGKILL); process.running = NO;
+          if (!SignalProcess(process, SIGKILL)) NSLog(@"Process cleanup failed: %s", strerror(errno));
+          process.running = NO;
         });
+        int status = 0; while (waitpid(process.pid, &status, 0) < 0 && errno == EINTR) {}
         dispatch_group_notify(group, dispatch_get_main_queue(), ^{
           int terminationStatus = status;
           process.ended = YES;
@@ -237,14 +266,17 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
           [self.processes removeObjectForKey:key];
         });
       });
-      if (initialInput) { NSData *data = initialInput; dispatch_async(process.inputQueue, ^{ @try { [process writeInput:data]; } @catch (NSException *exception) {} }); }
-      if (args[@"timeoutMs"]) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, [args[@"timeoutMs"] doubleValue] * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+      if (initialInput) { NSData *data = initialInput; dispatch_async(process.inputQueue, ^{ @try { [process.input writeData:data]; } @catch (NSException *exception) {} }); }
+      if (args[@"timeoutMs"]) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, [args[@"timeoutMs"] doubleValue] * NSEC_PER_MSEC), process.signalQueue, ^{
         if (process.running) { process.timedOut = YES; [self terminate:process]; }
       });
     } else {
       if (!process || process.ended) { if ([method isEqual:@"terminate"] || [method isEqual:@"closeInput"]) { resolve(binary ? NSNull.null : @"null"); return; } reject(@"E_CLOSED", @"Process has exited", nil); return; }
       if ([method isEqual:@"terminate"]) {
-        if (![self terminate:process]) { SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]); return; }
+        dispatch_async(process.signalQueue, ^{
+          if (![self terminate:process]) SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]);
+          else resolve(binary ? NSNull.null : @"null");
+        }); return;
       }
       else if ([method isEqual:@"resize"]) {
         NSInteger cols = [args[@"cols"] integerValue], rows = [args[@"rows"] integerValue];
@@ -263,12 +295,12 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
           @try {
             if ([method isEqual:@"write"]) {
               if (process.inputClosed) { reject(@"E_CLOSED", @"Process input is closed", nil); return; }
-              [process writeInput:data];
+              [process.input writeData:data];
             } else if (!process.inputClosed) {
               // The reader keeps the terminal open, so closing the writer would not reach the child.
               // Ctrl+D ends a pending line; only a Ctrl+D on an empty line reads as end-of-file.
               // The terminal stays open for resize until the process ends.
-              if (process.pty) [process.input writeData:[NSData dataWithBytes:"\x04\x04" length:process.pendingLine ? 2 : 1]];
+              if (process.pty) [process.input writeData:[NSData dataWithBytes:"\x04\x04" length:2]];
               else [process.input closeFile];
               process.inputClosed = YES;
             }

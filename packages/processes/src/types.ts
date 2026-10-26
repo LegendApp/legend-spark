@@ -13,7 +13,7 @@ export type ProcessOptions = {
   /** Maximum captured bytes per stream, 0–8 MiB; streaming remains complete. */
   captureLimitBytes?: number;
   onOutput?: (output: ProcessOutput) => void;
-  /** Run the child on a pseudo-terminal of this size (macOS). Output arrives as one `stdout` stream. */
+  /** Run the child on a pseudo-terminal of this size (macOS). Output, including terminal echo, arrives as one merged `stdout` stream. */
   pty?: TerminalSize;
 };
 export type RunCommandOptions = ProcessOptions;
@@ -31,6 +31,7 @@ export interface ProcessHandle {
   readonly exited: Promise<ProcessResult>;
   /** Strings use UTF-8; byte arrays pass through unchanged. Calls preserve order. */
   write(input: ProcessInput): Promise<void>;
+  /** With `pty`, inject two Ctrl+D EOF characters (canonical mode/default VEOF), rather than a pipe half-close. */
   closeInput(): Promise<void>;
   /** Resolve after the process tree exits and its output drains. Retry on failure. */
   terminate(): Promise<void>;
