@@ -1,8 +1,21 @@
 // @ts-check
 const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
+const { createRequire } = require('node:module');
 const upgradeNotesPath = 'node_modules/@legendapp/spark/skills/spark/UPGRADING.md';
+
+// `spark upgrade` loads these helpers from a downloaded release without its own
+// node_modules, so dependencies may only resolve through the app's installed Spark.
+/** @type {typeof import('./migration-helpers.cjs').resolveDependency} */
+function resolveDependency(root, request) {
+  try {
+    return require.resolve(request);
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'MODULE_NOT_FOUND') throw error;
+    const spark = createRequire(path.join(root, 'package.json')).resolve('@legendapp/spark/package.json');
+    return createRequire(spark).resolve(request);
+  }
+}
 
 /** @type {typeof import('./migration-helpers.cjs').createMigrationContext} */
 function createMigrationContext(root, version, changes, manualSteps) {
@@ -75,6 +88,8 @@ function createMigrationContext(root, version, changes, manualSteps) {
       if (!manualSteps.some(step => step.version === version && step.message === message)) manualSteps.push({ version, message, notes });
     },
     replaceImport(from, to, names = {}) {
+      /** @type {typeof import('typescript')} */
+      const ts = require(resolveDependency(root, 'typescript'));
       const files = new Set();
       /** @param {string} directory */
       function visit(directory) {
@@ -90,7 +105,7 @@ function createMigrationContext(root, version, changes, manualSteps) {
         const content = context.readFile(file);
         if (content === null || !content.includes(from)) continue;
         const source = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
-        if (/** @type {ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }} */ (source).parseDiagnostics.length) {
+        if (/** @type {import('typescript').SourceFile & { parseDiagnostics: readonly import('typescript').Diagnostic[] }} */ (source).parseDiagnostics.length) {
           context.manualStep(`Update imports from ${from} in ${file}; the source could not be parsed.`);
           continue;
         }
@@ -98,13 +113,13 @@ function createMigrationContext(root, version, changes, manualSteps) {
         const edits = [];
         // A locally bound require is not necessarily the CommonJS loader.
         let shadowedRequire = false;
-        /** @param {ts.Node} node */
+        /** @param {import('typescript').Node} node */
         function findRequireBinding(node) {
           if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node) || ts.isImportSpecifier(node)) && node.name && ts.isIdentifier(node.name) && node.name.text === 'require') shadowedRequire = true;
           ts.forEachChild(node, findRequireBinding);
         }
         findRequireBinding(source);
-        /** @param {ts.Node} node */
+        /** @param {import('typescript').Node} node */
         function inspect(node) {
           if (ts.isStringLiteralLike(node) && node.text === from) {
             const parent = node.parent;
@@ -149,4 +164,4 @@ function createMigrationContext(root, version, changes, manualSteps) {
   return context;
 }
 
-module.exports = { createMigrationContext, upgradeNotesPath };
+module.exports = { createMigrationContext, resolveDependency, upgradeNotesPath };
