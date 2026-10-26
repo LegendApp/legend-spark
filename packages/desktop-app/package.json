@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-desktop-app",
-  "version": "0.0.1-next.9",
+  "version": "0.0.1-next.10",
   "license": "MIT",
   "main": "src/index",
   "react-native": "src/index",

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.1-next.10 — preview
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- Add 0.0.1-next.10 upgrade notes
+- Add 0.0.1 upgrade notes
+- cli: Print the Runner download heading directly above its progress bar
+- cli: Show Runner download progress instead of a keypress prompt when the session opens automatically
+
 ## 0.0.1-next.9 — preview
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
