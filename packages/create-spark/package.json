@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/create-spark",
-  "version": "0.0.1-next.10",
+  "version": "0.0.1",
   "description": "Create a Legend Spark app",
   "license": "MIT",
   "type": "module",

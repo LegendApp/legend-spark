@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.1
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- First stable release, promoting 0.0.1-next.10.
+
 ## 0.0.1-next.10 — preview
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
