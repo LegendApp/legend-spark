@@ -256,8 +256,9 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 }
 @end
 
-// Hosts a React pane. Fabric lays panes out in split-view coordinates, so the host's bounds start at its
-// pane's split-view origin: the frame Fabric applies then lands on the pane, and measure() matches the screen.
+// Hosts a React pane. Fabric lays panes out in split-view coordinates, so measure() matches the screen.
+// The host's bounds start wherever the pane's frame starts, so the pane always draws at the AppKit pane's
+// origin: a Fabric commit still carrying an origin from before a divider move cannot shift it sideways.
 @interface RNSidebarSplitViewPaneHost : NSView
 @end
 
@@ -265,6 +266,27 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 - (BOOL)isFlipped
 {
   return YES;
+}
+
+- (void)didAddSubview:(NSView *)subview
+{
+  [super didAddSubview:subview];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(paneFrameDidChange:)
+                                               name:NSViewFrameDidChangeNotification
+                                             object:subview];
+  [self setBoundsOrigin:subview.frame.origin];
+}
+
+- (void)willRemoveSubview:(NSView *)subview
+{
+  [[NSNotificationCenter defaultCenter] removeObserver:self name:NSViewFrameDidChangeNotification object:subview];
+  [super willRemoveSubview:subview];
+}
+
+- (void)paneFrameDidChange:(NSNotification *)notification
+{
+  [self setBoundsOrigin:((NSView *)notification.object).frame.origin];
 }
 @end
 
@@ -892,7 +914,6 @@ static char RNSidebarSplitViewStartupKey;
   NSView *host = subview.superview;
   CGPoint origin = [self splitViewOriginOfPane:host.superview];
   host.frame = host.superview.bounds;
-  [host setBoundsOrigin:origin];
   subview.hidden = nativeBounds.size.width <= 0 || nativeBounds.size.height <= 0;
   subview.translatesAutoresizingMaskIntoConstraints = YES;
   subview.frame = CGRectMake(origin.x, origin.y, nativeBounds.size.width, nativeBounds.size.height);
@@ -918,12 +939,10 @@ static char RNSidebarSplitViewStartupKey;
 
 - (void)emitSplitViewDidResizeWithSidebarWidth:(CGFloat)sidebarWidth
                                   contentWidth:(CGFloat)contentWidth
-                                      contentX:(CGFloat)contentX
                                   sidebarHeight:(CGFloat)sidebarHeight
                                   contentHeight:(CGFloat)contentHeight
                                          height:(CGFloat)height
                                      listWidth:(CGFloat)listWidth
-                                         listX:(CGFloat)listX
                                     layoutReady:(BOOL)layoutReady
 {
   const auto eventEmitter = std::static_pointer_cast<const SidebarSplitViewEventEmitter>(_eventEmitter);
@@ -969,14 +988,14 @@ static char RNSidebarSplitViewStartupKey;
   eventEmitter->onSplitViewDidResize(SidebarSplitViewEventEmitter::OnSplitViewDidResize{
     .contentHeight = contentHeight,
     .contentWidth = contentWidth,
-    .contentX = contentX,
+    .contentX = contentOrigin.x,
     .contentY = contentOrigin.y,
     .height = height,
     .isLayoutReady = static_cast<bool>(panesReady),
     .isVertical = true,
     .listHeight = listWidth > 0 ? height : 0,
     .listWidth = listWidth,
-    .listX = listX,
+    .listX = listOrigin.x,
     .listY = listOrigin.y,
     .sidebarHeight = sidebarHeight,
     .sidebarWidth = sidebarWidth,
@@ -1041,12 +1060,10 @@ static char RNSidebarSplitViewStartupKey;
   if (!_layingOutSplitView) {
     [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
                                     contentWidth:contentWidth
-                                        contentX:contentX
                                    sidebarHeight:bounds.size.height
                                    contentHeight:bounds.size.height
                                           height:bounds.size.height
                                        listWidth:listWidth
-                                           listX:_hasList ? listX : 0
                                      layoutReady:layoutReady];
   }
 
@@ -1058,11 +1075,10 @@ static char RNSidebarSplitViewStartupKey;
   [self adoptNativeSidebarCollapsed];
   CGFloat sidebarWidth = [self sidebarPaneBounds].size.width;
   CGFloat contentWidth = _contentContainer.bounds.size.width;
-  CGFloat contentX = [_contentContainer convertRect:_contentContainer.bounds toView:self].origin.x;
+  CGFloat contentX = [self splitViewOriginOfPane:_contentContainer].x;
   CGFloat sidebarHeight = _sidebarContainer.bounds.size.height;
   CGFloat contentHeight = _contentContainer.bounds.size.height;
   CGFloat listWidth = _hasList ? _listContainer.bounds.size.width : 0;
-  CGFloat listX = _hasList ? [_listContainer convertRect:_listContainer.bounds toView:self].origin.x : 0;
   CGFloat height = MAX(sidebarHeight, contentHeight);
   CGRect bounds = [self currentLayoutBounds];
 
@@ -1086,12 +1102,10 @@ static char RNSidebarSplitViewStartupKey;
   [self layoutContentTitlebarMaterial];
   [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
                                   contentWidth:contentWidth
-                                      contentX:contentX
                                  sidebarHeight:sidebarHeight
                                  contentHeight:contentHeight
                                         height:height
                                      listWidth:listWidth
-                                         listX:listX
                                    layoutReady:YES];
 }
 

@@ -233,9 +233,12 @@ int main(){@autoreleasepool{
    NSPoint sidebarOnScreen=layOut(placedSidebar,reported.sidebarX,reported.sidebarY,reported.sidebarWidth,reported.sidebarHeight);
    NSPoint contentOnScreen=layOut(placedContent,reported.contentX,reported.contentY,reported.contentWidth,reported.contentHeight);
    assert(NSEqualPoints(sidebarOnScreen,sidebarOrigin) && NSEqualPoints(contentOnScreen,contentOrigin));
+   // A commit still carrying the origin from before a divider move must not shift the pane sideways.
+   NSPoint staleOnScreen=layOut(placedContent,reported.contentX-50,reported.contentY,reported.contentWidth,reported.contentHeight);
+   assert(NSEqualPoints(staleOnScreen,contentOrigin));
    [placed layout];spin();
    assert(NSEqualPoints([placedContent convertRect:placedContent.bounds toView:placed].origin,contentOrigin));
-   puts("PASS panes report their AppKit origins and stay there when Fabric applies them");
+   puts("PASS panes report their AppKit origins and stay there when Fabric applies current or stale origins");
  }
  puts("Full source AppKit component probe passed (generated event declarations; Fabric superclass shim)");
 }}

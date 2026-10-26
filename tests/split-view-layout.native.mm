@@ -95,7 +95,8 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
   return self;
 }
 - (void)layoutContentTitlebarMaterial {}
-- (void)emitSplitViewDidResizeWithSidebarWidth:(CGFloat)s contentWidth:(CGFloat)c contentX:(CGFloat)x sidebarHeight:(CGFloat)sh contentHeight:(CGFloat)ch height:(CGFloat)h listWidth:(CGFloat)l listX:(CGFloat)lx layoutReady:(BOOL)r {
+- (void)emitSplitViewDidResizeWithSidebarWidth:(CGFloat)s contentWidth:(CGFloat)c sidebarHeight:(CGFloat)sh contentHeight:(CGFloat)ch height:(CGFloat)h listWidth:(CGFloat)l layoutReady:(BOOL)r {
+  CGFloat x = [self splitViewOriginOfPane:_contentContainer].x, lx = _hasList ? [self splitViewOriginOfPane:_listContainer].x : 0;
   [_events addObject:@{@"sidebar":@(s), @"content":@(c), @"contentX":@(x), @"list":@(l), @"listX":@(lx), @"ready":@(r)}];
 }
 - (void)dealloc { if (_resizeObserver) [[NSNotificationCenter defaultCenter] removeObserver:_resizeObserver]; }
