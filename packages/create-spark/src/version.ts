@@ -1,4 +1,7 @@
+import { createRequire } from "node:module";
 import { VERSION } from "../../cli/src/project.ts";
+import { managerCommand } from "../../cli/src/package-manager.ts";
+import { spawnProcess } from "../../cli/src/process.ts";
 
 export function creatorArguments(args: string[]) {
   const forwarded: string[] = [];
@@ -30,7 +33,42 @@ export async function resolveCreatorVersion(requested: string, fetcher: typeof f
 export async function checkCreatorVersion(requested: string, forwarded: string[]) {
   const resolved = await resolveCreatorVersion(requested);
   if (resolved !== VERSION) {
-    const args = forwarded.filter(arg => arg !== "--").map(arg => "'" + arg.replaceAll("'", "'\\''") + "'").join(" ");
-    throw new Error(`Spark ${requested} resolves to ${resolved}, but this creator bundles ${VERSION}. Run the matching self-contained creator:\nnpx @legendapp/create-spark@${resolved} ${args}`);
+    throw new Error(`Spark ${requested} resolves to ${resolved}, but this creator bundles ${VERSION}. Run the matching self-contained creator:\nnpx @legendapp/create-spark@${resolved} ${shellArguments(forwarded)}`);
   }
+}
+
+// pnpm 11+ skips versions younger than a day (minimumReleaseAge), so on release day
+// `pnpm create`/`pnpm dlx` can run an older creator. Re-run the newest one instead.
+export function rerunCommand(spec: string, args: string[], env: Record<string, string | undefined> = process.env) {
+  const agent = env.npm_config_user_agent ?? "";
+  if (agent.startsWith("pnpm/")) return managerCommand("pnpm", ["dlx", spec, ...args], env);
+  if (agent.startsWith("bun/")) return managerCommand("bun", ["x", spec, ...args], env);
+  if (/^yarn\/[2-9]/.test(agent)) return managerCommand("yarn", ["dlx", "-p", spec, "create-spark", ...args], env);
+  return managerCommand("npm", ["exec", "--yes", `--package=${spec}`, "--", "create-spark", ...args], env);
+}
+
+export async function rerunNewerCreator(requested: string | undefined, args: string[], fetcher: typeof fetch = fetch, env: Record<string, string | undefined> = process.env) {
+  if (env.SPARK_CREATOR_RERUN || (requested && exactVersion.test(requested))) return undefined;
+  let tags: Record<string, string>;
+  try {
+    const response = await fetcher("https://registry.npmjs.org/-/package/@legendapp%2fcreate-spark/dist-tags", { signal: AbortSignal.timeout(1_500) });
+    if (!response.ok) return undefined;
+    tags = await response.json() as Record<string, string>;
+  } catch { return undefined; }
+  const { valid, gt } = createRequire(createRequire(import.meta.url).resolve("npm/package.json"))("semver");
+  // Without a flag, the user asked for latest; a prerelease creator may also come from @next.
+  const channels = requested ? [requested] : VERSION.includes("-") ? ["latest", "next"] : ["latest"];
+  const newer = channels.map(tag => tags[tag]).filter(version => version && valid(version) && gt(version, VERSION)).sort((a, b) => gt(a, b) ? -1 : 1)[0];
+  if (!newer) return undefined;
+  const argv = rerunCommand(`@legendapp/create-spark@${newer}`, args, env);
+  console.log(`Running @legendapp/create-spark@${newer}; this creator is ${VERSION}.`);
+  try {
+    return await spawnProcess(argv, { stdin: "inherit", stdout: "inherit", stderr: "inherit", env: { ...env, SPARK_CREATOR_RERUN: "1", pnpm_config_minimum_release_age: "0", npm_config_minimum_release_age: "0" } }).exited;
+  } catch {
+    throw new Error(`Run the current creator instead:\nnpx @legendapp/create-spark@${newer} ${shellArguments(args)}`);
+  }
+}
+
+function shellArguments(args: string[]) {
+  return args.filter(arg => arg !== "--").map(arg => "'" + arg.replaceAll("'", "'\\''") + "'").join(" ");
 }

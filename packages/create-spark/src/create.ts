@@ -4,7 +4,7 @@ import { examples, type Example } from "../../cli/src/examples.ts";
 import { hostPlatform, type AppPlatform } from "../../cli/src/platform.ts";
 import type { PackageManager } from "../../cli/src/package-manager.ts";
 import path from "node:path";
-import { creatorArguments, checkCreatorVersion } from "./version.ts";
+import { creatorArguments, checkCreatorVersion, rerunNewerCreator } from "./version.ts";
 
 export async function createSpark(args: string[]) {
   const { requested, forwarded } = creatorArguments(args);
@@ -14,10 +14,15 @@ export async function createSpark(args: string[]) {
     return;
   }
   if (values.example && !examples.includes(values.example as Example)) throw new Error(`Use --example ${examples.join(" | ")}`);
-  if (requested) {
-    if (values.packages) throw new Error("Release version flags cannot be combined with --packages.");
-    await checkCreatorVersion(requested, forwarded);
+  if (requested && values.packages) throw new Error("Release version flags cannot be combined with --packages.");
+  if (!values.packages) {
+    const code = await rerunNewerCreator(requested, args);
+    if (code !== undefined) {
+      process.exitCode = code;
+      return;
+    }
   }
+  if (requested) await checkCreatorVersion(requested, forwarded);
   const platform = (values.platform ?? hostPlatform()) as AppPlatform;
   process.env.SPARK_PLATFORM = platform;
   try {
