@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 import { buildMode } from "./build-mode.ts";
 
 const options = {
-  example: { type: "string" }, "package-manager": { type: "string" },
+  example: { type: "string" }, "package-manager": { type: "string" }, "bundle-id": { type: "string" },
   runtime: { type: "string", multiple: true }, universal: { type: "boolean" },
   device: { type: "string" }, project: { type: "string" }, platform: { type: "string" },
   packages: { type: "string" }, port: { type: "string" }, runner: { type: "boolean" },
@@ -10,7 +10,7 @@ const options = {
   force: { type: "boolean" }, "dry-run": { type: "boolean" }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
 } as const;
 const commands: Record<string, { flags: readonly string[]; arguments: readonly [number, number] }> = {
-  create: { flags: ["example", "package-manager", "universal", "platform", "packages"], arguments: [1, 1] },
+  create: { flags: ["example", "package-manager", "bundle-id", "universal", "platform", "packages"], arguments: [1, 1] },
   "add desktop": { flags: ["project", "packages"], arguments: [0, 0] },
   "sdk export": { flags: ["packages", "runtime"], arguments: [1, 1] },
   "sdk import": { flags: [], arguments: [1, 1] },
@@ -46,6 +46,7 @@ export function cliArguments(args: string[]) {
   if (values.platform && !["macos", "windows", "ios", "android", "web"].includes(values.platform)) throw new Error("Platform must be macos, windows, ios, android, or web.");
   if (values.port !== undefined && (!Number.isInteger(Number(values.port)) || Number(values.port) < 1 || Number(values.port) > 65535)) throw new Error("Port must be an integer between 1 and 65535.");
   if (values["package-manager"] && !["npm", "pnpm", "yarn", "bun"].includes(values["package-manager"])) throw new Error("Package manager must be npm, pnpm, yarn, or bun.");
+  if (values["bundle-id"] !== undefined && !/^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z0-9-]+)+$/.test(values["bundle-id"])) throw new Error("Bundle ID must be reverse DNS, such as com.yourcompany.myapp.");
   if (command === "build") buildMode(values);
   if (command === "sdk build-runner" && values.project && (values.packages || values["package-manager"])) throw new Error("--packages and --package-manager configure a generated Runner project; omit --project to use them.");
   return parsed;

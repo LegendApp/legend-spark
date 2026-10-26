@@ -90,7 +90,7 @@ Windows: dev and build --dev; production builds are not yet supported.
 SDK transfer: sdk export <directory> [--runtime <Spark Runner directory>], sdk import <directory>
 SDK maintainers: sdk pack, sdk package-runner, sdk build-runner [--platform windows], sdk register <runtime directory>
 Targets: dev/build/prebuild --platform macos|windows|ios|android|web
-Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime path>, create --packages <manifest>, create / sdk build-runner --package-manager npm|pnpm|yarn|bun`);
+Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime path>, create --packages <manifest>, create --bundle-id <com.yourcompany.app>, create / sdk build-runner --package-manager npm|pnpm|yarn|bun`);
   } else switch (command) {
     case "add": {
       if (positionals[1] !== "desktop") throw new Error("Usage: spark add desktop [--project <Expo app>]");
@@ -99,7 +99,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
     }
     case "create": {
       if (!positionals[1]) throw new Error("Usage: spark create MyApp");
-      await create(path.resolve(positionals[1]), creationManifest(values.packages as string | undefined), platform, !!values.universal || !!values.example, values.example as Example | undefined, values["package-manager"] as PackageManager | undefined);
+      await create(path.resolve(positionals[1]), creationManifest(values.packages as string | undefined), platform, !!values.universal || !!values.example, values.example as Example | undefined, values["package-manager"] as PackageManager | undefined, values["bundle-id"]);
       break;
     }
     case "sdk": {
@@ -146,7 +146,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
             if (fixedRoot) rmSync(root, { recursive: true, force: true });
             const manifest = packageManifest(values.packages as string | undefined);
             const manager = values["package-manager"] as PackageManager | undefined;
-            if (!existsSync(path.join(root, "package.json"))) await create(root, manifest, platform, false, undefined, manager);
+            if (!existsSync(path.join(root, "package.json"))) await create(root, manifest, platform, false, undefined, manager, "so.legend.spark.prototype.sparkrunner");
             else await refreshLocalPackages(root, manifest, manager);
             await prepareGoProfile(root, manifest, platform as "macos" | "windows", manager);
             const configFile = path.join(root, "desktop.config.json");

@@ -168,6 +168,11 @@ export async function analyze(root: string) {
   return result;
 }
 
+export function warnExampleBundleId(config: any) {
+  const id = config.expo?.macos?.bundleIdentifier;
+  if (id?.startsWith("com.example.")) console.warn(`Warning: the bundle ID is still the placeholder ${id}. Change bundleIdentifier in desktop.config.json to an ID you own before you distribute this app.`);
+}
+
 export async function build(
   root: string,
   mode: "go" | "dev" | "preview" | "release",
@@ -218,6 +223,7 @@ async function buildUnlocked(
 ): Promise<{ app: string; runtime: Runtime }> {
   if (projectPlatform(root) === "windows") return buildWindows(root, mode, force);
   prepareConfig(root);
+  if (mode === "release") warnExampleBundleId(readAppConfig(root));
   if (mode === "go") {
     const issues = goConfigurationIssues(readAppConfig(root));
     if (issues.length) throw new Error(`Build the Spark Runner from a generic SDK starter: ${issues.join("; ")}`);

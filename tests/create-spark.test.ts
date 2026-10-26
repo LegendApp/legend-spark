@@ -9,17 +9,17 @@ import { createSpark } from "../packages/create-spark/src/create.ts";
 
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); });
 
-test("create launcher delegates the app path, local archives, template and manager to the shared creator", async () => {
+test("create launcher delegates the app path, local archives, template, manager and bundle ID to the shared creator", async () => {
   vi.stubEnv("SPARK_PLATFORM", undefined);
-  await createSpark(["MyApp", "--packages", "archives/manifest.json", "--platform", "windows", "--universal", "--example", "notes-lite", "--package-manager", "npm"]);
-  expect(create).toHaveBeenCalledExactlyOnceWith(path.resolve("MyApp"), path.resolve("archives/manifest.json"), "windows", true, "notes-lite", "npm");
+  await createSpark(["MyApp", "--packages", "archives/manifest.json", "--platform", "windows", "--universal", "--example", "notes-lite", "--package-manager", "npm", "--bundle-id", "com.acme.myapp"]);
+  expect(create).toHaveBeenCalledExactlyOnceWith(path.resolve("MyApp"), path.resolve("archives/manifest.json"), "windows", true, "notes-lite", "npm", "com.acme.myapp");
   expect(process.env.SPARK_PLATFORM).toBe("windows");
 });
 
 test("published creation uses release metadata and the host platform", async () => {
   vi.stubEnv("SPARK_PLATFORM", undefined);
   await createSpark(["MyApp"]);
-  expect(create).toHaveBeenCalledExactlyOnceWith(path.resolve("MyApp"), undefined, process.platform === "win32" ? "windows" : "macos", false, undefined, undefined);
+  expect(create).toHaveBeenCalledExactlyOnceWith(path.resolve("MyApp"), undefined, process.platform === "win32" ? "windows" : "macos", false, undefined, undefined, undefined);
 });
 
 test("help and invalid create options do not scaffold an app", async () => {

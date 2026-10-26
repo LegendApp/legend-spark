@@ -46,7 +46,10 @@ export async function refreshLocalPackages(root: string, manifest: string, selec
   upgradeManagedEntry(root);
 }
 
-export async function create(root: string, archiveManifest: string | undefined, platform: AppPlatform = hostPlatform(), universal = false, example?: Example, selectedManager?: PackageManager) {
+/** A placeholder ID for new apps: lowercase letters, digits and hyphens, starting with a letter. */
+export const exampleBundleId = (name: string) => `com.example.${name.toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^[^a-z]+/, "") || "app"}`;
+
+export async function create(root: string, archiveManifest: string | undefined, platform: AppPlatform = hostPlatform(), universal = false, example?: Example, selectedManager?: PackageManager, bundleId?: string) {
   if (!(universal || example) && !["macos", "windows"].includes(platform)) throw new Error("Use create --universal for mobile/web targets");
   archiveManifest ??= creationManifest();
   const manager = packageManager(process.cwd(), selectedManager);
@@ -89,7 +92,7 @@ export async function create(root: string, archiveManifest: string | undefined, 
     // Expo needs file: to distinguish Windows drive paths from npm package names.
     const child = spawnProcess(nodeCommand(path.resolve(import.meta.dirname, ".."), "expo-desktop", "expo-desktop", [
       "create-app", root, "--template", `file:${templateFile}`, "--yes", "--no-agents-md",
-      "--display-name", name, "--rdns", `so.legend.spark.prototype.${name.toLowerCase()}`, ...(pnp ? ["--no-install"] : []),
+      "--display-name", name, "--rdns", bundleId ?? exampleBundleId(name), ...(pnp ? ["--no-install"] : []),
     ]), { cwd: process.cwd(), env: { ...process.env, PATH: `${npmBin}${path.delimiter}${process.env.PATH ?? ""}`, npm_config_user_agent: `${manager}/spark`, CI: "1", ...(pnp ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} ${pnpWriteFile}` } : {}), ...(manager === "yarn" ? { YARN_ENABLE_IMMUTABLE_INSTALLS: "false" } : {}) }, stdout: "pipe", stderr: "inherit" });
     // Spark owns the next steps; Expo's final block requires an unnecessary prebuild.
     let projectReady = false;
@@ -122,7 +125,8 @@ export async function create(root: string, archiveManifest: string | undefined, 
     if (!archiveManifest) { const release = installedRelease(); if (release) verifyMaterializedReleasePackages(release, root); }
     await configureExample(root, example);
   }
-  console.log(`Created ${root}.\n\n  cd ${JSON.stringify(root)}\n  ${manager} run ${platform}`);
+  const rename = bundleId || variant === "windows" ? "" : `\n\nBefore you ship, change bundleIdentifier in desktop.config.json from ${exampleBundleId(path.basename(root))} to an ID you own.`;
+  console.log(`Created ${root}.\n\n  cd ${JSON.stringify(root)}\n  ${manager} run ${platform}${rename}`);
 }
 
 export function upgradeManagedEntry(root: string) {

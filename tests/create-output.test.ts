@@ -9,8 +9,9 @@ import { spawnProcess } from "../packages/cli/src/process.ts";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { pointer, claudePointer } from "../packages/cli/src/migrations.cjs";
 import { run } from "../packages/cli/src/commands.ts";
-import { pnpWriteFile } from "../packages/cli/src/create.ts";
+import { exampleBundleId, pnpWriteFile } from "../packages/cli/src/create.ts";
 import { packageSources } from "../packages/cli/src/release.ts";
+import { warnExampleBundleId } from "../packages/cli/src/build.ts";
 import { spawnSync } from "node:child_process";
 
 vi.mock("../packages/cli/src/expo-node.ts", () => ({ checkExpoDesktopNode: vi.fn() }));
@@ -35,7 +36,8 @@ test.each([["macos", "npm"], ["windows", "npm"], ["universal", "npm"], ["macos",
     template = source;
     expect(JSON.parse(readFileSync(path.join(source, "package.json"), "utf8")).allowScripts["file:" + path.join(temporary, "spark.tgz")]).toBe(true);
   });
-  vi.mocked(spawnProcess).mockImplementation((_argv, options) => {
+  vi.mocked(spawnProcess).mockImplementation((argv, options) => {
+    expect(argv.slice(argv.indexOf("--rdns"), argv.indexOf("--rdns") + 2)).toEqual(["--rdns", "com.example.myapp"]);
     cpSync(template, root, { recursive: true });
     // npm pack always excludes .npmrc, even when it is present in the template.
     rmSync(path.join(root, ".npmrc"), { force: true });
@@ -57,6 +59,7 @@ test.each([["macos", "npm"], ["windows", "npm"], ["universal", "npm"], ["macos",
     await createSpark([root, "--packages", manifest, "--package-manager", manager, "--platform", variant === "windows" ? "windows" : "macos", ...(variant === "universal" ? ["--universal"] : [])]);
     expect(output.mock.calls.map(([value]) => value).join("")).toBe("Installing dependencies\n");
     expect(log).toHaveBeenCalledWith(expect.stringContaining(`${manager} run`));
+    expect(log.mock.calls.join("").includes("change bundleIdentifier in desktop.config.json from com.example.myapp")).toBe(variant !== "windows");
     if (manager === "pnpm") {
       const yaml = readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8");
       expect(yaml).toContain("nodeLinker: hoisted");
@@ -112,6 +115,7 @@ test.each(["--require /tmp/dlx/.pnp.cjs --experimental-loader file:///tmp/dlx/.p
   vi.mocked(packArchive).mockImplementation(async source => { template = source; });
   vi.mocked(spawnProcess).mockImplementation((argv, options) => {
     expect(argv).toContain("--no-install");
+    expect(argv[argv.indexOf("--rdns") + 1]).toBe("com.acme.myapp");
     if (nodeOptions) expect(options!.env!.NODE_OPTIONS).toContain(".pnp.cjs");
     expect(options!.env!.NODE_OPTIONS).toContain(pnpWriteFile);
     cpSync(template, root, { recursive: true });
@@ -122,11 +126,24 @@ test.each(["--require /tmp/dlx/.pnp.cjs --experimental-loader file:///tmp/dlx/.p
   vi.mocked(run).mockImplementation(async () => { expect(process.env.NODE_OPTIONS?.trim()).toBe(nodeOptions ? "--max-old-space-size=4096" : ""); return ""; });
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
-    await createSpark([root, "--packages", manifest, "--package-manager", "yarn", "--platform", "macos"]);
+    await createSpark([root, "--packages", manifest, "--package-manager", "yarn", "--platform", "macos", "--bundle-id", "com.acme.myapp"]);
+    expect(log.mock.calls.join("")).not.toContain("bundleIdentifier");
     expect(run).toHaveBeenCalledWith(root, ["yarn", "install"]);
     expect(readFileSync(path.join(root, "yarn.lock"), "utf8")).toBe("");
   } finally { log.mockRestore(); delete (process.versions as Record<string, string>).pnp; }
   expect(JSON.parse(readFileSync("packages/create-spark/package.json", "utf8")).preferUnplugged).toBe(true);
+});
+
+test("default bundle IDs are lowercase reverse DNS starting with a letter, and release builds warn about them", () => {
+  expect(exampleBundleId("My Cool_App!")).toBe("com.example.mycoolapp");
+  expect(exampleBundleId("2048-Game")).toBe("com.example.game");
+  expect(exampleBundleId("日本")).toBe("com.example.app");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  warnExampleBundleId({ expo: { macos: { bundleIdentifier: "com.acme.app" } } });
+  expect(warn).not.toHaveBeenCalled();
+  warnExampleBundleId({ expo: { macos: { bundleIdentifier: "com.example.app" } } });
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining("Change bundleIdentifier in desktop.config.json"));
+  warn.mockRestore();
 });
 
 test("PnP writeFile shim accepts the async iterables Node accepts", () => {
