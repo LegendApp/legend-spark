@@ -241,7 +241,9 @@ async function buildUnlocked(
   if (productionHash)
     runtime.fingerprint = digest(runtime.fingerprint + productionHash);
   const resultFile = stateFile(root, `${mode}-build.json`);
+  // RNW's CLI config probes for PowerShell when Expo autolinking loads it on macOS.
   const excludedNames = [...new Set<string>([
+    "react-native-windows",
     ...(readAppConfig(root).expo.autolinking?.exclude ?? []),
     ...chosen.excluded.map((p) => p.name),
   ])];

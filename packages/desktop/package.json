@@ -109,6 +109,7 @@
     "@legendapp/spark-sqlite": "0.0.1",
     "@react-native-runtimes/core": "0.1.0-alpha.2",
     "react-native-nitro-modules": "0.37.0",
+    "@react-native-windows/find-dotnet-tools": "0.0.0-canary.3",
     "@legendapp/spark-cli": "0.0.1",
     "@legendapp/spark-ui": "0.0.1",
     "@legendapp/spark-audio": "0.0.1",
