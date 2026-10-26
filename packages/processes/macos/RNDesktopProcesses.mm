@@ -3,6 +3,7 @@
 #import <RNDesktopApp/SparkDesktop.h>
 #import <signal.h>
 #import <AppKit/AppKit.h>
+#import <libproc.h>
 #import <spawn.h>
 #import <sys/ioctl.h>
 #import <sys/wait.h>
@@ -55,10 +56,27 @@ static NSString *ResolveCommandPath(NSString *command)
 @property BOOL ended;
 @property BOOL inputClosed;
 @property BOOL pty;
+@property BOOL pendingLine;
 @property dispatch_queue_t inputQueue;
 @end
 @implementation SparkProcess
+- (void)writeInput:(NSData *)data {
+  [self.input writeData:data];
+  if (data.length) self.pendingLine = ((const char *)data.bytes)[data.length - 1] != '\n';
+}
 @end
+// Terminal job control moves background jobs into their own process groups,
+// so a terminal child is signalled as its whole session.
+static BOOL SignalProcess(SparkProcess *process, int signal)
+{
+  if (kill(-process.pid, signal) != 0 && errno != ESRCH) return NO;
+  if (process.pty) {
+    std::vector<pid_t> pids(proc_listallpids(NULL, 0) + 64);
+    int count = proc_listallpids(pids.data(), (int)(pids.size() * sizeof(pid_t)));
+    for (int index = 0; index < count; index++) if (getsid(pids[index]) == process.pid) kill(pids[index], signal);
+  }
+  return YES;
+}
 @interface RNDesktopProcesses ()
 @property NSMutableDictionary<NSString *, SparkProcess *> *processes;
 @property BOOL invalidated;
@@ -74,14 +92,14 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
   }
   return self;
 }
-- (void)stopAll { for (SparkProcess *process in self.processes.allValues) if (process.running) kill(-process.pid, SIGKILL); }
+- (void)stopAll { for (SparkProcess *process in self.processes.allValues) if (process.running) SignalProcess(process, SIGKILL); }
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 
 - (BOOL)terminate:(SparkProcess *)process {
   if (process.running) {
-    if (kill(-process.pid, SIGTERM) != 0 && errno != ESRCH) return NO;
+    if (!SignalProcess(process, SIGTERM)) return NO;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-      if (process.running) kill(-process.pid, SIGKILL);
+      if (process.running) SignalProcess(process, SIGKILL);
     });
   }
   return YES;
@@ -206,7 +224,7 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
         int status = 0; while (waitpid(process.pid, &status, 0) < 0 && errno == EINTR) {}
         dispatch_sync(dispatch_get_main_queue(), ^{
           // Descendants must not keep the output pipes (and exited promise) alive.
-          kill(-process.pid, SIGKILL); process.running = NO;
+          SignalProcess(process, SIGKILL); process.running = NO;
         });
         dispatch_group_notify(group, dispatch_get_main_queue(), ^{
           int terminationStatus = status;
@@ -219,7 +237,7 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
           [self.processes removeObjectForKey:key];
         });
       });
-      if (initialInput) { NSData *data = initialInput; dispatch_async(process.inputQueue, ^{ @try { [process.input writeData:data]; } @catch (NSException *exception) {} }); }
+      if (initialInput) { NSData *data = initialInput; dispatch_async(process.inputQueue, ^{ @try { [process writeInput:data]; } @catch (NSException *exception) {} }); }
       if (args[@"timeoutMs"]) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, [args[@"timeoutMs"] doubleValue] * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         if (process.running) { process.timedOut = YES; [self terminate:process]; }
       });
@@ -234,7 +252,7 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
         if (cols < 1 || cols > UINT16_MAX || rows < 1 || rows > UINT16_MAX) { SparkInvalid(reject, @"Invalid terminal size"); return; }
         dispatch_async(process.inputQueue, ^{
           struct winsize size = { .ws_row = (unsigned short)rows, .ws_col = (unsigned short)cols };
-          if (process.inputClosed || ioctl(process.input.fileDescriptor, TIOCSWINSZ, &size) != 0) { reject(@"E_CLOSED", @"Process terminal is closed", nil); return; }
+          if (process.ended || ioctl(process.input.fileDescriptor, TIOCSWINSZ, &size) != 0) { reject(@"E_CLOSED", @"Process terminal is closed", nil); return; }
           resolve(binary ? NSNull.null : @"null");
         }); return;
       }
@@ -245,11 +263,14 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
           @try {
             if ([method isEqual:@"write"]) {
               if (process.inputClosed) { reject(@"E_CLOSED", @"Process input is closed", nil); return; }
-              [process.input writeData:data];
+              [process writeInput:data];
             } else if (!process.inputClosed) {
               // The reader keeps the terminal open, so closing the writer would not reach the child.
-              if (process.pty) [process.input writeData:[NSData dataWithBytes:"\x04" length:1]];
-              [process.input closeFile]; process.inputClosed = YES;
+              // Ctrl+D ends a pending line; only a Ctrl+D on an empty line reads as end-of-file.
+              // The terminal stays open for resize until the process ends.
+              if (process.pty) [process.input writeData:[NSData dataWithBytes:"\x04\x04" length:process.pendingLine ? 2 : 1]];
+              else [process.input closeFile];
+              process.inputClosed = YES;
             }
             resolve(binary ? NSNull.null : @"null");
           } @catch (NSException *exception) { reject(@"E_CLOSED", @"Process input is closed", nil); }

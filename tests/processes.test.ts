@@ -76,6 +76,16 @@ test("runCommand closes input and preserves expected nonzero exit status", async
   const result = await runCommand(options);
   expect(result.exit).toEqual({ type: "exited", code: 7 }); expect(new TextDecoder().decode(result.stderr)).toBe("error");
 });
+test("runCommand on a terminal sends unterminated input with the launch, then closes input", async () => {
+  mocks.call.mockImplementation(async (method, json) => {
+    if (method === "closeInput") exit(JSON.parse(json).id);
+    return "null";
+  });
+  await expect(runCommand({ ...options, input: "partial", pty: { cols: 80, rows: 24 } })).resolves.toMatchObject({ exit: { type: "exited", code: 0 } });
+  expect(mocks.call.mock.calls.map(([method]) => method)).toEqual(["spawn", "closeInput"]);
+  expect(JSON.parse(mocks.call.mock.calls[0]![1])).toMatchObject({ pty: { cols: 80, rows: 24 } });
+  expect(new TextDecoder().decode(mocks.call.mock.calls[0]![2])).toBe("partial");
+});
 test("invalid options and unsupported capabilities reject before side effects", async () => {
   for (const extra of [{ args: "bad" }, { captureLimitBytes: -1 }, { signal: {} }, { onOutput: true }, { target: { type: "helper", name: "../escape" } }, { target: { type: "command", name: "/bin/cat" } }, { target: { type: "executable", path: "/bin/cat", name: "bad" } }]) {
     await expect(spawn({ ...options, ...extra } as never)).rejects.toBeDefined();
