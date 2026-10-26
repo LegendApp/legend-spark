@@ -305,8 +305,6 @@ and run `yarn install`; Spark's native preflight requires one Expo version.
 
 ## 0.0.1-next.10
 
-Spark's `react-native-enriched-markdown` patch now includes the Markdown fixes from legend-apps: inline code styling, list style config, caret positions, heading baselines, checkbox gutter clicks, link deletion and image height. If your app carried its own copy of this patch, remove it (for example from `patchedDependencies`) and let Spark apply its own.
-
 Clearer wording when a new app downloads the prebuilt Spark Runner: `spark dev` (and `npm run macos`) shows `Downloading Spark Runner (20.6 MB)…` with a progress bar after Metro starts, then `Spark Runner installed, opening your app…`. The "Press d to install and open it" prompt now appears only when the session doesn't open the desktop app by itself, such as with `--no-open`. No changes are needed in existing apps.
 
 ## 0.0.1
