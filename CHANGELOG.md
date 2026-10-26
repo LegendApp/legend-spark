@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.1-next.9 — preview
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- Finalize next.9 upgrade notes
+- fix: keep pnpm overrides in YAML and resolve one Expo in starters
+
 ## 0.0.1-next.8 — preview
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
