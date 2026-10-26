@@ -302,3 +302,17 @@ Starters also pin Expo to `54.0.37` throughout the dependency graph.
 Yarn 4 can resolve to a second Expo version alongside the starter's exact pin.
 For existing Yarn apps on this SDK, add `"expo": "54.0.37"` to `resolutions`
 and run `yarn install`; Spark's native preflight requires one Expo version.
+
+## 0.0.1
+
+The first stable release. It contains everything from `0.0.1-next.9`, plus
+clearer wording when a new app downloads the prebuilt Spark Runner.
+
+`spark dev` (and `npm run macos`) now downloads the Runner automatically and
+shows `Downloading Spark Runner (20.6 MB)…` with a progress bar after Metro
+starts, then `Spark Runner installed, opening your app…`. The old "Press d to
+install and open it" prompt now appears only when the session doesn't open the
+desktop app by itself, such as with `--no-open`.
+
+No changes are needed in existing apps. Update `@legendapp/spark` to `0.0.1`
+and reinstall.
