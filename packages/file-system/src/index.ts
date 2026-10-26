@@ -105,7 +105,7 @@ export async function move(source: string, destination: string, options: CopyMov
   await call("move", { path: absolute(source), to: absolute(destination), overwrite: overwriteOption(options) });
 }
 let nextWatch = 0;
-/** Invalidation, not an exact change log. Recursive watches require a directory. */
+/** Invalidation, not an exact change log. On macOS, recursive watches also observe directories created after registration. */
 export async function watch(path: string, listener: (path: string) => void, options: WatchOptions = {}): Promise<AsyncRegistration> {
   const location = absolute(path), recursive = recursiveOption(options, false);
   if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a watch listener");
