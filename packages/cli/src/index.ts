@@ -4,12 +4,12 @@ import type { PackageManager } from "./package-manager.ts";
 import { nodeCommand, spawnProcess } from "./process.ts";
 import { examples, type Example } from "./examples.ts";
 import { prepareGoProfile } from "./go-profile.ts";
-import { seedRunnerCaches } from "./warm-runner-cache.ts";
+import { mirrorRunner, preservedBuildState, releaseRunnerRoot, releaseRunnerStaging, rewritePathRecords, syncTree } from "./release-runner-root.ts";
 import { exportSDK, importSDK } from "./sdk-transfer.ts";
 import { hostPlatform, type AppPlatform } from "./platform.ts";
 import path from "node:path";
 import { cliArguments } from "./cli-arguments.ts";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { prepareConfig, readConfig, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { prepareWindows } from "./windows.ts";
 import { create, refreshLocalPackages } from "./create.ts";
@@ -136,9 +136,14 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
         }
         case "build-runner": {
           let root: string;
+          // Release builds (set by scripts/release-runner.ts) build macOS in one fixed folder so
+          // Xcode stays incremental across versions; users' builds are unchanged.
+          const fixedRoot = !projectOption && platform === "macos" && process.env.SPARK_RELEASE_FIXED_RUNNER === "1";
+          const versionRoot = path.join(sparkHome(), "sdk-builds", VERSION, ...(platform === "windows" ? ["windows"] : []), "SparkRunner");
           if (projectOption) root = project();
           else {
-            root = path.join(sparkHome(), "sdk-builds", VERSION, ...(platform === "windows" ? ["windows"] : []), "SparkRunner");
+            root = fixedRoot ? releaseRunnerStaging(path.join(sparkHome(), "sdk-builds")) : versionRoot;
+            if (fixedRoot) rmSync(root, { recursive: true, force: true });
             const manifest = packageManifest(values.packages as string | undefined);
             const manager = values["package-manager"] as PackageManager | undefined;
             if (!existsSync(path.join(root, "package.json"))) await create(root, manifest, platform, false, undefined, manager);
@@ -148,11 +153,17 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
             const config = readJson(configFile);
             config.version = VERSION.split("-")[0];
             writeJson(configFile, config);
-            // Release builds opt in: reuse the previous version's DerivedData and Pods so the
-            // Runner build is incremental instead of compiling every pod from scratch.
-            if (platform === "macos" && process.env.SPARK_RUNNER_WARM_CACHE === "1") seedRunnerCaches(path.join(sparkHome(), "sdk-builds"), VERSION, process.arch);
+            if (fixedRoot) {
+              const fixed = releaseRunnerRoot(path.join(sparkHome(), "sdk-builds"));
+              const changed = syncTree(root, fixed, preservedBuildState);
+              rewritePathRecords(fixed, root, fixed);
+              console.log(`Release Runner: building in ${fixed} (${changed.length} project files changed since the last release build).`);
+              rmSync(root, { recursive: true, force: true });
+              root = fixed;
+            }
           }
           await build(root, "go", !!values.force);
+          if (fixedRoot) { mirrorRunner(root, versionRoot); console.log(`Release Runner copied to ${versionRoot}.`); }
           break;
         }
         default: throw new Error("SDK commands: spark sdk pack, spark sdk build-runner, spark sdk register <runtime directory>");
