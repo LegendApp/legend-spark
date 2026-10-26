@@ -2410,9 +2410,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
-    NSWindow *window = [targetIdentifier isEqualToString:@"main"]
-      ? [RNWindowManager getMainWindow]
-      : (NSWindow *)self.windows[targetIdentifier];
+    NSWindow *window = [self windowForIdentifier:targetIdentifier];
     if (!window) {
       reject(@"E_NOT_FOUND", @"Window not found", nil);
       return;
@@ -2434,7 +2432,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
-    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    NSWindow *window = [self windowForIdentifier:targetIdentifier];
     if (!window) {
       resolve([self failureJson:@"Window not found"]);
       return;
@@ -2509,9 +2507,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
-    NSWindow *window = [targetIdentifier isEqualToString:@"main"]
-      ? [RNWindowManager getMainWindow]
-      : (NSWindow *)self.windows[targetIdentifier];
+    NSWindow *window = [self windowForIdentifier:targetIdentifier];
     if (!window) {
       reject(@"E_NOT_FOUND", @"Window not found", nil);
       return;
@@ -2648,7 +2644,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
-    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    NSWindow *window = [self windowForIdentifier:targetIdentifier];
     if (!window) {
       reject(@"E_NOT_FOUND", @"Window not found", nil);
       return;
@@ -2704,7 +2700,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
     NSDictionary *options = [self parseObjectJSON:optionsJson];
-    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    NSWindow *window = [self windowForIdentifier:targetIdentifier];
     if (!window) {
       reject(@"E_NOT_FOUND", @"Window not found", nil);
       return;
@@ -2772,7 +2768,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
-    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    NSWindow *window = [self windowForIdentifier:targetIdentifier];
     if (!window) {
       reject(@"E_NOT_FOUND", @"Target window not found for blur animation", nil);
       return;
@@ -3161,6 +3157,13 @@ willBeInsertedIntoToolbar:(BOOL)flag
 - (NSString *)normalizeIdentifier:(NSString *)identifier
 {
   return [identifier isKindOfClass:NSString.class] && identifier.length > 0 ? identifier : @"default";
+}
+
+// The host owns "main", which reaches the registry only once RNDesktopWindows looks it up.
+- (NSWindow *)windowForIdentifier:(NSString *)identifier
+{
+  NSWindow *window = (NSWindow *)self.windows[identifier];
+  return window ?: ([identifier isEqualToString:@"main"] ? [RNWindowManager getMainWindow] : nil);
 }
 #endif
 

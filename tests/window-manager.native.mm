@@ -154,6 +154,11 @@ int main() { @autoreleasepool {
     styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
   window.releasedWhenClosed = NO;
   MainWindowOwner *owner = [MainWindowOwner new]; owner.window = window; NSApp.delegate = owner;
+  // The host owns "main": it reaches the registry only after a window module call, so early calls must not depend on it.
+  assert(manager.windows[@"main"] == nil);
+  [manager setWindowOptions:@"main" optionsJson:SparkJSON(@{ @"title": @"Early" }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert([window.title isEqual:@"Early"]);
+  [manager setWindowToolbarItemText:@"main" itemId:@"missing" text:@"" resolve:^(id result) { assert(![result containsString:@"Window not found"]); } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
   NSDictionary *split = @{ @"restoreOnLaunch": @YES, @"sidebar": @{ @"width": @240 } };
   for (NSString *mode in @[@"safe", @"driver"]) {
     testSafeMode = [mode isEqual:@"safe"]; testDriverMode = !testSafeMode;
