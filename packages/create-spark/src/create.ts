@@ -4,6 +4,7 @@ import { examples, type Example } from "../../cli/src/examples.ts";
 import { hostPlatform, type AppPlatform } from "../../cli/src/platform.ts";
 import type { PackageManager } from "../../cli/src/package-manager.ts";
 import path from "node:path";
+import { VERSION } from "../../cli/src/project.ts";
 import { creatorArguments, checkCreatorVersion, rerunNewerCreator } from "./version.ts";
 
 export async function createSpark(args: string[]) {
@@ -29,7 +30,7 @@ export async function createSpark(args: string[]) {
     await create(path.resolve(positionals[1]!), values.packages ? path.resolve(values.packages) : undefined, platform, !!values.universal, values.example as Example | undefined, values["package-manager"] as PackageManager | undefined, values["bundle-id"]);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Use create --universal")) {
-      throw new Error(error.message.replace("Use create --universal", `Use npm create @legendapp/spark@next ${positionals[1] ?? "MyApp"} -- --universal`));
+      throw new Error(error.message.replace("Use create --universal", `Use npx @legendapp/create-spark@${VERSION} ${positionals[1] ?? "MyApp"} --universal`));
     }
     if (error instanceof Error && error.message.includes("Run spark --help")) {
       throw new Error(error.message.replace("Run spark --help", "Run npm create @legendapp/spark@next -- --help"));

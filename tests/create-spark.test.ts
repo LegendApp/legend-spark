@@ -45,9 +45,9 @@ test("installation errors propagate to the launcher", async () => {
 });
 
 test.each([
-  ["Use create --universal for mobile/web targets", "Use npm create @legendapp/spark@next MyApp -- --universal for mobile/web targets"],
+  ["Use create --universal for mobile/web targets", `Use npx @legendapp/create-spark@${VERSION} MyApp --universal for mobile/web targets`],
   ["Invalid project. Run spark --help.", "Invalid project. Run npm create @legendapp/spark@next -- --help."],
-])("creator error uses npm create flag syntax: %s", async (message, expected) => {
+])("creator error uses launcher flag syntax: %s", async (message, expected) => {
   vi.mocked(create).mockRejectedValueOnce(new Error(message));
   await expect(createSpark(["MyApp", "--platform", "ios"])).rejects.toThrow(expected);
 });
@@ -104,8 +104,8 @@ test("creator reruns itself through the same package manager at a newer dist-tag
     expect(await rerunNewerCreator(undefined, ["MyApp", "--platform", "macos"], tags({ latest: "9.0.0", next: "9.1.0-next.1" }), env)).toBe(3);
     expect(spawnProcess).toHaveBeenCalledExactlyOnceWith(["pnpm", "dlx", "@legendapp/create-spark@9.0.0", "MyApp", "--platform", "macos"], expect.objectContaining({ env: expect.objectContaining({ SPARK_CREATOR_RERUN: "1", pnpm_config_minimum_release_age: "0" }) }));
     vi.mocked(spawnProcess).mockClear();
-    expect(await rerunNewerCreator("next", ["MyApp", "--next"], tags({ latest: VERSION, next: "9.1.0-next.1" }), env)).toBe(3);
-    expect(vi.mocked(spawnProcess).mock.calls[0]![0]).toEqual(["pnpm", "dlx", "@legendapp/create-spark@9.1.0-next.1", "MyApp", "--next"]);
+    expect(await rerunNewerCreator("latest", ["MyApp", "--latest"], tags({ latest: "9.0.0", next: "9.1.0-next.1" }), env)).toBe(3);
+    expect(vi.mocked(spawnProcess).mock.calls[0]![0]).toEqual(["pnpm", "dlx", "@legendapp/create-spark@9.0.0", "MyApp", "--latest"]);
   } finally { log.mockRestore(); }
 });
 
@@ -166,4 +166,59 @@ test("a rerun creator replaces scaffolding with its exit code", async () => {
     expect(create).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(0);
   } finally { vi.unstubAllGlobals(); log.mockRestore(); process.exitCode = undefined; }
+});
+
+test("creator strips manager separators before parsing app flags", async () => {
+  expect(creatorArguments(["MyApp", "--", "--universal", "--next"])).toEqual({ requested: "next", forwarded: ["MyApp", "--universal"] });
+  await createSpark(["MyApp", "--", "--universal"]);
+  expect(create).toHaveBeenCalledExactlyOnceWith(path.resolve("MyApp"), undefined, process.platform === "win32" ? "windows" : "macos", true, undefined, undefined, undefined);
+});
+
+test.each([
+  { npm_config_user_agent: "pnpm/11.0.0 @legendapp/spark@0.0.1" },
+  { npm_config_user_agent: "npm/12.0.2 create-spark/0.0.1" },
+  { npm_config_package: "@legendapp/create-spark@0.0.1" },
+  { npm_config_package: '["create-spark@1.2.3", "other@latest"]' },
+  { npm_config_argv: JSON.stringify({ original: ["create", "@legendapp/spark@0.0.1", "MyApp"] }) },
+  { pnpm_config_package: "@legendapp/create-spark@1.2.3-next.1" },
+  { pnpm_config_argv: 'dlx @legendapp/create-spark@^1.0.0 MyApp' },
+  { NPX_PACKAGE: "create-spark@1.2.3" },
+  { npm_config_package: "@legendapp/create-spark@next" },
+])("creator preserves a manager selection: %j", async env => {
+  const fetcher = tags({ latest: "9.0.0", next: "9.1.0-next.1" });
+  expect(await rerunNewerCreator(undefined, ["MyApp"], fetcher, env)).toBeUndefined();
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(spawnProcess).not.toHaveBeenCalled();
+});
+
+test.each(["latest", "next", VERSION])("--spark-version %s never reruns", async requested => {
+  const fetcher = tags({ latest: "9.0.0", next: "9.1.0-next.1" });
+  for (const selection of [["--spark-version", requested], [`--spark-version=${requested}`]]) {
+    expect(await rerunNewerCreator(requested, ["MyApp", ...selection], fetcher, {})).toBeUndefined();
+  }
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(spawnProcess).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["0.0.2-next.1", undefined, { latest: "9.0.0", next: "0.0.2-next.2" }, "0.0.2-next.2"],
+  ["0.0.2-next.1", "next", { latest: "9.0.0", next: "0.0.2-next.2" }, "0.0.2-next.2"],
+  ["0.0.2-next.1", undefined, { latest: "9.0.0", next: "0.0.2-next.1" }, undefined],
+  ["0.0.2-next.1", undefined, { latest: "9.0.0", next: "0.0.2" }, undefined],
+  ["0.0.2-next.1", "latest", { latest: "9.0.0", next: "0.0.2-next.2" }, undefined],
+  ["0.0.2-beta.1", undefined, { latest: "9.0.0", beta: "0.0.2-beta.2" }, "0.0.2-beta.2"],
+  ["0.0.1", "next", { latest: "9.0.0", next: "9.1.0-next.1" }, undefined],
+  ["0.0.1", "preview", { preview: "9.0.0" }, undefined],
+  ["0.0.1", undefined, { latest: "9.0.0-next.1" }, undefined],
+] as const)("creator %s only refreshes its default channel (%s)", async (version, requested, distTags, expected) => {
+  vi.resetModules();
+  vi.doMock("../packages/cli/src/project.ts", () => ({ VERSION: version }));
+  vi.mocked(spawnProcess).mockReturnValue({ exited: Promise.resolve(0) } as ManagedProcess);
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const { rerunNewerCreator } = await import("../packages/create-spark/src/version.ts");
+    expect(await rerunNewerCreator(requested, ["MyApp", ...requested ? [`--${requested}`] : []], tags(distTags), {})).toBe(expected ? 0 : undefined);
+    if (expected) expect(vi.mocked(spawnProcess).mock.calls[0]![0]).toContain(`--package=@legendapp/create-spark@${expected}`);
+    else expect(spawnProcess).not.toHaveBeenCalled();
+  } finally { log.mockRestore(); vi.doUnmock("../packages/cli/src/project.ts"); vi.resetModules(); }
 });
