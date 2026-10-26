@@ -30,7 +30,7 @@ if (args.includes('--help')) {
   // Preserve generated package/config fields on reruns so the native build cache remains usable.
   if (!existsSync(path.join(root, 'package.json'))) writeJson(path.join(root, 'package.json'), {
     name: 'spark-customize-demo', version: `${version}.0.0`, private: true, main: 'index.js',
-    dependencies: { '@legendapp/spark': VERSION, expo: '54.0.37', react: '19.1.4', 'react-native': '0.81.6', 'react-native-macos': '0.81.7', 'expo-desktop-metro-config': '54.81.3' },
+    dependencies: { '@legendapp/spark': VERSION, expo: '55.0.32', react: '19.2.0', 'react-native': '0.83.10', 'react-native-macos': '0.83.0', 'expo-desktop-metro-config': '55.83.3' },
   });
   if (!existsSync(path.join(root, 'desktop.config.json'))) writeJson(path.join(root, 'desktop.config.json'), {
     name: 'Spark Customize Demo', version: `${version}.0.0`, projectId: 'be3cc70e-63b8-42d1-95c6-4f527c80eb15', platforms: ['macos'],

@@ -44,7 +44,7 @@ export function NitroCompatibility({ report, onComplete }: { report?: string; on
         const last = JSON.parse(native.current!.snapshot());
         if (last.label !== "Updated from React") throw new Error("Remounted native view lost its props");
         check("Remount and native method call", last);
-        if (report) await writeText(report, JSON.stringify({ passed: true, react: "19.1.4", reactNative: "0.81.6", reactNativeMacOS: "0.81.7", nitro: "0.37.0", results }, null, 2));
+        if (report) await writeText(report, JSON.stringify({ passed: true, react: "19.2.0", reactNative: "0.83.10", reactNativeMacOS: "0.83.0", nitro: "0.37.0", results }, null, 2));
         if (!disposed) onComplete?.(true);
       } catch (cause) {
         if (disposed) return;
@@ -57,7 +57,7 @@ export function NitroCompatibility({ report, onComplete }: { report?: string; on
   }, [report, onComplete]);
   return <View style={{ gap: 12 }} testID="nitro-compatibility">
     <Text style={{ fontSize: 18, fontWeight: "600" }}>Native view compatibility</Text>
-    <Text>React Native macOS 0.81.7 · Nitro 0.37.0</Text>
+    <Text>React Native macOS 0.83.0 · Nitro 0.37.0</Text>
     {mounted && <CompatibilityViewComponent label={label} style={{ width, height: 120 }} hybridRef={hybridRef} />}
     {checks.map(check => <Text key={check.name}>PASS · {check.name}</Text>)}
     {error ? <Text style={{ color: "#b42318" }}>{error}</Text> : null}

@@ -132,10 +132,10 @@
     "node": ">=24.19.0"
   },
   "peerDependencies": {
-    "expo": "54.0.37",
-    "react": "^19.1.0",
-    "react-native": "0.81.6",
-    "react-dom": "^19.1.0",
+    "expo": "55.0.32",
+    "react": "^19.2.0",
+    "react-native": "0.83.10",
+    "react-dom": "^19.2.0",
     "react-native-enriched-markdown": "1.1.1",
     "react-native-enriched-html": "1.1.1"
   },

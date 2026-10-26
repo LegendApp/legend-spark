@@ -53,7 +53,7 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   const req = createRequire(pkgFile);
   const installed = (name: string) => readJson(req.resolve(`${name}/package.json`)).version;
   // Never upgrade the mobile baseline as a side effect of adding desktop.
-  for (const [name, version] of Object.entries({ expo: "54.0.37", "react-native": "0.81.6", react: "19.1.4" })) {
+  for (const [name, version] of Object.entries({ expo: "55.0.32", "react-native": "0.83.10", react: "19.2.0" })) {
     let actual: string;
     try { actual = installed(name); } catch { throw new Error(`Install the app's dependencies first; ${name} is missing.`); }
     if (actual !== version) throw new Error(`The tested Expo Desktop beta needs ${name}@${version}; this app has ${actual}. Align the app's baseline separately, then retry. No files were changed.`);
@@ -130,7 +130,7 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   }
   // Resolve local transitive SDK packages without replacing any mobile pins.
   const vendor = ["@react-native-runtimes/core", "react-native-nitro-modules", "@op-engineering/op-sqlite", "react-native-webview"];
-  const overrides: Record<string, string> = { ...Object.fromEntries(local.map(name => [name, dependencies[name]!])), "@expo/cli": "54.0.27",
+  const overrides: Record<string, string> = { ...Object.fromEntries(local.map(name => [name, dependencies[name]!])), "@expo/cli": "55.0.37",
     "react-native-macos": defaults.overrides["react-native-macos"], "react-native-windows": defaults.overrides["react-native-windows"] };
   for (const name of vendor) {
     if (archives[name]) {

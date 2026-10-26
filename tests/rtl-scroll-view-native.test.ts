@@ -33,7 +33,7 @@ test("RTL scroll patch install checks the version and preserves package cache ha
     const dependency = path.join(root, "node_modules/react-native-macos"), cache = path.join(root, "cache.mm");
     const installed = path.join(dependency, "React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm");
     mkdirSync(path.dirname(installed), { recursive: true });
-    writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.81.7" }));
+    writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.83.0" }));
     writeFileSync(cache, pristine); linkSync(cache, installed);
     installRTLScrollViewPatch(root);
     expect(readFileSync(cache, "utf8")).toBe(pristine);
@@ -41,7 +41,7 @@ test("RTL scroll patch install checks the version and preserves package cache ha
     const inode = statSync(installed).ino; installRTLScrollViewPatch(root);
     expect(statSync(installed).ino).toBe(inode);
     writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.82.0" }));
-    expect(() => installRTLScrollViewPatch(root)).toThrow("requires react-native-macos@0.81.7");
+    expect(() => installRTLScrollViewPatch(root)).toThrow("requires react-native-macos@0.83.0");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

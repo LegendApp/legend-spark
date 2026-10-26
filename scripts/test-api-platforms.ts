@@ -16,8 +16,8 @@ const archives = { "@legendapp/spark": localArchive(path.join(framework, "artifa
 mkdirSync(root, { recursive: true }); writeFileSync(path.join(root, ".spark-api-probe"), "managed\n");
 writeJson(path.join(root, "package.json"), {
   name: "spark-api-platform-probe", private: true, version: "1.0.0", main: "index.ts",
-  dependencies: { ...archives, "@expo/ui": "0.2.0-beta.9", expo: "54.0.37", "expo-clipboard": "8.0.8", "expo-secure-store": "15.0.8", "expo-linking": "8.0.12", react: "19.1.4", "react-native": "0.81.6", "react-dom": "19.1.4", "react-native-web": "0.21.0" },
-  overrides: { ...archives, expo: "54.0.37", "expo-constants": "18.0.14", "expo-modules-core": "3.0.30" },
+  dependencies: { ...archives, "@expo/ui": "55.0.17", expo: "55.0.32", "expo-clipboard": "55.0.17", "expo-secure-store": "55.0.18", "expo-linking": "55.0.17", react: "19.2.0", "react-native": "0.83.10", "react-dom": "19.2.0", "react-native-web": "0.21.0" },
+  overrides: { ...archives, expo: "55.0.32", "expo-constants": "55.0.17", "expo-modules-core": "55.0.27" },
 });
 writeJson(path.join(root, "app.json"), { expo: { name: "API Platform Probe", slug: "spark-api-probe", platforms: ["ios", "android", "web"] } });
 writeFileSync(path.join(root, "metro.config.js"), 'const {getDefaultConfig} = require("expo/metro-config"); module.exports = getDefaultConfig(__dirname);\n');

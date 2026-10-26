@@ -20,6 +20,7 @@ test("Metro readiness does not wait for Expo's dependency checks", async () => {
     const exports: any = {};
     const modules: Record<string, unknown> = {
       "@expo/config": { getConfig: () => ({ exp: { platforms: ["macos"] }, pkg: {} }) },
+      "../events": { shouldReduceLogs: () => false },
       chalk: { gray: (value: string) => value },
       "../log": { log() {} },
       "../utils/profile": { profile: (fn: unknown) => fn },
@@ -40,7 +41,9 @@ test("Metro readiness does not wait for Expo's dependency checks", async () => {
     new Function("require", "exports", source)((name: string) => name.endsWith("expo-dev-extension.cjs")
       ? { ready: (port: number) => { expect(port).toBe(19091); events.push("ready"); } }
       : modules[name] ?? {}, exports);
-    await expect(exports.startAsync(root, { dev: true }, {})).rejects.toThrow(serverFails ? "server failed" : "dependency check failed");
+    const start = exports.startAsync(root, { dev: true }, {});
+    // Expo ignores dependency check failures; later startup steps are not modeled here.
+    if (serverFails) await expect(start).rejects.toThrow("server failed"); else await start.catch(() => {});
     expect(events).toEqual(serverFails ? [] : ["listening", "ready", "dependency check"]);
   }
 });

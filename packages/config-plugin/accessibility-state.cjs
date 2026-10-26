@@ -1,4 +1,4 @@
-// RN macOS 0.81.7 Fabric applies accessibilityState only on iOS: RCTViewComponentView's accessibilityState block is
+// RN macOS 0.83.0 Fabric applies accessibilityState only on iOS: RCTViewComponentView's accessibilityState block is
 // inside #if !TARGET_OS_OSX, so a disabled Pressable with an accessibilityRole reports itself enabled to VoiceOver and a
 // selected one unselected. A view whose accessibility traits never changed (no accessibilityRole) reported
 // isAccessibilityEnabled NO, as a plain NSView does, enabled or not. The patch answers both from the view's current
@@ -38,7 +38,7 @@ function patchAccessibilityStateSource(source) {
 function installAccessibilityStatePatch(root) {
   const manifest = require.resolve("react-native-macos/package.json", { paths: [root] });
   const version = JSON.parse(fs.readFileSync(manifest, "utf8")).version;
-  if (version !== "0.81.7") throw new Error(`spark's accessibility state patch requires react-native-macos@0.81.7; found ${version}.`);
+  if (version !== "0.83.0") throw new Error(`spark's accessibility state patch requires react-native-macos@0.83.0; found ${version}.`);
   const target = path.join(path.dirname(manifest), file);
   const source = fs.readFileSync(target, "utf8"), patched = patchAccessibilityStateSource(source);
   if (source !== patched) {

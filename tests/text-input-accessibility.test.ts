@@ -25,7 +25,7 @@ test("the TextInput accessibility patch install checks the version and preserves
     const dependency = path.join(root, "node_modules/react-native-macos"), cache = path.join(root, "cache.m");
     const installed = path.join(dependency, relative);
     mkdirSync(path.dirname(installed), { recursive: true });
-    writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.81.7" }));
+    writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.83.0" }));
     writeFileSync(cache, pristine); linkSync(cache, installed);
     installTextInputAccessibilityPatch(root);
     expect(readFileSync(cache, "utf8")).toBe(pristine);
@@ -33,6 +33,6 @@ test("the TextInput accessibility patch install checks the version and preserves
     const inode = statSync(installed).ino; installTextInputAccessibilityPatch(root);
     expect(statSync(installed).ino).toBe(inode);
     writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.82.0" }));
-    expect(() => installTextInputAccessibilityPatch(root)).toThrow("requires react-native-macos@0.81.7");
+    expect(() => installTextInputAccessibilityPatch(root)).toThrow("requires react-native-macos@0.83.0");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

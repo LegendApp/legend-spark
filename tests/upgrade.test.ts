@@ -27,7 +27,7 @@ beforeEach(() => {
   current = "0.0.1-next.3";
   next = "0.0.1-next.5";
   writeJson(path.join(root, "package.json"), {
-    name: "consumer", scripts: { dev: "spark dev" }, dependencies: { "@legendapp/spark": current, react: "^19.1.0", "react-native": "0.81.6", expo: "54.0.37" },
+    name: "consumer", scripts: { dev: "spark dev" }, dependencies: { "@legendapp/spark": current, react: "^19.2.0", "react-native": "0.81.6", expo: "54.0.37" },
     overrides: { "@legendapp/spark": current, react: "$react", "@expo/cli": "old", "@react-native-runtimes/core": "file:./spark-packages/old.tgz" }, custom: true,
   });
   writeJson(path.join(root, "desktop.config.json"), { projectId: "upgrade-test", platforms: ["macos"] });

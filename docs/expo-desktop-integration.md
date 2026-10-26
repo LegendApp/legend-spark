@@ -1,6 +1,6 @@
 # Expo Desktop integration
 
-spark delegates project creation and native generation to the tested Expo Desktop release. The pinned CLI is `expo-desktop@1.0.6`; desktop native generation uses `expo-desktop-template-bare-minimum@54.81.6`. Config plugins are pinned to `expo-desktop-config-plugins@1.3.2`. Metro config is `54.81.3`; modules-core is `54.0.14` and stubs are `54.0.15`. Expo 54 / React Native 0.81 remain unchanged. Spark pins RN macOS `0.81.7` and RN Windows `0.81.35` in overrides as well as direct dependencies, preventing the upstream native template from installing conflicting desktop versions.
+spark delegates project creation and native generation to the tested Expo Desktop release. The pinned CLI is `expo-desktop@1.0.6`; desktop native generation uses `expo-desktop-template-bare-minimum@55.83.10`. Config plugins are pinned to `expo-desktop-config-plugins@1.3.2`. Metro config is `55.83.3`; modules-core and stubs are `55.0.2`. The SDK is Expo 55 / React Native 0.83 / React 19.2. Spark pins RN macOS `0.83.0` and RN Windows `0.83.2` in overrides as well as direct dependencies, preventing the upstream native template from installing conflicting desktop versions.
 
 ## Ownership
 
@@ -44,7 +44,7 @@ spark therefore retains desktop compilation and process ownership, module select
 
 ## React Native macOS Fabric lifecycle compatibility
 
-The pinned `react-native-macos@0.81.7` starts Fabric surfaces asynchronously. An
+The pinned `react-native-macos@0.83.0` starts Fabric surfaces asynchronously. An
 immediate secondary-window close can stop the shadow tree before startup finishes
 installing its animation driver. spark applies `fabric-lifecycle.cjs` from its
 config plugin during macOS Podfile generation, before compilation. It serializes
@@ -68,7 +68,7 @@ session. See the
 
 ## RN macOS keyboard compatibility patch
 
-The config plugin also patches `react-native-macos@0.81.7` keyboard event handling.
+The config plugin also patches `react-native-macos@0.83.0` keyboard event handling.
 An internal legacy `RCTView` hosted inside Fabric (including WebView) can lack a
 React tag. Untagged keyboard events now return nil rather than constructing an
 invalid event. `RCTView` only marks JS delivery complete when an event and
@@ -83,7 +83,7 @@ the native regression; see [macOS evidence](macos-readiness-2026-09-18.md#webvie
 
 ## RN macOS RTL ScrollView patch
 
-In RTL, `react-native-macos@0.81.7` Fabric flips every ScrollView's content container
+In RTL, `react-native-macos@0.83.0` Fabric flips every ScrollView's content container
 with a `scale(-1, 1)` layer transform. The matching flip of the scroll view itself,
 which cancels it on iOS, is iOS-only, so scroll content renders mirrored on macOS.
 Mirroring the NSScrollView as well is not an option: AppKit scrolls `NSClipView` by its
@@ -100,7 +100,7 @@ compiles the patched methods against AppKit.
 
 ## RN macOS RTL text alignment patch
 
-`react-native-macos@0.81.7` Fabric passes natural `textAlign` (`"auto"` or unset) to TextKit
+`react-native-macos@0.83.0` Fabric passes natural `textAlign` (`"auto"` or unset) to TextKit
 as `NSTextAlignmentNatural`. TextKit resolves that from the user's language and the app's
 localization, not from the Yoga layout direction. So in an RTL subtree of an app that isn't
 localized for an RTL language (such as `direction: "rtl"`), text in a full-width box aligns
@@ -116,7 +116,7 @@ upstream code and lays text out with TextKit.
 
 ## RN macOS RTL TextInput alignment patch
 
-A `react-native-macos@0.81.7` TextInput has no layout direction on macOS: its text attributes
+A `react-native-macos@0.83.0` TextInput has no layout direction on macOS: its text attributes
 carry none, and the `semanticContentAttribute` that makes UIKit's natural alignment follow it
 is iOS-only. So a TextInput with natural `textAlign` drew its text and placeholder from the
 left in an RTL layout. `rtl-text-input-alignment.cjs` aligns them, single-line and multiline,
@@ -128,7 +128,7 @@ compiles the patch's helpers and checks text and placeholders in `NSTextField` a
 
 ## RN macOS TextInput accessibility patch
 
-`react-native-macos@0.81.7` Fabric sets a TextInput's `accessibilityLabel` on the backed text input view. A multiline
+`react-native-macos@0.83.0` Fabric sets a TextInput's `accessibilityLabel` on the backed text input view. A multiline
 input's is `RCTWrappedTextView`, a plain view around a scroll view, while the `NSTextView` inside it is the
 accessibility element, so VoiceOver announced a labelled multiline input without its label.
 `text-input-accessibility.cjs` keeps the label on that text view. Like the other patches, it checks the version and
@@ -137,7 +137,7 @@ exact source, is idempotent, and replaces the file atomically; existing runtimes
 
 ## RN macOS accessibility state patch
 
-`react-native-macos@0.81.7` Fabric applies `accessibilityState` only on iOS: in `RCTViewComponentView.mm` it is inside
+`react-native-macos@0.83.0` Fabric applies `accessibilityState` only on iOS: in `RCTViewComponentView.mm` it is inside
 `#if !TARGET_OS_OSX`. So a disabled `Pressable` (`disabled`, `accessibilityState.disabled`) with an
 `accessibilityRole` told VoiceOver it was enabled, a selected one (`accessibilityState.selected`) that it was not
 selected, and a view without a role reported `isAccessibilityEnabled` NO, as a plain `NSView` does, enabled or not.

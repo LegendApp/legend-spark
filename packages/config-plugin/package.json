@@ -13,11 +13,11 @@
     "expo-desktop-config-plugins": "1.3.2",
     "@legendapp/spark-desktop-host": "0.0.1",
     "@legendapp/spark-window-options": "0.0.1",
-    "@expo/config-plugins": "54.0.5",
+    "@expo/config-plugins": "55.0.12",
     "diff": "8.0.4"
   },
   "private": true,
   "devDependencies": {
-    "@expo/config-types": "54.0.10"
+    "@expo/config-types": "55.0.6"
   }
 }
