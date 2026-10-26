@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { writeJson } from "../packages/cli/src/project.ts";
 import { CommandError } from "../packages/cli/src/errors.ts";
@@ -9,6 +11,39 @@ type Edit = { file: string; before: string; after: string };
 type State = { schema: 1; version: string; baseRevision: string; revision?: string; latest: boolean; edits: Edit[]; publicationReady?: boolean; complete?: boolean };
 export type Execute = (argv: string[], capture?: boolean) => Promise<{ code: number; output: string }>;
 const repository = "LegendApp/legend-spark";
+
+// Git tree of the working tree as it is now (tracked and untracked, honouring .gitignore),
+// written through a throwaway index so the real index is untouched.
+export function workingTreeHash(root: string) {
+  const folder = mkdtempSync(path.join(os.tmpdir(), "spark-release-index-"));
+  try {
+    const env = { ...process.env, GIT_INDEX_FILE: path.join(folder, "index") };
+    const git = (...args: string[]) => {
+      const result = spawnSync("git", args, { cwd: root, env, encoding: "utf8" });
+      if (result.status) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+      return result.stdout.trim();
+    };
+    git("read-tree", "HEAD");
+    git("add", "-A");
+    return git("write-tree");
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+}
+
+const testPassFile = (root: string) => path.join(root, ".spark/release-tests-passed.json");
+
+// typecheck + the full test suite verify source, not shipped bits: skip them when this exact
+// tree already passed (or when explicitly asked). bun install, packing, building, signing and
+// the packed-consumer check always run.
+export function testSkipReason(root: string, tree: string, skipTests?: boolean) {
+  if (skipTests) return "--skip-tests was passed";
+  if (!existsSync(testPassFile(root))) return undefined;
+  const marker = JSON.parse(readFileSync(testPassFile(root), "utf8"));
+  return marker.tree === tree ? `tree ${tree.slice(0, 12)} already passed typecheck and tests at ${marker.at}` : undefined;
+}
+
+export function recordTestPass(root: string, tree: string) {
+  writeJson(testPassFile(root), { tree, at: new Date().toISOString() });
+}
 
 export function signingProject(root: string) {
   const project = path.join(root, ".spark/release-signing");
@@ -137,7 +172,7 @@ async function finishRelease(root: string, state: State, execute: Execute) {
   console.log(`Released ${state.version}. Native UI and clean-recipient Runner acceptance must still be recorded separately.`);
 }
 
-export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; stable?: boolean; next?: boolean; finish?: boolean; resumeFrom?: "publish" }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
+export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; stable?: boolean; next?: boolean; finish?: boolean; resumeFrom?: "publish"; skipTests?: boolean }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
   const stateFile = path.join(root, ".spark/release-workflow.json");
   const run = async (argv: string[], capture = false) => {
     const result = await execute(argv, capture);
@@ -228,8 +263,14 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
       if (!state.publicationReady) {
         requireUpgradeNotes(root, state.version);
         await run(["bun", "install", "--frozen-lockfile"]);
-        await run(["bun", "run", "typecheck"]);
-        await run(["bun", "run", "test"]);
+        const tree = workingTreeHash(root);
+        const skip = testSkipReason(root, tree, options.skipTests);
+        if (skip) console.log(`Skipping typecheck and the full test suite: ${skip}.`);
+        else {
+          await run(["bun", "run", "typecheck"]);
+          await run(["bun", "run", "test"]);
+          recordTestPass(root, tree);
+        }
         if (!state.revision) {
           const changed = (await git("diff", "--name-only", "HEAD")).split("\n").sort();
           if (JSON.stringify(changed) !== JSON.stringify(state.edits.map(edit => edit.file).sort()) || await git("ls-files", "--others", "--exclude-standard")) throw new Error("Verification changed release source unexpectedly");
