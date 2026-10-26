@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import ts from "typescript";
 import { writeJson } from "../packages/cli/src/project.ts";
 import { CommandError } from "../packages/cli/src/errors.ts";
 import { alreadyPublished, changelogSection, latestChannel, publishedPackages, publishAndWait, waitForReleaseTags, verifyCreatorArchive } from "./npm-release.ts";
@@ -110,7 +111,15 @@ export function versionEdits(root: string, files: string[], current: string, ver
     let after = before;
     if (file.endsWith("package.json") || file === "bun.lock") {
       // Only workspace versions and @legendapp pins: third-party pins may equal the old version.
-      after = before.replace(new RegExp(`("version"|"@legendapp/[^"]+")(\\s*:\\s*)${JSON.stringify(current).replaceAll(".", "\\.")}`, "g"), `$1$2${JSON.stringify(version)}`);
+      let start = 0, end = before.length;
+      if (file === "bun.lock") {
+        const parsed = ts.parseJsonText(file, before);
+        const object = parsed.statements[0]!.expression as ts.ObjectLiteralExpression;
+        const workspaces = object.properties.find(property => property.name?.getText(parsed) === '"workspaces"')!;
+        start = workspaces.getStart(parsed); end = workspaces.end;
+      }
+      after = before.replace(new RegExp(`("version"|"@legendapp/[^"]+")(\\s*:\\s*)${JSON.stringify(current).replaceAll(".", "\\.")}`, "g"), (match, key, separator, offset) =>
+        key !== '"version"' || (offset >= start && offset < end) ? `${key}${separator}${JSON.stringify(version)}` : match);
       const values = (text: string) => text.replace(/("version"|"@legendapp\/[^"]+")\s*:\s*"[^"]*"/g, "$1");
       if (values(after) !== values(before)) throw new Error(`Release version edit of ${file} would change more than @legendapp versions`);
     } else if (file === "packages/cli/src/project.ts") {
@@ -265,7 +274,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
       const versions = JSON.parse(await run(["npm", "view", "@legendapp/spark", "versions", "--json"], true));
       const { version, previous: tag } = releaseTarget(current, Array.isArray(versions) ? versions : [versions], options.stable);
       const latest = latestChannel(version, options), channel = latest ? "latest" : "next";
-      const tagged = JSON.parse(await run(["npm", "view", "@legendapp/spark", "dist-tags", "--json"], true))[channel];
+      const tagged = JSON.parse(await run(["npm", "view", "@legendapp/spark", "dist-tags", "--json", "--prefer-online"], true))[channel];
       if (tagged && olderThan(version, tagged)) throw new Error(`npm ${channel} is ${tagged}, newer than ${version}; refusing to move it backwards. Pull main before releasing.`);
       let notes = changelogSection(readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), version);
       if (notes === undefined) {

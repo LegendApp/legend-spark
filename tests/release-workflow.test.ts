@@ -50,7 +50,7 @@ test("version edits rewrite only @legendapp versions and pins, never equal third
   const f = fixture();
   try {
     f.write("packages/desktop/skills/spark/UPGRADING.md", "# Upgrading Spark apps\n\n## 0.0.2-next.0\n\nNotes.\n");
-    const lock = JSON.stringify({ workspaces: { "packages/desktop": { name: "@legendapp/spark", version: "0.0.1", dependencies: { "@legendapp/spark-ui": "0.0.1", "concat-map": "0.0.1" } } }, packages: { "concat-map": ["concat-map@0.0.1", "", {}, "sha512-x"] } }, null, 2);
+    const lock = JSON.stringify({ workspaces: { "packages/desktop": { name: "@legendapp/spark", version: "0.0.1", dependencies: { "@legendapp/spark-ui": "0.0.1", "concat-map": "0.0.1" } } }, packages: { "concat-map": ["concat-map@0.0.1", "", { version: "0.0.1" }, "sha512-x"] } }, null, 2);
     f.write("bun.lock", lock);
     f.write("package.json", '{"version": "0.0.1", "dependencies": {"concat-map": "0.0.1", "@legendapp/spark": "0.0.1"}}\n');
     f.write("packages/cli/src/project.ts", 'export const VERSION = "0.0.1";\n');
@@ -610,6 +610,7 @@ test("a release never moves its npm channel backwards", async () => {
   try {
     f.tags.next = "0.0.2-next.5";
     await expect(f.release()).rejects.toThrow("npm next is 0.0.2-next.5, newer than 0.0.1-next.3; refusing to move it backwards");
+    expect(f.commands).toContainEqual(["npm", "view", "@legendapp/spark", "dist-tags", "--json", "--prefer-online"]);
     expect(existsSync(path.join(f.root, ".spark/release-workflow.json"))).toBe(false);
     expect(JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8")).version).toBe("0.0.1-next.2");
   } finally { f.cleanup(); }
