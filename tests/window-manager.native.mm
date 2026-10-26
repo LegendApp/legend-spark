@@ -267,6 +267,34 @@ int main() { @autoreleasepool {
   style[@"toolbarItems"] = changedItems; changed[@"windowStyle"] = style;
   [manager applyToolbarItemsFromOptions:changed toWindow:window identifier:@"brightness-probe"];
   assert(![window.toolbar.items isEqualToArray:originalItems]);
+  NSDictionary *(^searchOptions)(NSArray *) = ^NSDictionary *(NSArray *trailing) {
+    return @{ @"windowStyle": @{ @"toolbarItems": [@[@{ @"id": @"search", @"type": @"search", @"placement": @"leading" }] arrayByAddingObjectsFromArray:trailing] } };
+  };
+  NSToolbarItem *(^toolbarItem)(NSString *) = ^NSToolbarItem *(NSString *itemId) {
+    for (NSToolbarItem *item in window.toolbar.items) if ([item.itemIdentifier isEqual:[@"legend.toolbar." stringByAppendingString:itemId]]) return item;
+    return nil;
+  };
+  [manager applyToolbarItemsFromOptions:searchOptions(@[@{ @"id": @"go", @"type": @"button", @"label": @"Go", @"enabled": @YES }]) toWindow:window identifier:@"brightness-probe"];
+  NSToolbarItem *search = toolbarItem(@"search");
+  NSSearchField *searchField = [search isKindOfClass:NSSearchToolbarItem.class] ? ((NSSearchToolbarItem *)search).searchField : (NSSearchField *)search.view;
+  searchField.stringValue = @"typed";
+  // Unchanged items keep their control, so a search field keeps what the user typed when another item changes.
+  for (NSArray *trailing in @[
+    @[@{ @"id": @"go", @"type": @"button", @"label": @"Go", @"enabled": @NO }],
+    @[@{ @"id": @"go", @"type": @"button", @"label": @"Go", @"enabled": @NO }, @{ @"id": @"more", @"type": @"button", @"label": @"More" }],
+    @[@{ @"id": @"more", @"type": @"button", @"label": @"More" }, @{ @"id": @"go", @"type": @"button", @"label": @"Go", @"enabled": @NO }],
+    @[@{ @"id": @"more", @"type": @"button", @"label": @"More" }],
+  ]) {
+    [manager applyToolbarItemsFromOptions:searchOptions(trailing) toWindow:window identifier:@"brightness-probe"];
+    assert(toolbarItem(@"search") == search);
+    assert([searchField.stringValue isEqual:@"typed"]);
+    NSMutableArray *expected = [NSMutableArray arrayWithObjects:@"legend.toolbar.search", NSToolbarFlexibleSpaceItemIdentifier, nil];
+    for (NSDictionary *item in trailing) [expected addObject:[@"legend.toolbar." stringByAppendingString:item[@"id"]]];
+    assert([[window.toolbar.items valueForKey:@"itemIdentifier"] isEqualToArray:expected]);
+  }
+  assert(!toolbarItem(@"go"));
+  [manager applyToolbarItemsFromOptions:searchOptions(@[@{ @"id": @"more", @"type": @"button", @"label": @"More", @"enabled": @NO }]) toWindow:window identifier:@"brightness-probe"];
+  assert(!toolbarItem(@"more").enabled);
   [window close];
   puts("Window manager controls passed");
 } }

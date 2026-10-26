@@ -1267,12 +1267,43 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
     if (menuUpdate) return;
   }
+  [self updateToolbar:toolbar previousConfigs:previousConfigs ?: @[]];
+}
 
-  while (toolbar.items.count > 0) {
-    [toolbar removeItemAtIndex:toolbar.items.count - 1];
+// Recreating an item resets its control (a search field loses its text and focus), so only changed items are replaced.
+- (void)updateToolbar:(NSToolbar *)toolbar previousConfigs:(NSArray<NSDictionary *> *)previousConfigs
+{
+  NSMutableDictionary<NSString *, NSDictionary *> *previousByIdentifier = [NSMutableDictionary new];
+  for (NSDictionary *config in previousConfigs) {
+    NSString *itemIdentifier = [self toolbarItemIdentifierForConfig:config];
+    if (itemIdentifier.length > 0) previousByIdentifier[itemIdentifier] = config;
   }
-  for (NSToolbarItemIdentifier itemIdentifier in [self toolbarDefaultItemIdentifiers:toolbar]) {
-    [toolbar insertItemWithItemIdentifier:itemIdentifier atIndex:toolbar.items.count];
+  NSMutableDictionary<NSString *, NSDictionary *> *nextByIdentifier = [NSMutableDictionary new];
+  for (NSDictionary *config in self.toolbarItemConfigs[toolbar.identifier] ?: @[]) {
+    NSString *itemIdentifier = [self toolbarItemIdentifierForConfig:config];
+    if (itemIdentifier.length > 0) nextByIdentifier[itemIdentifier] = config;
+  }
+  NSArray<NSToolbarItemIdentifier> *identifiers = [self toolbarDefaultItemIdentifiers:toolbar];
+  for (NSInteger index = (NSInteger)toolbar.items.count - 1; index >= 0; index--) {
+    NSToolbarItemIdentifier itemIdentifier = toolbar.items[index].itemIdentifier;
+    NSDictionary *previous = previousByIdentifier[itemIdentifier];
+    NSDictionary *next = nextByIdentifier[itemIdentifier];
+    BOOL unchanged = previous || next ? [previous isEqualToDictionary:next] : YES;
+    if (![identifiers containsObject:itemIdentifier] || !unchanged) [toolbar removeItemAtIndex:index];
+  }
+  NSUInteger position = 0;
+  for (NSUInteger index = 0; index < toolbar.items.count;) {
+    NSUInteger found = [identifiers indexOfObject:toolbar.items[index].itemIdentifier inRange:NSMakeRange(position, identifiers.count - position)];
+    if (found == NSNotFound) {
+      [toolbar removeItemAtIndex:index];
+    } else {
+      position = found + 1;
+      index++;
+    }
+  }
+  for (NSUInteger index = 0; index < identifiers.count; index++) {
+    if (index < toolbar.items.count && [toolbar.items[index].itemIdentifier isEqual:identifiers[index]]) continue;
+    [toolbar insertItemWithItemIdentifier:identifiers[index] atIndex:index];
   }
 }
 
