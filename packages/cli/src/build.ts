@@ -377,7 +377,7 @@ async function buildUnlocked(
       "CODE_SIGNING_ALLOWED=NO",
       ...(mode === "release" ? macOSReleaseSettings : []),
       "-jobs",
-      "8",
+      /^\d+$/.test(process.env.SPARK_XCODEBUILD_JOBS ?? "") ? process.env.SPARK_XCODEBUILD_JOBS! : "8",
       "build",
     ],
     {
