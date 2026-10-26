@@ -4,6 +4,7 @@
   "license": "MIT",
   "files": [
     "AppDelegate.mm",
+    "macos",
     "windows",
     "SparkCustomize.mm"
   ],

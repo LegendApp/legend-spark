@@ -136,13 +136,17 @@ test("single Spark archive resolves public exports and preserves private native 
     mkdirSync(pluginStub);
     writeFileSync(path.join(pluginStub, "package.json"), JSON.stringify({ name: "expo-desktop-config-plugins", main: "index.cjs" }));
     writeFileSync(path.join(pluginStub, "index.cjs"), `
-      exports.withEntitlementsPlist = exports.withAppDelegate = exports.withPodfile = config => config;
+      exports.withEntitlementsPlist = exports.withAppDelegate = exports.withPodfile = exports.withXcodeProject = config => config;
       exports.generatedInfo = {};
       exports.withInfoPlist = (config, action) => {
         Object.assign(exports.generatedInfo, action({ modRequest: { projectRoot: ${JSON.stringify(app)} }, modResults: {} }).modResults);
         return config;
       };
     `);
+    const configPluginsStub = path.join(app, "node_modules/@expo/config-plugins");
+    mkdirSync(configPluginsStub, { recursive: true });
+    writeFileSync(path.join(configPluginsStub, "package.json"), JSON.stringify({ name: "@expo/config-plugins", main: "index.cjs" }));
+    writeFileSync(path.join(configPluginsStub, "index.cjs"), "exports.withMod = config => config; exports.IOSConfig = {};");
     const plugin = spawnProcess([process.execPath, "-e", `
       const { createRequire } = require("node:module");
       const req = createRequire(${JSON.stringify(path.join(app, "package.json"))});
