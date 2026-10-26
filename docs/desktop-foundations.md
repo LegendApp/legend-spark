@@ -45,8 +45,9 @@ const subscription = await watch(libraryPath, () => scheduleRescan(), {
 await subscription.remove();
 ```
 
-Recursive watching requires an existing directory. Nested edits, new directories,
-and replacement of the watched root invalidate that root. The callback receives
+On macOS, recursive watches can target a missing path. Windows requires an existing
+directory. Nested edits, new directories, and replacement of the watched root
+invalidate that root. The callback receives
 the originally watched path, not a precise per-file change record. Events can be
 coalesced or include unrelated sibling changes, particularly on Windows. Debounce
 and rescan; do not count events or use them as an audit log. Symlink targets outside

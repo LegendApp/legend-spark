@@ -21,7 +21,7 @@ await remove(destination); // void; absence is success
 
 Whole-file writes replace atomically on supported desktop backends. Conditional writes compare observed UTF-8 text before replacing; another process can still write between those steps. A conflict returns `{ written: false }`; missing files and IO failures reject. Invalid UTF-8 rejects. Use the [streaming APIs](file-streams.md) for bounded memory on large files.
 
-`watch(path, listener, { recursive })` resolves when native registration succeeds and returns an asynchronous `remove()`. Notifications invalidate cached data; they are not an exact change log. Recursive watches require a directory. Removal stops JS callbacks immediately, joins concurrent calls, and permits retry if native cleanup fails. File handles use `close()` with the same cleanup guarantees; new work rejects after closing starts, even if cleanup needs retry.
+`watch(path, listener, { recursive })` resolves when native registration succeeds and returns an asynchronous `remove()`. Notifications invalidate cached data; they are not an exact change log. On macOS, recursive watches can target a missing path. Windows requires an existing directory. Removal stops JS callbacks immediately, joins concurrent calls, and permits retry if native cleanup fails. File handles use `close()` with the same cleanup guarantees; new work rejects after closing starts, even if cleanup needs retry.
 
 ## Scanning
 
