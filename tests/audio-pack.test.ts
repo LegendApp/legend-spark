@@ -12,7 +12,7 @@ test("distributed audio archives apply the exact workspace delta and verify upst
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-audio-package-"));
   try {
     const actual = path.resolve(import.meta.dirname, "..");
-    const patch = readFileSync(path.join(actual, "patches/workspace/expo-audio@1.1.1.patch"), "utf8");
+    const patch = readFileSync(path.join(actual, "patches/workspace/expo-audio@55.0.18.patch"), "utf8");
     const stage = path.join(root, "upstream"), cache = path.join(root, ".spark/vendor/audio"), output = path.join(root, "output");
     mkdirSync(cache, { recursive: true }); mkdirSync(path.join(root, "patches/workspace"), { recursive: true });
     const expected = new Map<string, string>();
@@ -24,8 +24,8 @@ test("distributed audio archives apply the exact workspace delta and verify upst
       const target = path.join(stage, relative); mkdirSync(path.dirname(target), { recursive: true }); writeFileSync(target, original);
     }
     const archive = path.join(cache, "upstream.tgz"); await packArchive(stage, archive);
-    writeFileSync(path.join(root, "patches/workspace/upstream.json"), JSON.stringify({ "expo-audio": { version: "1.1.1", integrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}` } }));
-    writeFileSync(path.join(root, "patches/workspace/expo-audio@1.1.1.patch"), patch);
+    writeFileSync(path.join(root, "patches/workspace/upstream.json"), JSON.stringify({ "expo-audio": { version: "55.0.18", integrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}` } }));
+    writeFileSync(path.join(root, "patches/workspace/expo-audio@55.0.18.patch"), patch);
     cpSync(path.join(actual, "patches/licenses"), path.join(root, "patches/licenses"), { recursive: true });
     const manifest = await packAudio(root, output); const packed = path.join(output, manifest["expo-audio"]);
     expect(execFileSync("tar", ["-tzf", packed], { encoding: "utf8" })).not.toContain("package/.spark/");

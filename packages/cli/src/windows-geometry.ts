@@ -19,7 +19,7 @@ export function patchWindowsGeometry(source: string) {
 export function prepareWindowsGeometry(root: string) {
   const req = createRequire(path.join(root, "package.json"));
   const manifest = req.resolve("react-native-windows/package.json");
-  if (JSON.parse(readFileSync(manifest, "utf8")).version !== "0.81.35") throw new Error("spark's Windows geometry adapter requires react-native-windows 0.81.35");
+  if (JSON.parse(readFileSync(manifest, "utf8")).version !== "0.83.2") throw new Error("spark's Windows geometry adapter requires react-native-windows 0.83.2");
   const rnw = path.dirname(manifest), source = path.join(rnw, "Microsoft.ReactNative/Fabric/ComponentView.h");
   const original = readFileSync(source, "utf8"); const patched = patchWindowsGeometry(original);
   if (patched !== original) writeFileSync(source, patched);

@@ -1,22 +1,24 @@
 --- a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -31,6 +31,7 @@
+@@ -30,8 +30,8 @@ import kotlinx.coroutines.CoroutineScope
  import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
  import kotlinx.coroutines.cancel
+-import kotlinx.coroutines.isActive
  import kotlinx.coroutines.launch
 +import kotlinx.coroutines.withContext
+ import java.lang.ref.WeakReference
  import java.net.URL
  
- @OptIn(UnstableApi::class)
-@@ -43,6 +44,7 @@
-   private val scope = CoroutineScope(Dispatchers.IO)
+@@ -46,6 +46,7 @@ class AudioControlsService : MediaSessionService() {
    private var currentArtworkUrl: URL? = null
    private var currentArtwork: Bitmap? = null
+   private var artworkLoadJob: Job? = null
 +  private var artworkRequest = 0
    private val notificationId: Int
      get() = currentPlayer?.hashCode() ?: CHANNEL_ID.hashCode()
  
-@@ -207,16 +209,11 @@
+@@ -281,16 +282,11 @@ class AudioControlsService : MediaSessionService() {
      currentPlayer?.isActiveForLockScreen = false
      hideNotification()
  
@@ -34,15 +36,15 @@
      player?.isActiveForLockScreen = true
  
      if (player != null) {
-@@ -228,6 +225,7 @@
+@@ -308,6 +304,7 @@ class AudioControlsService : MediaSessionService() {
  
-       addSession(session)
-       mediaSession = session
-+      updateArtwork(metadata?.artworkUrl)
+         addSession(session)
+         mediaSession = session
++        updateArtwork(metadata?.artworkUrl)
  
-       // Set initial custom layout
-       updateSessionCustomLayout(player.ref.isPlaying)
-@@ -259,12 +257,7 @@
+         updateSessionCustomLayout(player.ref.isPlaying)
+ 
+@@ -328,12 +325,7 @@ class AudioControlsService : MediaSessionService() {
        return
      }
      currentMetadata = metadata
@@ -56,51 +58,76 @@
    }
  
    private fun clearSessionInternal() {
-@@ -275,6 +268,7 @@
-     playbackListener = null
+@@ -341,6 +333,7 @@ class AudioControlsService : MediaSessionService() {
+     removePlayerListener()
      currentPlayer = null
      currentMetadata = null
 +    clearArtwork()
      mediaSession?.release()
      mediaSession = null
-     stopForeground(STOP_FOREGROUND_REMOVE)
-@@ -298,19 +292,36 @@
-     return super.onBind(intent) ?: binder
+     currentPlayer?.assignBasicMediaSession()
+@@ -369,16 +362,8 @@ class AudioControlsService : MediaSessionService() {
+       currentMetadata = metadata
+       currentOptions = options
+ 
+-      // Reload artwork if metadata has changed
+-      metadata?.artworkUrl?.let {
+-        loadArtworkFromUrl(it) { bitmap ->
+-          currentArtwork = bitmap
+-          postOrStartForegroundNotification(startInForeground = false)
+-        }
+-      }
+-
+       updateSessionCustomLayout(player.ref.isPlaying)
+-      postOrStartForegroundNotification(startInForeground = false)
++      updateArtwork(metadata?.artworkUrl)
+     } else {
+       setActivePlayerInternal(player, metadata, options)
+     }
+@@ -388,26 +373,38 @@ class AudioControlsService : MediaSessionService() {
+     clearSessionInternal()
    }
  
 -  private fun loadArtworkFromUrl(url: URL, callback: (Bitmap?) -> Unit) {
 +  private fun clearArtwork() {
 +    artworkRequest++
++    artworkLoadJob?.cancel()
++    artworkLoadJob = null
 +    currentArtworkUrl = null
 +    currentArtwork = null
 +  }
 +
 +  private fun updateArtwork(url: URL?) {
      if (url != currentArtworkUrl) {
++      clearArtwork()
        currentArtworkUrl = url
--      scope.launch {
+-      artworkLoadJob?.cancel()
+-
+-      artworkLoadJob = scope.launch {
 -        try {
 -          val inputStream = url.openConnection().getInputStream()
 -          val bitmap = BitmapFactory.decodeStream(inputStream)
--          callback(bitmap)
--        } catch (e: Exception) {
--          callback(null)
-+      currentArtwork = null
-+      val request = ++artworkRequest
+-
+-          if (isActive) {
+-            callback(bitmap)
++      val request = artworkRequest
 +      if (url != null) {
-+        scope.launch {
++        artworkLoadJob = scope.launch {
 +          val bitmap = try {
 +            url.openConnection().getInputStream().use { BitmapFactory.decodeStream(it) }
 +          } catch (e: Exception) {
 +            null
-+          }
+           }
+-        } catch (e: Exception) {
+-          if (isActive) {
+-            callback(null)
 +          withContext(Dispatchers.Main) {
 +            // A replaced/cleared session must never receive an earlier download.
 +            if (request == artworkRequest && currentPlayer != null) {
 +              currentArtwork = bitmap
 +              postOrStartForegroundNotification(startInForeground = false)
 +            }
-+          }
+           }
          }
        }
      }
@@ -109,14 +136,16 @@
    }
  
    private fun hideNotification() {
-@@ -322,6 +333,7 @@
+@@ -419,8 +416,7 @@ class AudioControlsService : MediaSessionService() {
    override fun onDestroy() {
      super.onDestroy()
-     instance = null
+ 
+-    artworkLoadJob?.cancel()
+-    artworkLoadJob = null
 +    clearArtwork()
-     try {
-       scope.cancel()
-     } catch (e: Exception) {
+     scope.cancel()
+     mediaSession?.release()
+     mediaSession = null
 --- a/package.json
 +++ b/package.json
 @@ -11,8 +11,6 @@

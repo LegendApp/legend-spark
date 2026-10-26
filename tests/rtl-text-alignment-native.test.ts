@@ -24,7 +24,7 @@ test("RTL text alignment patch install checks the version and preserves package 
     const dependency = path.join(root, "node_modules/react-native-macos"), cache = path.join(root, "cache.mm");
     const installed = path.join(dependency, "ReactCommon/react/renderer/textlayoutmanager/platform/ios/react/renderer/textlayoutmanager/RCTAttributedTextUtils.mm");
     mkdirSync(path.dirname(installed), { recursive: true });
-    writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.81.7" }));
+    writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.83.0" }));
     writeFileSync(cache, pristine); linkSync(cache, installed);
     installRTLTextAlignmentPatch(root);
     expect(readFileSync(cache, "utf8")).toBe(pristine);
@@ -32,7 +32,7 @@ test("RTL text alignment patch install checks the version and preserves package 
     const inode = statSync(installed).ino; installRTLTextAlignmentPatch(root);
     expect(statSync(installed).ino).toBe(inode);
     writeFileSync(path.join(dependency, "package.json"), JSON.stringify({ name: "react-native-macos", version: "0.82.0" }));
-    expect(() => installRTLTextAlignmentPatch(root)).toThrow("requires react-native-macos@0.81.7");
+    expect(() => installRTLTextAlignmentPatch(root)).toThrow("requires react-native-macos@0.83.0");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

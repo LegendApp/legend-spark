@@ -13,9 +13,9 @@
     "common"
   ],
   "peerDependencies": {
-    "react": "^19.1.0",
-    "react-native": "0.81.6",
-    "expo-linking": "~8.0.12"
+    "react": "^19.2.0",
+    "react-native": "0.83.10",
+    "expo-linking": "~55.0.17"
   },
   "codegenConfig": {
     "name": "RNDesktopLinksSpec",

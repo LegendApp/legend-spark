@@ -1,4 +1,4 @@
-// RN macOS 0.81.7 Fabric leaves natural ("auto" or unset) textAlign as NSTextAlignmentNatural. TextKit resolves that
+// RN macOS 0.83.0 Fabric leaves natural ("auto" or unset) textAlign as NSTextAlignmentNatural. TextKit resolves that
 // from the user's language, not the Yoga layout direction, so text in an RTL subtree of an LTR-localized app aligns
 // left. The patch resolves natural alignment from the layout direction. "left" and "right" keep the upstream
 // behavior, shared with iOS: they swap in RTL.
@@ -48,7 +48,7 @@ function patchTextAlignmentSource(source) {
 function installRTLTextAlignmentPatch(root) {
   const manifest = require.resolve("react-native-macos/package.json", { paths: [root] });
   const version = JSON.parse(fs.readFileSync(manifest, "utf8")).version;
-  if (version !== "0.81.7") throw new Error(`spark's RTL text alignment patch requires react-native-macos@0.81.7; found ${version}.`);
+  if (version !== "0.83.0") throw new Error(`spark's RTL text alignment patch requires react-native-macos@0.83.0; found ${version}.`);
   const target = path.join(path.dirname(manifest), file);
   const source = fs.readFileSync(target, "utf8"), patched = patchTextAlignmentSource(source);
   if (source !== patched) {

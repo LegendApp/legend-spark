@@ -25,9 +25,9 @@ for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {
       const pkg = JSON.parse(first);
       const pins = manager === "yarn" ? pkg.resolutions : manager === "pnpm" ? parse(readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8")).overrides : pkg.overrides;
       expect(pkg.dependencies["expo-desktop"]).toBe("1.0.6");
-      expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("54.81.6");
+      expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("55.83.10");
       expect(pins["expo-desktop-config-plugins"]).toBe("1.3.2");
-      expect(pins["react-native-macos"]).toBe("0.81.7");
+      expect(pins["react-native-macos"]).toBe("0.83.0");
       expect(pkg.dependencies["@legendapp/spark"]).toBe(pins["@legendapp/spark"]);
       await refreshLocalPackages(root, manifest, manager);
       expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(first);

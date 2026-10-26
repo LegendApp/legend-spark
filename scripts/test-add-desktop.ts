@@ -14,8 +14,8 @@ if (existsSync(root)) throw new Error("Choose a fresh fixture directory");
 mkdirSync(path.join(root, "src"), { recursive: true });
 writeJson(path.join(root, "package.json"), { name: "existing-expo", version: "1.0.0", private: true, main: "src/bootstrap.ts", packageManager: `npm@${(await run(framework, ["npm", "--version"], { capture: true })).trim()}`,
   scripts: { start: "expo start", ios: "expo run:ios", android: "expo run:android", web: "expo start --web", macos: "echo existing script" },
-  dependencies: { expo: "54.0.37", react: "19.1.4", "react-native": "0.81.6", "react-dom": "19.1.4", "react-native-web": "0.21.0" },
-  devDependencies: { typescript: "5.9.3", "@types/react": "19.1.10" },
+  dependencies: { expo: "55.0.32", react: "19.2.0", "react-native": "0.83.10", "react-dom": "19.2.0", "react-native-web": "0.21.0" },
+  devDependencies: { typescript: "5.9.3", "@types/react": "19.2.18" },
 });
 writeJson(path.join(root, "app.json"), { expo: { name: "ExistingApp", slug: "existing-app", version: "1.2.3", platforms: ["ios", "android", "web"], ios: { bundleIdentifier: "org.example.existing" }, android: { package: "org.example.existing" }, extra: { original: true } } });
 writeFileSync(path.join(root, "app.config.ts"), 'import type { ConfigContext } from "expo/config";\nexport default ({ config }: ConfigContext) => ({ ...config, extra: { ...config.extra, environment: process.env.APP_ENV ?? "local" }, plugins: ["./plugin.cjs"] });\n');

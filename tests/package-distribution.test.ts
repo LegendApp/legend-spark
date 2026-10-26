@@ -154,7 +154,7 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(JSON.parse(pluginOut).SparkFrameworkVersion).toBe(manifest.version);
     const singletonPeers = ["expo", "react", "react-native", "react-dom"];
     for (const name of singletonPeers) expect(manifest.dependencies).not.toHaveProperty(name);
-    expect(manifest.peerDependencies).toMatchObject({ expo: "54.0.37", react: "^19.1.0", "react-native": "0.81.6", "react-dom": "^19.1.0" });
+    expect(manifest.peerDependencies).toMatchObject({ expo: "55.0.32", react: "^19.2.0", "react-native": "0.83.10", "react-dom": "^19.2.0" });
     expect(manifest.peerDependenciesMeta["react-dom"]).toEqual({ optional: true });
     expect(manifest.dependencies["@react-native-runtimes/core"]).toBe("0.1.0-alpha.2");
     expect(manifest.dependencies["react-native-nitro-modules"]).toBe("0.37.0");
@@ -313,8 +313,8 @@ test("Create Spark archive is peer-free and runs without installing the framewor
     for (const variant of ["blank-typescript", "windows", "universal"]) {
       expect(existsSync(path.join(destination, "templates", variant, "README.md"))).toBe(true);
       const template = JSON.parse(readFileSync(path.join(destination, "templates", variant, "package.json"), "utf8"));
-      expect(template.dependencies).toMatchObject({ "@legendapp/spark": VERSION, react: "19.1.4", "react-native": "0.81.6", expo: "54.0.37" });
-      expect(template.overrides).toMatchObject({ react: "19.1.4", "react-native": "0.81.6", "react-native-macos": "0.81.7" });
+      expect(template.dependencies).toMatchObject({ "@legendapp/spark": VERSION, react: "19.2.0", "react-native": "0.83.10", expo: "55.0.32" });
+      expect(template.overrides).toMatchObject({ react: "19.2.0", "react-native": "0.83.10", "react-native-macos": "0.83.0" });
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 }, 120_000);

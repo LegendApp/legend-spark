@@ -1,4 +1,4 @@
-Upstream: expo-audio@1.1.1
-Source: https://github.com/expo/expo/blob/ce76892f5b356dc1bbfeabaf29dd8a50a19aa08a/LICENSE
-Commit: ce76892f5b356dc1bbfeabaf29dd8a50a19aa08a
+Upstream: expo-audio@55.0.18
+Source: https://github.com/expo/expo/blob/856b99321eeb04bd528b33f90c0e7fa2859a1fcb/LICENSE
+Commit: 856b99321eeb04bd528b33f90c0e7fa2859a1fcb
 The accompanying LICENSE is copied verbatim from this upstream revision.

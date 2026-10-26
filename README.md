@@ -142,7 +142,7 @@ Packaging requires signing credentials and a notarization profile. It signs a st
 
 Windows uses the same CLI, starter, prebuilt registry, native compatibility checks, and managed Metro session. The Windows starter includes the native host; the SDK prebuilt profile includes the desktop modules and external integrations. Their Windows source implementations are ready for native acceptance. There is no separate source kit to install.
 
-On Windows 11 x64 or ARM64 (including Parallels), install the prerequisites in the [Windows guide](docs/windows-slice.md), including Visual Studio 2026 / MSVC v145 for the pinned RNW 0.81.35 template. Then run from the framework checkout:
+On Windows 11 x64 or ARM64 (including Parallels), install the prerequisites in the [Windows guide](docs/windows-slice.md), including Visual Studio 2026 / MSVC v145 for the pinned RNW 0.83.2 template. Then run from the framework checkout:
 
 ```powershell
 bun install
@@ -316,7 +316,7 @@ macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
 This is a prerelease; APIs and tooling may change. Intel macOS has architecture selection tooling but no verified native build/runtime support; see [Intel macOS](docs/macos-intel.md). Windows currently covers development builds, with details in the [Windows guide](docs/windows-slice.md). Linux and Mac App Store distribution are unsupported. Mobile/web development delegates to Expo.
 
-The checkout uses Expo SDK 54, React Native 0.81, and Expo Desktop 1.0.0. See the [integration boundary](docs/expo-desktop-integration.md) for upstream requirements.
+The checkout uses Expo SDK 55, React Native 0.83, and Expo Desktop 1.0.6. See the [integration boundary](docs/expo-desktop-integration.md) for upstream requirements.
 
 Use the [Mac and Windows manual acceptance checklist](docs/desktop-manual-acceptance.md)
 to validate a checkout on real machines, including runtime rebuilds and OS interactions.

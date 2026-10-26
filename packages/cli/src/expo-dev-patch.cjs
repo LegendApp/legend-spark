@@ -3,18 +3,18 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const { createHash } = require('node:crypto');
 
-const VERSION = '54.0.27';
+const VERSION = '55.0.37';
 const extension = JSON.stringify(path.join(__dirname, 'expo-dev-extension.cjs'));
 // Process-local patches: installed Expo files remain untouched. Verify the exact
 // upstream inputs before starting, so an Expo upgrade cannot silently lose keys.
 const patches = [
-  ['interface/commandsTable.js', 'eeb1700b0ae26613bf6dedab556479a4c15d3a3c94c63ecbb5db21c4899e1645',
+  ['interface/commandsTable.js', '6d809faa4721fd68e86af40372e6aef7f729902afc1a1484f66cade067db4792',
     'function logCommandsTable(ui) {',
     `function logCommandsTable(ui) {\n    ui = require(${extension}).integrateCommands(ui);`],
   ['interface/startInterface.js', 'c8e55431b18a37e1ab2be22f068c980e9cc41ffc105ea7478e34fc11b91a22bd',
     '    const onPressAsync = async (key)=>{',
     `    const onPressAsync = async (key)=>{\n        try {\n            if (await require(${extension}).handleKey(key)) return;\n        } catch (error) {\n            _log.exception(error);\n            return;\n        }`],
-  ['startAsync.js', '0e062078e63ad6264b1393d403ad56d65a38c6430d30fdac50cd656486cd418b',
+  ['startAsync.js', 'fb52b3bd7962ad13c57c1a6e4050c9cc1420197186df7d0259d74ddbd79ae46b',
     '    await (0, _profile.profile)(devServerManager.startAsync.bind(devServerManager))(startOptions);',
     // Dependency validation can wait on the network after Metro is listening.
     // Report actual server readiness before those optional startup checks.

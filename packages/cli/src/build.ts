@@ -317,7 +317,7 @@ async function buildUnlocked(
           "--platform",
           "macos",
           "--template",
-          "expo-desktop-template-bare-minimum@54.81.6",
+          "expo-desktop-template-bare-minimum@55.83.10",
           "--no-install",
           // Template renaming is not idempotent (HelloWorld becomes
           // LegendHelloWorld, then LegendLegendHelloWorld). Native projects

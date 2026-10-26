@@ -1,4 +1,4 @@
-// RN macOS 0.81.7 Fabric gives a TextInput no layout direction: its text attributes have none, and the iOS
+// RN macOS 0.83.0 Fabric gives a TextInput no layout direction: its text attributes have none, and the iOS
 // semanticContentAttribute that makes UIKit's natural alignment follow it isn't set on macOS. TextKit resolves
 // NSTextAlignmentNatural from the user's language, so in an RTL layout a TextInput with natural ("auto" or unset)
 // textAlign draws its text and placeholder from the left. The patch aligns them to the leading edge of the input's
@@ -100,7 +100,7 @@ function patchTextInputAlignmentSource(source) {
 function installRTLTextInputAlignmentPatch(root) {
   const manifest = require.resolve("react-native-macos/package.json", { paths: [root] });
   const version = JSON.parse(fs.readFileSync(manifest, "utf8")).version;
-  if (version !== "0.81.7") throw new Error(`spark's RTL TextInput alignment patch requires react-native-macos@0.81.7; found ${version}.`);
+  if (version !== "0.83.0") throw new Error(`spark's RTL TextInput alignment patch requires react-native-macos@0.83.0; found ${version}.`);
   const target = path.join(path.dirname(manifest), file);
   const source = fs.readFileSync(target, "utf8"), patched = patchTextInputAlignmentSource(source);
   if (source !== patched) {

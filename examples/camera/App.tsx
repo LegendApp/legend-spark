@@ -83,11 +83,11 @@ function CameraPage({ report }: { report?: string }) {
   }, []);
   useEffect(() => {
     if (!complete || nitro === undefined || !report) return;
-    void writeText(report, JSON.stringify({ passed: nitro && checks.length > 0 && checks.every(c => c.passed), versions: { reactNative: "0.81.6", reactNativeMacOS: "0.81.7", nitro: "0.37.0", nitroImage: "0.15.2", visionCamera: "5.2.3" }, results: checks, nativeViewPassed: nitro, hardwareChecks: "Pending on a Mac with a camera: permission, preview, photo, video, microphone, device reconnect" }, null, 2)).catch(console.error);
+    void writeText(report, JSON.stringify({ passed: nitro && checks.length > 0 && checks.every(c => c.passed), versions: { reactNative: "0.83.10", reactNativeMacOS: "0.83.0", nitro: "0.37.0", nitroImage: "0.15.2", visionCamera: "5.2.3" }, results: checks, nativeViewPassed: nitro, hardwareChecks: "Pending on a Mac with a camera: permission, preview, photo, video, microphone, device reconnect" }, null, 2)).catch(console.error);
   }, [complete, nitro, checks, report]);
   return <ScrollView contentContainerStyle={{ padding: 28, gap: 20 }}>
     <Text style={{ fontSize: 28, fontWeight: "700" }}>VisionCamera for macOS · prototype</Text>
-    <Text>RN macOS 0.81.7 · VisionCamera 5.2.3 · Nitro 0.37.0 · macOS 14+ · Apple Silicon</Text>
+    <Text>RN macOS 0.83.0 · VisionCamera 5.2.3 · Nitro 0.37.0 · macOS 14+ · Apple Silicon</Text>
     <Text>Camera-free checks run automatically. Use the controls below on a Mac with a camera to verify preview and capture.</Text>
     {complete && checks.every(c => c.passed) && <CameraDemo />}
     <NitroCompatibility onComplete={onNitroComplete} />

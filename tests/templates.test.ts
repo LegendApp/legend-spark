@@ -59,22 +59,22 @@ test("all templates retain the tested desktop matrix", () => {
   for (const folder of ["blank-typescript", "windows", "universal"]) {
     const pkg = JSON.parse(readFileSync(path.join(templates, folder, "package.json"), "utf8"));
     expect(pkg.dependencies["expo-desktop"]).toBe("1.0.6");
-    expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("54.81.6");
+    expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("55.83.10");
     expect(pkg.dependencies["expo-desktop-prebuild-config"]).toBe("1.1.3");
     expect(pkg.dependencies["expo-desktop-config-plugins"]).toBe("1.3.2");
-    expect(pkg.dependencies["expo-desktop-metro-config"]).toBe("54.81.3");
-    expect(pkg.overrides["expo-desktop-modules-core"]).toBe("54.0.14");
-    expect(pkg.overrides["expo-desktop-stubs"]).toBe("54.0.15");
+    expect(pkg.dependencies["expo-desktop-metro-config"]).toBe("55.83.3");
+    expect(pkg.overrides["expo-desktop-modules-core"]).toBe("55.0.2");
+    expect(pkg.overrides["expo-desktop-stubs"]).toBe("55.0.2");
     const { expo } = JSON.parse(readFileSync(path.join(templates, folder, "app.json"), "utf8"));
     expect(expo.macos).toMatchObject({ version: expo.version, buildNumber: "1" });
-    expect(pkg.dependencies.expo).toBe("54.0.37");
+    expect(pkg.dependencies.expo).toBe("55.0.32");
     const yarn = structuredClone(pkg);
     applyOverrides(yarn, {}, "yarn");
     expect(yarn.resolutions.expo).toBe(pkg.dependencies.expo);
-    expect(pkg.overrides["@expo/cli"]).toBe("54.0.27");
-    expect(pkg.dependencies["react-native"]).toBe("0.81.6");
-    expect(pkg.overrides["react-native-macos"]).toBe("0.81.7");
-    expect(pkg.overrides["react-native-windows"]).toBe("0.81.35");
+    expect(pkg.overrides["@expo/cli"]).toBe("55.0.37");
+    expect(pkg.dependencies["react-native"]).toBe("0.83.10");
+    expect(pkg.overrides["react-native-macos"]).toBe("0.83.0");
+    expect(pkg.overrides["react-native-windows"]).toBe("0.83.2");
     expect(pkg.scripts.postinstall).toBe("node node_modules/@legendapp/spark/init-template.cjs");
     for (const name of ["@legendapp/spark", "react-native-enriched-markdown", "fsevents"]) {
       expect(pkg.allowScripts[name]).toBe(true);

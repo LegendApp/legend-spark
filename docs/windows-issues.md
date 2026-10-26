@@ -145,7 +145,7 @@ owner. The platform runner's prepare-only mode is available on macOS, including
   fail on destruction/load failure or after 120 seconds, rather than hanging.
   The current macOS guide does not claim validated threaded UI; Windows threaded
   surfaces likewise require explicit visual, input and lifecycle acceptance.
-- The pinned RNW 0.81.35 geometry adapter exposes hit testing/client bounds for
+- The pinned RNW 0.83.2 geometry adapter exposes hit testing/client bounds for
   drag/drop without changing existing interface IDs. It fails explicitly if the
   pinned source changes. Native geometry, clipping and scrolling need Windows
   checks. Expo Desktop beta still owns project generation.

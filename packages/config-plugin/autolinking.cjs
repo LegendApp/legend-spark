@@ -1,4 +1,4 @@
-// Expo 54's file scanner ignores Bun file: dependencies' symlinked podspecs.
+// Expo's file scanner ignores Bun file: dependencies' symlinked podspecs.
 const fs = require("node:fs");
 const path = require("node:path");
 const before = `        return (await fs_1.default.promises.readdir(targetPath, { withFileTypes: true }))
@@ -22,7 +22,7 @@ function patchAutolinkingSource(source) {
 function installAutolinkingPatch(root) {
   const manifest = require.resolve("expo-modules-autolinking/package.json", { paths: [root] });
   const version = JSON.parse(fs.readFileSync(manifest, "utf8")).version;
-  if (version !== "3.0.27") throw new Error(`spark's autolinking patch requires expo-modules-autolinking@3.0.27; found ${version}.`);
+  if (version !== "55.0.28") throw new Error(`spark's autolinking patch requires expo-modules-autolinking@55.0.28; found ${version}.`);
   const file = path.join(path.dirname(manifest), "build/utils.js");
   const source = fs.readFileSync(file, "utf8");
   const patched = patchAutolinkingSource(source);
@@ -32,8 +32,8 @@ function installAutolinkingPatch(root) {
     fs.renameSync(temporary, file); // Do not modify package-cache hardlinks.
   }
 }
-// Expo autolinking ignores an app-level `ios: null` override when the package's own
-// react-native.config.js declares iOS, so pass the native selection's exclusions to its CLI.
+// Packages such as Codex declare iOS for the desktop autolinker in their own
+// react-native.config.js, so pass the native selection's exclusions to its CLI.
 function excludeNativeModules(podfile, excluded) {
   const call = /use_native_modules!\(config_command(?: \+ \[[^\]]*\])?\)/;
   if (!call.test(podfile)) throw new Error("The macOS Podfile no longer calls use_native_modules!(config_command); review spark's native selection.");

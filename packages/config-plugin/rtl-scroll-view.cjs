@@ -1,4 +1,4 @@
-// RN macOS 0.81.7 Fabric mirrors ScrollView content in RTL: it flips the content container with a
+// RN macOS 0.83.0 Fabric mirrors ScrollView content in RTL: it flips the content container with a
 // layer transform, but the scroll view flip that cancels it on iOS is iOS-only. AppKit ignores layer
 // transforms when it scrolls NSClipView and routes events, so macOS flips nothing (Yoga already
 // places RTL content), reports offsets unconverted, and anchors RTL content to its right end.
@@ -132,7 +132,7 @@ function patchScrollViewSource(source) {
 function installRTLScrollViewPatch(root) {
   const manifest = require.resolve("react-native-macos/package.json", { paths: [root] });
   const version = JSON.parse(fs.readFileSync(manifest, "utf8")).version;
-  if (version !== "0.81.7") throw new Error(`spark's RTL scroll patch requires react-native-macos@0.81.7; found ${version}.`);
+  if (version !== "0.83.0") throw new Error(`spark's RTL scroll patch requires react-native-macos@0.83.0; found ${version}.`);
   const target = path.join(path.dirname(manifest), file);
   const before = fs.readFileSync(target, "utf8"), after = patchScrollViewSource(before);
   if (before !== after) {

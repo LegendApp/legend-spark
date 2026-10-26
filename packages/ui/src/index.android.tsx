@@ -1,7 +1,16 @@
 import type { ComponentProps } from "react";
-function ExpoButton(props: ComponentProps<typeof import("@expo/ui/jetpack-compose").Button>) {
-  const Component = (require("@expo/ui/jetpack-compose") as typeof import("@expo/ui/jetpack-compose")).Button;
-  return <Component {...props} />;
+type Compose = typeof import("@expo/ui/jetpack-compose");
+const compose = () => require("@expo/ui/jetpack-compose") as Compose;
+const buttons = { default: "Button", bordered: "OutlinedButton", borderless: "TextButton" } as const;
+function ExpoButton({ variant, label, ...props }: Omit<ComponentProps<Compose["Button"]>, "children"> & { variant: keyof typeof buttons; label: string }) {
+  const { Host, Text, [buttons[variant]]: Component } = compose();
+  return <Host style={{ flex: 1 }}><Component {...props}><Text>{label}</Text></Component></Host>;
+}
+function Segments({ labels, selected, enabled, onSelect }: { labels: string[]; selected: number; enabled: boolean; onSelect: (index: number) => void }) {
+  const { Host, Text, SingleChoiceSegmentedButtonRow, SegmentedButton } = compose();
+  return <Host style={{ flex: 1 }}><SingleChoiceSegmentedButtonRow>{labels.map((label, index) =>
+    <SegmentedButton key={index} selected={index === selected} enabled={enabled} onClick={() => onSelect(index)}><SegmentedButton.Label><Text>{label}</Text></SegmentedButton.Label></SegmentedButton>)}
+  </SingleChoiceSegmentedButtonRow></Host>;
 }
 import { View, Text } from "react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
@@ -18,9 +27,9 @@ export function getControlAvailability(control: ControlKind): Availability {
 export function Button(props: ButtonProps) {
   validateButton(props); const control = useControl(props, getControlAvailability("button"));
   const { children, onPress, variant = "default", style, testID, accessibilityLabel = children } = props;
-  return <View ref={control.ref} style={[{ width: 160, height: 48 }, style]} testID={testID}>
-    {control.failed ? <Text accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}>{children}</Text> :
-      <ExpoButton style={{ flex: 1 }} onPress={() => { if (control.active()) onPress?.(); }} disabled={control.disabled} variant={variant} {...{ accessibilityLabel }}>{children}</ExpoButton>}
+  return <View ref={control.ref} style={[{ width: 160, height: 48 }, style]} testID={testID} accessibilityLabel={accessibilityLabel}>
+    {control.failed ? <Text accessibilityState={{ disabled: true }}>{children}</Text> :
+      <ExpoButton onClick={() => { if (control.active()) onPress?.(); }} enabled={!control.disabled} variant={variant} label={children} />}
   </View>;
 }
 function Selection(props: SelectProps) {
@@ -28,10 +37,9 @@ function Selection(props: SelectProps) {
   if (typeof props.onValueChange !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onValueChange");
   const control = useControl(props, getControlAvailability("select"));
   return <View ref={control.ref} style={[{ width: 280, minHeight: 48, flexDirection: "row" }, props.style]} testID={props.testID} accessibilityLabel={props.accessibilityLabel}>
-    {control.failed ? <Text accessibilityState={{ disabled: true }}>{props.options[selected].label}</Text> : props.options.map(option =>
-      <ExpoButton key={option.value} disabled={control.disabled} variant={option.value === props.value ? "bordered" : "borderless"} style={{ flex: 1 }}
-        {...{ accessibilityRole: "radio", accessibilityState: { checked: option.value === props.value, disabled: control.disabled } }}
-        onPress={() => { if (control.active()) props.onValueChange(option.value); }}>{option.label}</ExpoButton>)}
+    {control.failed ? <Text accessibilityState={{ disabled: true }}>{props.options[selected].label}</Text> :
+      <Segments labels={props.options.map(option => option.label)} selected={selected} enabled={!control.disabled}
+        onSelect={index => { if (control.active()) props.onValueChange(props.options[index].value); }} />}
   </View>;
 }
 /** Android presents its choices inline; there is no dropdown backend in the pinned Expo UI. */
