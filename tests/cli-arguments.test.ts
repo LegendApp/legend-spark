@@ -8,6 +8,9 @@ test("accepts documented command shapes and rejects incompatible build modes", (
   expect(cliArguments(["sdk", "export", "out", "--runtime", "one", "--runtime", "two"]).values.runtime).toEqual(["one", "two"]);
   expect(cliArguments(["build", "--dev", "--platform", "ios", "--device", "Phone", "--port", "8082"]).values.device).toBe("Phone");
   for (const args of [["build", "--dev", "--release"], ["build", "--runner", "--preview"], ["build", "--port", "0"], ["create", "App", "--package-manager", "unknown"]]) expect(() => cliArguments(args)).toThrow();
+  expect(cliArguments(["create", "App", "--bundle-id", "com.acme.my-app"]).values["bundle-id"]).toBe("com.acme.my-app");
+  for (const id of ["myapp", "1com.acme.app", "com.acme.my_app", "com..app"]) expect(() => cliArguments(["create", "App", "--bundle-id", id]), id).toThrow("Bundle ID");
+  expect(() => cliArguments(["build", "--bundle-id", "com.acme.app"])).toThrow();
   expect(cliArguments(["create", "--help"]).values.help).toBe(true);
   expect(cliArguments(["sdk", "--help"]).values.help).toBe(true);
 });

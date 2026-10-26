@@ -10,7 +10,7 @@
     "restoreBounds": true
   },
   "macos": {
-    "bundleIdentifier": "so.legend.spark.prototype.helloworld"
+    "bundleIdentifier": "com.example.helloworld"
   },
   "platforms": [
     "ios",
