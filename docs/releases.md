@@ -161,8 +161,10 @@ without a second selection prompt. Explicit `SPARK_*` values override saved choi
 It runs `bun install --frozen-lockfile`, typechecking, and portable tests before committing the version
 change. It then builds/signs/notarizes the Runner, assembles immutable artifacts,
 and runs the packed-consumer integration against the **exact staged npm archive**.
-After successful checks it atomically pushes `main` and the matching release tag,
-publishes the GitHub release and both npm packages to the release's channel.
+After successful checks it tags the release locally, creates a draft GitHub release
+with verified assets, and publishes both npm packages to the release's channel. Only
+after both packages are verified on the registry does it atomically push `main` and
+the tag and publish the GitHub release.
 
 If notarization is pending or a later step fails, retry the same release command
 to continue the unfinished release automatically, or run:
@@ -174,7 +176,7 @@ bun run release --resume
 Resume retains the original version and channel choice, reuses a matching Runner
 build and staged artifacts, and verifies an already published npm version has the
 same archive integrity before finishing tag promotion. Once artifact verification
-and the source/tag push have succeeded, its checkpoint skips installation, tests,
+has succeeded, its checkpoint skips installation, tests,
 Runner packaging and signing setup on subsequent resumes. It refuses changed source,
 changed archives, conflicting tags, and unrelated working-tree edits. A failed
 check can leave the script's version edits uncommitted; preserve them for resume.
@@ -191,8 +193,9 @@ bun run release --resume-from publish
 This requires the saved committed candidate, its clean source revision, and
 `artifacts/releases/<version>/`. It verifies artifact checksums and the creator's
 embedded `dist/release.json` and package version against the SDK version before
-publication. Dev packs under `artifacts/packages/` cannot be published. The remote
-source tag must already exist; this resume mode does not push source or tags.
+publication. Dev packs under `artifacts/packages/` cannot be published. The local
+release tag must already exist; like a full release, it pushes `main` and the tag
+only after npm publication.
 
 npm publish and dist-tag changes require **both stdin and stdout attached to a
 TTY**. Run directly in a terminal, without `tee` or output redirection, so npm can
@@ -319,17 +322,17 @@ when inputs change.
 
 ## Publish a reviewed preview
 
-Publishing is a separate explicit operation. First push the reviewed source and
-its matching `v<version>` tag to the configured public repository. The publisher
-requires the remote tag to resolve to the staged revision. Then run:
+Publishing is a separate explicit operation. First create the matching local
+`v<version>` tag on the reviewed source. Then run:
 
 ```sh
 bun run release:publish
 ```
 
 The publisher verifies staged checksums and repository visibility, creates a
-draft prerelease, uploads and verifies assets, publishes the GitHub release,
-and publishes both exact assembled npm archives (`@legendapp/spark` and the peer-free `@legendapp/create-spark`) under the version's channel (`next` for a prerelease, `latest` for a stable version; `--latest` or `--next` overrides it) with matching versions and tags. It does not replace
+draft release, uploads and verifies assets, publishes both exact assembled npm archives (`@legendapp/spark` and the peer-free `@legendapp/create-spark`) under the version's channel (`next` for a prerelease, `latest` for a stable version; `--latest` or `--next` overrides it) with matching versions and tags, then atomically pushes `main` and the tag,
+requires the remote tag to resolve to the staged revision, and publishes the
+GitHub release. After a failure at any step, rerun the same command to continue. It does not replace
 existing assets or move tags. Run interactively if npm needs browser
 authentication. Inspect registry tags after publication: npm may assign `latest`
 to an initial release, and `--tag next` does not by itself prove that no

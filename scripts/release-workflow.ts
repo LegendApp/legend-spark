@@ -230,6 +230,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
         const hasTag = await execute(["git", "rev-parse", "--verify", `refs/tags/${tag}`], true);
         if (hasTag.code) throw new Error(`Missing previous release tag ${tag}; cannot generate release notes`);
         notes = (await git("log", "--no-merges", "--format=- %s", `${tag}..HEAD`)).split("\n").filter(line => !/^- (?:Revert\b|release(?:\([^)]*\))?:)/i.test(line)).join("\n");
+        if (!notes && !version.includes("-")) notes = `- First stable release, promoting ${tag.slice(1)}`;
         if (!notes) throw new Error("No new committed changes since the previous release");
       }
       const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["bun.lock", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md", "docs/release-support-matrix.json", "docs/release-support-matrix.md"].includes(file));
@@ -298,11 +299,11 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
         const existingTag = await execute(["git", "rev-parse", "--verify", `refs/tags/${tag}^{commit}`], true);
         if (!existingTag.code && existingTag.output.trim() !== state.revision) throw new Error(`${tag} already points at another source revision`);
         if (existingTag.code) await git("tag", tag, state.revision!);
-        await git("push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`);
         state.publicationReady = true;
         writeJson(stateFile, state);
       }
       verifyReleaseArchive(root, state.version, state.revision!);
+      // Publishes npm first, then pushes main and the tag and makes the draft GitHub release public.
       await run(["bun", "run", "release:publish", state.latest ? "--latest" : "--next"]);
     }
     for (const name of publishedPackages) await waitForReleaseTags(state.version, state.latest, execute, undefined, name);
