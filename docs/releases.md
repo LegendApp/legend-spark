@@ -128,7 +128,11 @@ bun run release --stable
 `--stable` removes the `-next.N` suffix, uses the latest published preview on
 that version line as the release-notes baseline, and defaults both npm packages
 to `latest`. A checkout already versioned `0.0.1` can use `bun run release`.
-An already published stable version is rejected; no patch bump is inferred.
+`--stable` rejects an already published stable version. Without it, `bun run release`
+on a published stable `0.0.1` starts the next line at `0.0.2-next.0`. A new version
+line with no published previews (`0.0.2-next.0`, or a checkout already versioned
+`0.0.2`) uses the highest published version below it, such as `v0.0.1`, as its
+release-notes baseline.
 Add reviewed `UPGRADING.md` notes for `0.0.1` before starting. Finish any unfinished
 preview release before promoting. Stable releases are normal GitHub releases marked
 Latest; preview versions stay GitHub prereleases even with npm `--latest`.
@@ -334,7 +338,10 @@ bun run release:publish
 The publisher verifies staged checksums and repository visibility, creates a
 draft release, uploads and verifies assets, publishes both exact assembled npm archives (`@legendapp/spark` and the peer-free `@legendapp/create-spark`) under the version's channel (`next` for a prerelease, `latest` for a stable version; `--latest` or `--next` overrides it) with matching versions and tags, then atomically pushes `main` and the tag,
 requires the remote tag to resolve to the staged revision, and publishes the
-GitHub release. After a failure at any step, rerun the same command to continue. It does not replace
+GitHub release. After a failure at any step, rerun the same command to continue,
+except when `origin/main` moved after npm publication: then it still pushes the tag
+and publishes the release, and you rebase and push `main`, then run
+`bun run release --finish`. It does not replace
 existing assets or move tags. Run interactively if npm needs browser
 authentication. Inspect registry tags after publication: npm may assign `latest`
 to an initial release, and `--tag next` does not by itself prove that no

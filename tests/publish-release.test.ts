@@ -127,10 +127,16 @@ test.each(["success", "next only", "draft", "stable", "stable draft", "stable ne
     expect(order()).toEqual(["merge-base"]);
     return;
   }
-  if (state.failPush) {
+  if (state.failPush && state.moved) {
     // npm is live: the tag and release still go public; main is left to the maintainer.
-    await expect(publication).rejects.toThrow("push main");
-    expect(order()).toEqual(state.retry ? ["push", "push tag", "edit"] : ["merge-base", "create", "upload", "npm spark.tgz", "npm create-spark.tgz", "push", "push tag", "edit"]);
+    await expect(publication).rejects.toThrow("push main: git pull --rebase origin main && git push origin HEAD:main. Then run bun run release --finish");
+    expect(order()).toEqual(["push", "merge-base", "push tag", "edit"]);
+    return;
+  }
+  if (state.failPush) {
+    // A push failure while main still fast-forwards publishes nothing more and resumes as is.
+    await expect(publication).rejects.toThrow("origin/main still fast-forwards. Fix the cause and run bun run release --resume.\npush rejected");
+    expect(order()).toEqual(["merge-base", "create", "upload", "npm spark.tgz", "npm create-spark.tgz", "push", "merge-base"]);
     return;
   }
   if (state.failCreate || !state.visible) {

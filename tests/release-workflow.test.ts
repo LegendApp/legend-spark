@@ -14,14 +14,27 @@ test("release targets advance published versions and retain unpublished workspac
   expect(releaseTarget("0.0.1-next.5", ["0.0.1-next.4", "0.0.1-next.2", "0.0.2-next.30", "0.0.1-next.bad"])).toEqual({ version: "0.0.1-next.5", previous: "v0.0.1-next.4" });
   expect(releaseTarget("0.0.1-next.12", ["0.0.1-next.9", "0.0.1-next.10"])).toEqual({ version: "0.0.1-next.12", previous: "v0.0.1-next.10" });
   expect(() => releaseTarget("0.0.1-next.3", ["0.0.1-next.2", "0.0.1-next.4"])).toThrow("higher 0.0.1-next. version is already published");
-  expect(() => releaseTarget("0.0.1-next.3", ["0.0.2-next.2", "0.0.1-next.bad"])).toThrow("No previous published 0.0.1-next. version below 0.0.1-next.3");
+  expect(() => releaseTarget("0.0.1-next.3", ["0.0.2-next.2", "0.0.1-next.bad"])).toThrow("No published version below 0.0.1-next.3");
   expect(() => releaseTarget("0.0.1-beta.1", [])).toThrow("Expected a stable or next preview version");
 });
 
-test("stable targets use the latest published preview on their line and never advance a published stable version", () => {
+test("stable targets use the latest published preview on their line and never re-release a published stable version", () => {
   expect(releaseTarget("0.0.1", ["0.0.1-next.9", "0.0.1-next.10", "0.0.2-next.30", "0.0.1-next.bad"])).toEqual({ version: "0.0.1", previous: "v0.0.1-next.10" });
-  expect(() => releaseTarget("0.0.1", ["0.0.1", "0.0.1-next.7"])).toThrow("Stable version 0.0.1 is already published");
-  expect(() => releaseTarget("0.0.1", ["0.0.2-next.1"])).toThrow("No previous published 0.0.1-next. version below 0.0.1");
+  expect(() => releaseTarget("0.0.1", ["0.0.1", "0.0.1-next.7"], true)).toThrow("Stable version 0.0.1 is already published");
+  expect(() => releaseTarget("0.0.1", ["0.0.2-next.1"])).toThrow("No published version below 0.0.1");
+  expect(releaseTarget("0.0.1-next.10", ["0.0.1-next.10"], true)).toEqual({ version: "0.0.1", previous: "v0.0.1-next.10" });
+});
+
+test("release targets start a new version line from the previous stable release", () => {
+  const published = ["0.0.1-next.2", "0.0.1-next.10", "0.0.1", "0.0.1-beta.40"];
+  // bun run release after a stable release starts the next patch line's previews.
+  expect(releaseTarget("0.0.1", published)).toEqual({ version: "0.0.2-next.0", previous: "v0.0.1" });
+  expect(releaseTarget("0.0.1", [...published, "0.0.2-next.0"])).toEqual({ version: "0.0.2-next.1", previous: "v0.0.2-next.0" });
+  expect(releaseTarget("0.0.2-next.0", published)).toEqual({ version: "0.0.2-next.0", previous: "v0.0.1" });
+  // A workspace already bumped to the stable version, with or without --stable.
+  expect(releaseTarget("0.0.2", published)).toEqual({ version: "0.0.2", previous: "v0.0.1" });
+  expect(releaseTarget("0.0.2", published, true)).toEqual({ version: "0.0.2", previous: "v0.0.1" });
+  expect(releaseTarget("0.1.0", [...published, "0.0.10"])).toEqual({ version: "0.1.0", previous: "v0.0.10" });
 });
 
 test("release environment loading works without process.loadEnvFile and preserves shell values", () => {
@@ -461,6 +474,8 @@ test("resume refuses new source commits and preserves unrelated drafts", async (
     expect(readFileSync(path.join(f.root, "unrelated.ts"), "utf8")).toBe("draft\n");
     f.git("add", "unrelated.ts"); f.git("commit", "-m", "Another change");
     await expect(f.release(true)).rejects.toThrow("Source revision changed");
+    // The automatic continuation names the commands that close or abandon the release.
+    await expect(f.release()).rejects.toThrow("If 0.0.1-next.3 is already published, run bun run release --finish");
     expect(f.commands.some(args => args.includes("release:publish"))).toBe(false);
   } finally { f.cleanup(); }
 });

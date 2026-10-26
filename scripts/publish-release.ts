@@ -101,8 +101,12 @@ await releaseCommand(root, async () => {
   // downloads work, then leave main to the maintainer.
   let mainPushed = true;
   try { await run(root, ["git", "push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`]); }
-  catch {
-    mainPushed = false;
+  catch (error) {
+    // Only a main that no longer fast-forwards falls back to a tag-only push.
+    await run(root, ["git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main"]);
+    try { await run(root, ["git", "merge-base", "--is-ancestor", "refs/remotes/origin/main", "HEAD"], { capture: true }); }
+    catch { mainPushed = false; }
+    if (mainPushed) throw new Error(`npm has ${VERSION}, but pushing main and ${tag} failed while origin/main still fast-forwards. Fix the cause and run bun run release --resume.\n${error instanceof Error ? error.message : error}`);
     await run(root, ["git", "push", "origin", `refs/tags/${tag}`]);
   }
   const ref = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/ref/tags/${tag}`], { capture: true }));
@@ -110,6 +114,6 @@ await releaseCommand(root, async () => {
   if (commit.type === "tag") commit = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/tags/${commit.sha}`], { capture: true })).object;
   if (commit.type !== "commit" || commit.sha !== revision) throw new Error("Release tag does not point at the staged source revision");
   if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", ...releaseFlags]);
-  if (!mainPushed) throw new Error(`Published ${tag}, but origin/main moved and was not updated. Rebase the release commit onto origin/main and push main: git pull --rebase origin main && git push origin HEAD:main`);
+  if (!mainPushed) throw new Error(`Published ${tag}, but origin/main moved and was not updated. Rebase the release commit onto origin/main and push main: git pull --rebase origin main && git push origin HEAD:main. Then run bun run release --finish to close the release.`);
   console.log(`Published ${tag} under ${latest ? "latest" : "next"}. Native UI and clean-machine Runner acceptance remain separate evidence.`);
 });

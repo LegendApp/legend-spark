@@ -52,19 +52,37 @@ export function signingProject(root: string) {
   return project;
 }
 
-export function releaseTarget(current: string, published: string[]) {
-  const match = /^(\d+\.\d+\.\d+)(?:-next\.(\d+))?$/.exec(current);
+const releaseVersion = /^(\d+)\.(\d+)\.(\d+)(?:-next\.(\d+))?$/;
+// X.Y.Z-next.N sorts below X.Y.Z; other prerelease forms are ignored.
+const rank = (version: string) => {
+  const match = releaseVersion.exec(version);
+  return match && [Number(match[1]), Number(match[2]), Number(match[3]), match[4] === undefined ? Infinity : Number(match[4])];
+};
+const below = (a: number[], b: number[]) => {
+  const index = a.findIndex((value, index) => value !== b[index]);
+  return index >= 0 && a[index]! < b[index]!;
+};
+
+export function releaseTarget(current: string, published: string[], stable?: boolean): { version: string; previous: string } {
+  const match = releaseVersion.exec(current);
   if (!match) throw new Error(`Expected a stable or next preview version, received ${current}`);
-  const prefix = `${match[1]}-next.`;
+  const line = `${match[1]}.${match[2]}.${match[3]}`, prefix = `${line}-next.`;
+  const version = stable ? line : current;
   const numbers = published.filter(value => value.startsWith(prefix) && /^\d+$/.test(value.slice(prefix.length))).map(value => Number(value.slice(prefix.length)));
   const latest = Math.max(...numbers);
-  if (published.includes(current)) {
-    if (match[2] === undefined) throw new Error(`Stable version ${current} is already published; select a new version`);
+  if (published.includes(version)) {
+    if (stable) throw new Error(`Stable version ${version} is already published; select a new version`);
+    // After a stable release, the next preview starts the following patch line.
+    if (match[4] === undefined) return releaseTarget(`${match[1]}.${match[2]}.${Number(match[3]) + 1}-next.0`, published);
     return { version: `${prefix}${latest + 1}`, previous: `v${current}` };
   }
-  if (match[2] !== undefined && latest > Number(match[2])) throw new Error(`A higher ${prefix} version is already published; cannot release ${current}`);
-  if (!numbers.length) throw new Error(`No previous published ${prefix} version below ${current}`);
-  return { version: current, previous: `v${prefix}${latest}` };
+  if (!stable && match[4] !== undefined && latest > Number(match[4])) throw new Error(`A higher ${prefix} version is already published; cannot release ${current}`);
+  if (numbers.length) return { version, previous: `v${prefix}${latest}` };
+  // A new version line diffs against the highest published version below it.
+  const target = rank(version)!;
+  const previous = published.filter(value => { const r = rank(value); return r && below(r, target); }).sort((a, b) => below(rank(a)!, rank(b)!) ? 1 : -1)[0];
+  if (!previous) throw new Error(`No published version below ${version}`);
+  return { version, previous: `v${previous}` };
 }
 
 function requireUpgradeNotes(root: string, version: string) {
@@ -172,6 +190,9 @@ async function finishRelease(root: string, state: State, execute: Execute) {
   console.log(`Released ${state.version}. Native UI and clean-recipient Runner acceptance must still be recorded separately.`);
 }
 
+// An unfinished release blocks the next one, so name the commands that close it.
+const movedSource = (state: State) => `Source revision changed since release ${state.version} started from ${state.revision!.slice(0, 12)}. If ${state.version} is already published, run bun run release --finish. Otherwise return main to that commit to resume it, or remove .spark/release-workflow.json to abandon it.`;
+
 export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; stable?: boolean; next?: boolean; finish?: boolean; resumeFrom?: "publish"; skipTests?: boolean }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
   const stateFile = path.join(root, ".spark/release-workflow.json");
   const run = async (argv: string[], capture = false) => {
@@ -192,7 +213,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
   if (options.resumeFrom === "publish") {
     if (!previous?.revision) throw new Error("No committed release to resume from publish; preserve the workflow state and staged artifacts.");
     sameChannel(previous);
-    if (await git("rev-parse", "HEAD") !== previous.revision) throw new Error("Source revision changed since this release started");
+    if (await git("rev-parse", "HEAD") !== previous.revision) throw new Error(movedSource(previous));
     await clean();
     verifyReleaseArchive(root, previous.version, previous.revision);
     await run(["bun", "run", "release:publish", previous.latest ? "--latest" : "--next"]);
@@ -224,13 +245,13 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (!state) {
       const current = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version as string;
       const versions = JSON.parse(await run(["npm", "view", "@legendapp/spark", "versions", "--json"], true));
-      const { version, previous: tag } = releaseTarget(options.stable ? current.replace(/-next\.\d+$/, "") : current, Array.isArray(versions) ? versions : [versions]);
+      const { version, previous: tag } = releaseTarget(current, Array.isArray(versions) ? versions : [versions], options.stable);
       let notes = changelogSection(readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), version);
       if (notes === undefined) {
         const hasTag = await execute(["git", "rev-parse", "--verify", `refs/tags/${tag}`], true);
         if (hasTag.code) throw new Error(`Missing previous release tag ${tag}; cannot generate release notes`);
         notes = (await git("log", "--no-merges", "--format=- %s", `${tag}..HEAD`)).split("\n").filter(line => !/^- (?:Revert\b|release(?:\([^)]*\))?:)/i.test(line)).join("\n");
-        if (!notes && !version.includes("-")) notes = `- First stable release, promoting ${tag.slice(1)}`;
+        if (!notes && !version.includes("-") && tag.includes("-")) notes = `- First stable release, promoting ${tag.slice(1)}`;
         if (!notes) throw new Error("No new committed changes since the previous release");
       }
       const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["bun.lock", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md", "docs/release-support-matrix.json", "docs/release-support-matrix.md"].includes(file));
@@ -240,7 +261,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     }
     console.log(`Releasing ${state.version} under ${state.latest ? "latest" : "next"}.`);
     if (state.revision) {
-      if (state.revision !== revision) throw new Error("Source revision changed since this release started; preserve its artifacts and start a new candidate");
+      if (state.revision !== revision) throw new Error(movedSource(state));
       await clean();
     } else {
       if (revision !== state.baseRevision) {
