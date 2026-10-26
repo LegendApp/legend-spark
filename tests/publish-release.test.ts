@@ -5,7 +5,7 @@ import path from "node:path";
 const state = vi.hoisted(() => ({
   release: {} as any, commands: [] as string[][], checks: new Map<string, number>(),
   failCreate: false, visible: true, retry: false, draft: false, latest: true,
-  newRelease: false, tagError: "", failPush: false, moved: false,
+  partial: false, newRelease: false, tagError: "", failPush: false, moved: false,
   tags: {} as Record<string, Record<string, string>>,
 }));
 vi.mock("../scripts/release-env.ts", () => ({ loadReleaseEnv: vi.fn() }));
@@ -23,7 +23,7 @@ vi.mock("../scripts/npm-release.ts", async importOriginal => ({
   alreadyPublished: async (_version: string, _archive: string, _execute: unknown, name: string) => {
     const count = state.checks.get(name) ?? 0;
     state.checks.set(name, count + 1);
-    return count === 0 ? state.retry : state.visible || name === "@legendapp/spark";
+    return count === 0 ? state.retry || (state.partial && name === "@legendapp/spark") : state.visible || name === "@legendapp/spark";
   },
   publishAndWait: async (_root: string, release: { name: string; published: boolean }, _execute: unknown, publish: () => Promise<void>) => {
     if (!release.published) await publish();
@@ -79,7 +79,7 @@ vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, a
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-test.each(["success", "next only", "draft", "stable", "stable draft", "stable next draft", "new preview", "new stable", "E404 tags", "E401 tags", "create failure", "not visible", "push failure", "main moved", "moved retry draft", "retry", "invalid creator", "no terminal"])("release publication publishes to its channel: %s", async scenario => {
+test.each(["success", "next only", "draft", "stable", "stable draft", "stable next draft", "new preview", "new stable", "E404 tags", "E401 tags", "create failure", "not visible", "push failure", "main moved", "partial moved", "moved retry draft", "retry", "invalid creator", "no terminal"])("release publication publishes to its channel: %s", async scenario => {
   vi.resetModules();
   state.commands = [];
   state.checks.clear();
@@ -87,6 +87,7 @@ test.each(["success", "next only", "draft", "stable", "stable draft", "stable ne
   state.visible = scenario !== "not visible";
   state.retry = scenario === "retry" || scenario === "moved retry draft";
   state.moved = scenario.includes("moved");
+  state.partial = scenario === "partial moved";
   state.newRelease = scenario.startsWith("new ") || scenario === "push failure";
   state.failPush = scenario === "push failure" || scenario === "moved retry draft";
   state.draft = scenario.includes("draft") || state.newRelease;
@@ -122,14 +123,14 @@ test.each(["success", "next only", "draft", "stable", "stable draft", "stable ne
   const distTags = () => state.commands.filter(argv => argv[1] === "dist-tag").map(argv => argv.slice(3));
   // Nothing goes public on GitHub (main, tag, release) until npm has both packages.
   const order = () => state.commands.map(argv => argv[0] === "git" ? argv[1] === "push" ? argv.includes("--atomic") ? "push" : "push tag" : argv[1] : argv[0] === "npm" && argv[1] === "publish" ? `npm ${path.basename(argv[2]!)}` : argv[1] === "release" && argv[2] !== "view" ? argv[2] : undefined).filter(Boolean);
-  if (scenario === "main moved") {
-    await expect(publication).rejects.toThrow("Nothing was published");
+  if (scenario === "main moved" || state.partial) {
+    await expect(publication).rejects.toThrow(state.partial ? "Some npm packages are already published; preserve the release artifacts" : "Nothing was published");
     expect(order()).toEqual(["merge-base"]);
     return;
   }
   if (state.failPush && state.moved) {
     // npm is live: the tag and release still go public; main is left to the maintainer.
-    await expect(publication).rejects.toThrow("push main: git pull --rebase origin main && git push origin HEAD:main. Then run bun run release --finish");
+    await expect(publication).rejects.toThrow("push main: git pull --no-rebase origin main && git push origin HEAD:main. Then run bun run release --finish");
     expect(order()).toEqual(["push", "merge-base", "push tag", "edit"]);
     return;
   }

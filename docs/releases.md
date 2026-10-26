@@ -170,7 +170,7 @@ with verified assets, and publishes both npm packages to the release's channel. 
 after both packages are verified on the registry does it atomically push `main` and
 the tag and publish the GitHub release. Before publishing npm it fetches and stops if
 `origin/main` is not an ancestor of the release. If `main` moves after npm is live, it
-pushes the tag alone, publishes the GitHub release, and stops so you can rebase and push `main`.
+pushes the tag alone, publishes the GitHub release, and stops so you can merge `origin/main` and push `main`.
 
 If notarization is pending or a later step fails, retry the same release command
 to continue the unfinished release automatically, or run:
@@ -340,7 +340,7 @@ draft release, uploads and verifies assets, publishes both exact assembled npm a
 requires the remote tag to resolve to the staged revision, and publishes the
 GitHub release. After a failure at any step, rerun the same command to continue,
 except when `origin/main` moved after npm publication: then it still pushes the tag
-and publishes the release, and you rebase and push `main`, then run
+and publishes the release, and you merge `origin/main` and push `main`, then run
 `bun run release --finish`. It does not replace
 existing assets or move tags. Run interactively if npm needs browser
 authentication. Inspect registry tags after publication: npm may assign `latest`
