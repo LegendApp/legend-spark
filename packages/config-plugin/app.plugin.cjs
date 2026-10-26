@@ -8,6 +8,8 @@ const {
   withEntitlementsPlist,
   withXcodeProject,
 } = require("expo-desktop-config-plugins");
+const { withMod } = require("@expo/config-plugins");
+const { installHostFiles, installHostProject } = require("./macos-host.cjs");
 const { identity } = require("./identity.cjs");
 const { resolveEntitlements } = require("./entitlements.cjs");
 const { version: sparkVersion } = require("@legendapp/spark/package.json");
@@ -33,6 +35,15 @@ module.exports = function withSparkDesktop(config) {
     mod.modResults = resolveEntitlements({ macos: { entitlements: declaredEntitlements } }, packages);
     return mod;
   });
+  // Expo Desktop 55's template hosts React Native in a SwiftUI App; Spark keeps its AppKit host.
+  config = withMod(config, { platform: "macos", mod: "dangerous", action: (mod) => {
+    installHostFiles(mod.modRequest.platformProjectRoot);
+    return mod;
+  } });
+  config = withXcodeProject(config, (mod) => {
+    installHostProject(mod.modResults);
+    return mod;
+  });
   config = withAppDelegate(config, (mod) => {
     // Own this adapter; application customizations belong in configuration/plugins.
     mod.modResults.contents = fs.readFileSync(
@@ -56,6 +67,7 @@ module.exports = function withSparkDesktop(config) {
       if (!(key in generated)) delete mod.modResults[key];
     Object.assign(mod.modResults, generated);
     mod.modResults.SparkFrameworkVersion = sparkVersion;
+    mod.modResults.NSMainStoryboardFile = "Main";
     mod.modResults.NSAppTransportSecurity = { NSAllowsLocalNetworking: true };
     return mod;
   });

@@ -220,7 +220,9 @@ describe('native opt-in configuration', () => {
       const result = await config.mods.macos.appDelegate({ ...config, modResults: { contents: '' }, modRequest: { projectRoot: root, platform: 'macos', modName: 'appDelegate', introspect: false } });
       expect(result.modResults.contents.includes('@interface SparkCustomizeController')).toBe(enabled);
       expect(result.modResults.contents.includes('return SparkCustomizeBundleURL();')).toBe(enabled);
-      expect(!!config.mods.macos.xcodeproj).toBe(enabled);
+      const project = require('xcode').project(path.join(path.dirname(require.resolve('expo-desktop-template-bare-minimum/package.json')), 'macos/HelloWorld.xcodeproj/project.pbxproj')).parseSync();
+      const xcodeproj = await config.mods.macos.xcodeproj({ ...config, modResults: project, modRequest: { projectRoot: root, platform: 'macos', modName: 'xcodeproj', introspect: false } });
+      expect(xcodeproj.modResults.writeSync().includes('Security.framework')).toBe(enabled);
     }
   });
   it('rejects sandboxed customize app distribution', () => {
