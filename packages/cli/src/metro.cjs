@@ -27,7 +27,9 @@ function withDesktop(config, options = {}) {
   for (const platform of ["macos", "windows"]) {
     conditions[platform] = [...new Set([...(conditions[platform] || []), "react-native"])];
   }
-  config = { ...config, resolver: { ...config.resolver, unstable_conditionsByPlatform: conditions } };
+  config = { ...config, resolver: { ...config.resolver, unstable_conditionsByPlatform: conditions,
+    // spark dev found Watchman unresponsive; crawl and watch with Node instead.
+    ...(process.env.SPARK_METRO_NO_WATCHMAN === "1" ? { useWatchman: false } : {}) } };
   const root = path.resolve(config.projectRoot || process.cwd());
   // Keep the configured workspace root so lazy imports outside the app have
   // valid URLs. Only the prebuilt host's fixed entry URLs are app-relative.

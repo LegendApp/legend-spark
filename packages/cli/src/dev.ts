@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 const { preparePatch } = createRequire(import.meta.url)("./expo-dev-patch.cjs");
 import { findGo, readRuntime, registerRuntime } from "./local.ts";
 import { sessionStatus } from "./session-status.ts";
+import { watchmanStalls } from "./watchman.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import {
   prepareConfig,
@@ -105,6 +106,7 @@ export async function dev(
   // Without --no-open the session opens the desktop app itself, so a missing Runner downloads without a keypress.
   let autoOpen = !noOpen;
   let metro: ReturnType<typeof spawnProcess> | undefined;
+  let skipWatchman: boolean | undefined;
   let finish!: () => void;
   const finished = new Promise<void>((resolve) => {
     finish = resolve;
@@ -118,6 +120,10 @@ export async function dev(
       await previous.exited;
     }
     if (closing) return;
+    if (skipWatchman === undefined) {
+      skipWatchman = await watchmanStalls(root);
+      if (skipWatchman) console.warn("Watchman is not responding, so Metro will scan files without it this session. To fix Watchman, run: watchman watch-del-all && watchman shutdown-server");
+    }
     let ready!: (port: number) => void;
     const started = new Promise<number>(resolve => { ready = resolve; });
     const [, expo, ...args] = nodeCommand(root, "expo", "expo", [
@@ -128,7 +134,7 @@ export async function dev(
     const child = spawnProcess([
       "node", "--require", path.join(import.meta.dirname, "expo-dev-preload.cjs"), expo!, ...args,
     ], {
-      cwd: root, env: { ...process.env, SPARK_PLATFORM: platform, SPARK_DEV_SESSION: "1" },
+      cwd: root, env: { ...process.env, SPARK_PLATFORM: platform, SPARK_DEV_SESSION: "1", ...(skipWatchman ? { SPARK_METRO_NO_WATCHMAN: "1" } : {}) },
       stdin: "inherit", stdout: "inherit", stderr: "inherit", serialization: "json",
       ipc(message, sender) {
         if (message?.type === "spark:ready") { bundleOptions = message.options ?? {}; ready(message.port); }
