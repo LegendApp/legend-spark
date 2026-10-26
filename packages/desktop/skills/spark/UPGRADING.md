@@ -357,3 +357,14 @@ in `desktop.config.json`, because these backends have no Windows implementation.
 The `/native` `NativeConfiguration` type now describes only Spark's emitted
 `platforms` and `dependencies` overrides; use your own CLI configuration type for
 extra project or dependency fields, preserved by `withSparkNative`.
+
+New apps now get a placeholder bundle ID, `com.example.<app-name>`, instead of
+`so.legend.spark.prototype.<app-name>`. Pass `--bundle-id com.yourcompany.myapp`
+to `create` to choose one up front, or change `bundleIdentifier` in
+`desktop.config.json` before you ship. Release builds warn while the ID still
+starts with `com.example.`. Existing apps keep their ID.
+
+`spark dev` no longer hangs on "Waiting for Watchman `watch-project`" when
+Watchman stops responding. After 10 seconds it starts Metro without Watchman
+for that session and suggests `watchman watch-del-all && watchman shutdown-server`
+to fix it.
