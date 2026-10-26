@@ -34,7 +34,12 @@ NSDictionary *SparkContext(void) {
     NSString *runtimePath = [bundle pathForResource:@"spark-runtime" ofType:@"json"];
     NSData *data = runtimePath ? [NSData dataWithContentsOfFile:runtimePath] : nil;
     id rawRuntime = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    NSDictionary *runtime = [rawRuntime isKindOfClass:NSDictionary.class] ? rawRuntime : @{};
+#if DEBUG
+    NSString *defaultMode = @"dev";
+#else
+    NSString *defaultMode = @"release";
+#endif
+    NSDictionary *runtime = [rawRuntime isKindOfClass:NSDictionary.class] ? rawRuntime : @{ @"mode": defaultMode, @"modules": @{} };
     NSString *project = [bundle objectForInfoDictionaryKey:@"SparkProjectIdentifier"] ?: bundle.bundleIdentifier;
     NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.0.0";
     NSString *name = [bundle objectForInfoDictionaryKey:@"CFBundleDisplayName"] ?: [bundle objectForInfoDictionaryKey:@"CFBundleName"];
@@ -48,7 +53,7 @@ NSDictionary *SparkContext(void) {
 #endif
     context = @{ @"projectId": project ?: @"desktop.app", @"name": name ?: @"Desktop App",
       @"version": version,
-      @"runtime": runtime ?: @{}, @"launchArguments": NSProcessInfo.processInfo.arguments };
+      @"runtime": runtime, @"launchArguments": NSProcessInfo.processInfo.arguments };
   });
   return context;
 }
