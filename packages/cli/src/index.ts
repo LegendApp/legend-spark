@@ -4,6 +4,7 @@ import type { PackageManager } from "./package-manager.ts";
 import { nodeCommand, spawnProcess } from "./process.ts";
 import { examples, type Example } from "./examples.ts";
 import { prepareGoProfile } from "./go-profile.ts";
+import { seedRunnerCaches } from "./warm-runner-cache.ts";
 import { exportSDK, importSDK } from "./sdk-transfer.ts";
 import { hostPlatform, type AppPlatform } from "./platform.ts";
 import path from "node:path";
@@ -147,6 +148,9 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
             const config = readJson(configFile);
             config.version = VERSION.split("-")[0];
             writeJson(configFile, config);
+            // Release builds opt in: reuse the previous version's DerivedData and Pods so the
+            // Runner build is incremental instead of compiling every pod from scratch.
+            if (platform === "macos" && process.env.SPARK_RUNNER_WARM_CACHE === "1") seedRunnerCaches(path.join(sparkHome(), "sdk-builds"), VERSION, process.arch);
           }
           await build(root, "go", !!values.force);
           break;

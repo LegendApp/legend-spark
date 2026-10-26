@@ -17,7 +17,7 @@ await releaseCommand(root, async () => {
   const project = path.join(sparkHome(), "sdk-builds", VERSION, "SparkRunner");
   // A resumed signing run reuses its original build; a fresh invocation forces a
   // native build carrying the exact source revision instead of trusting old caches.
-  if (!process.argv.includes("--resume")) await run(root, [process.execPath, "scripts/spark.mjs", "sdk", "build-runner", "--force"], { env: { SPARK_RELEASE_REVISION: revision } });
+  if (!process.argv.includes("--resume")) await run(root, [process.execPath, "scripts/spark.mjs", "sdk", "build-runner", "--force"], { env: { SPARK_RELEASE_REVISION: revision, SPARK_RUNNER_WARM_CACHE: "1" } });
   const built = readJson(path.join(project, ".spark/go-build.json"));
   if (built.runtime.sourceRevision !== revision) throw new Error("No Runner build exists for this revision. Run without --resume first.");
   const result = await packageApp(project, { runner: true });
