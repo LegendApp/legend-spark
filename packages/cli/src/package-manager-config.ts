@@ -11,7 +11,7 @@ export function readPnpmConfig(root: string) {
   return document;
 }
 
-/** pnpm 11 reads installer settings from YAML; retain package.json settings for pnpm 10. */
+/** pnpm 10–12 read overrides from YAML; pnpm 12 rejects duplicate package.json overrides. */
 export function writePackageConfig(root: string, pkg: any, manager: PackageManager, installRoot = root, preservedOverrides: readonly string[] = []) {
   if (manager === "pnpm") {
     const file = path.join(root, "pnpm-workspace.yaml");
@@ -30,6 +30,7 @@ export function writePackageConfig(root: string, pkg: any, manager: PackageManag
       }
     }
     if (pkg.pnpm?.onlyBuiltDependencies) pkg.pnpm.onlyBuiltDependencies = pkg.pnpm.onlyBuiltDependencies.filter((name: string) => document.getIn(["allowBuilds", name]) !== false);
+    if (pkg.pnpm) delete pkg.pnpm.overrides;
     writeFileSync(file, document.toString());
   }
   writeJson(path.join(root, "package.json"), pkg);

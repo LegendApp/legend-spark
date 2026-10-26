@@ -289,3 +289,16 @@ tags.
 Publishing: each release now publishes straight to its channel (stable ->
 latest, preview -> next). Existing apps are unaffected.
 
+## 0.0.1-next.9 (draft, unreleased)
+
+New starters write pnpm overrides only to `pnpm-workspace.yaml`, supported by
+pnpm 10, 11 and 12. pnpm 12 rejects the duplicate `pnpm.overrides` previously
+left in `package.json`. For existing apps, move those overrides into the YAML
+file's top-level `overrides` map, remove `pnpm.overrides` from `package.json`,
+and run `pnpm install` before `pnpm run dev`. Keep local `file:` archive pins.
+
+Starters also pin Expo to `54.0.37` throughout the dependency graph.
+`expo-desktop-template-bare-minimum@54.81.6` requests `expo@~54.0.35`, which
+Yarn 4 can resolve to a second Expo version alongside the starter's exact pin.
+For existing Yarn apps on this SDK, add `"expo": "54.0.37"` to `resolutions`
+and run `yarn install`; Spark's native preflight requires one Expo version.

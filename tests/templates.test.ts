@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { applyOverrides } from "../packages/cli/src/package-manager.ts";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -60,6 +61,9 @@ test("all templates retain the tested desktop matrix", () => {
     const { expo } = JSON.parse(readFileSync(path.join(templates, folder, "app.json"), "utf8"));
     expect(expo.macos).toMatchObject({ version: expo.version, buildNumber: "1" });
     expect(pkg.dependencies.expo).toBe("54.0.37");
+    const yarn = structuredClone(pkg);
+    applyOverrides(yarn, {}, "yarn");
+    expect(yarn.resolutions.expo).toBe(pkg.dependencies.expo);
     expect(pkg.overrides["@expo/cli"]).toBe("54.0.27");
     expect(pkg.dependencies["react-native"]).toBe("0.81.6");
     expect(pkg.overrides["react-native-macos"]).toBe("0.81.7");

@@ -90,8 +90,12 @@ test("pnpm configuration persists pins and build permissions while retaining use
     expect(readFileSync(file, "utf8")).toContain("# Keep team configuration");
     expect(pkg.pnpm.onlyBuiltDependencies).toContain("@legendapp/spark@file:spark.tgz");
     expect(pkg.pnpm.onlyBuiltDependencies).not.toContain("fsevents");
-    pkg.pnpm.overrides.react = "19.1.5";
+    expect(JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8")).pnpm).not.toHaveProperty("overrides");
+    applyOverrides(pkg, { react: "19.1.5" }, "pnpm");
     writePackageConfig(f.root, pkg, "pnpm");
-    expect(parse(readFileSync(file, "utf8")).overrides.react).toBe("19.1.5");
+    expect(parse(readFileSync(file, "utf8")).overrides).toEqual({ custom: "1.0.0", react: "19.1.5" });
+    const yaml = readFileSync(file, "utf8");
+    writePackageConfig(f.root, pkg, "pnpm");
+    expect(readFileSync(file, "utf8")).toBe(yaml);
   } finally { f.close(); }
 });

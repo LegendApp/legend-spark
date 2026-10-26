@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { parse } from "yaml";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,7 +23,7 @@ for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {
       expect(run).toHaveBeenLastCalledWith(root, [manager, "install"]);
       const first = readFileSync(path.join(root, "package.json"), "utf8");
       const pkg = JSON.parse(first);
-      const pins = manager === "yarn" ? pkg.resolutions : manager === "pnpm" ? pkg.pnpm.overrides : pkg.overrides;
+      const pins = manager === "yarn" ? pkg.resolutions : manager === "pnpm" ? parse(readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8")).overrides : pkg.overrides;
       expect(pkg.dependencies["expo-desktop"]).toBe("1.0.6");
       expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("54.81.6");
       expect(pins["expo-desktop-config-plugins"]).toBe("1.3.2");

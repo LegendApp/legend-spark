@@ -1,3 +1,4 @@
+import { parse } from "yaml";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
@@ -91,7 +92,7 @@ test.each(["npm", "pnpm", "yarn", "bun"] as const)("upgrade migrates install inp
   expect(readFileSync(path.join(root, ".spark/upgrade-notes.md"), "utf8")).toContain(`../node_modules/@legendapp/spark/skills/spark/UPGRADING.md#${next.replaceAll('.', '')}`);
   expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Review the target-only native module change."));
   const pkg = read("package.json");
-  const overrides = manager === "pnpm" ? pkg.pnpm.overrides : manager === "yarn" ? pkg.resolutions : pkg.overrides;
+  const overrides = manager === "pnpm" ? parse(readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8")).overrides : manager === "yarn" ? pkg.resolutions : pkg.overrides;
   expect(overrides["@react-native-runtimes/core"]).toMatch(/^file:\.\/spark-packages\//);
   expect(overrides["@expo/cli"]).toBe("54.0.99");
 });
@@ -179,10 +180,12 @@ test("new release overrides are added and preserve other pnpm configuration", as
   vi.mocked(run).mockImplementation(async (...args) => {
     const after = read("package.json");
     expect(after.pnpm.onlyBuiltDependencies).toEqual(["custom-native"]);
-    expect(after.pnpm.overrides.custom).toBe("2.0.0");
-    expect(after.pnpm.overrides["@react-native-runtimes/core"]).toMatch(/^file:\.\/spark-packages\//);
+    expect(after.pnpm).not.toHaveProperty("overrides");
+    const overrides = parse(readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8")).overrides;
+    expect(overrides.custom).toBe("2.0.0");
+    expect(overrides["@react-native-runtimes/core"]).toMatch(/^file:\.\/spark-packages\//);
     // Verify the same archive through the manager's actual override location.
-    expect(readFileSync(path.join(root, after.pnpm.overrides["@react-native-runtimes/core"].slice("file:./".length)))).toEqual(bytes);
+    expect(readFileSync(path.join(root, overrides["@react-native-runtimes/core"].slice("file:./".length)))).toEqual(bytes);
     cpSync(target, path.join(root, "node_modules/@legendapp/spark"), { recursive: true });
     return "";
   });
