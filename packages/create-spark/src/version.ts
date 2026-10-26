@@ -64,7 +64,11 @@ export async function rerunNewerCreator(requested: string | undefined, args: str
     if (!response.ok) return undefined;
     tags = await response.json() as Record<string, string>;
     ({ valid, gt } = createRequire(createRequire(import.meta.url).resolve("npm/package.json"))("semver"));
-  } catch { return undefined; }
+  } catch (error) {
+    // Fail open: a creator that cannot check for a newer one still creates the app.
+    if (env.SPARK_DEBUG === "1") console.error(`Skipped the newer-creator check: ${error}`);
+    return undefined;
+  }
   const newer = tags[channel];
   if (!newer || !valid(newer) || !gt(newer, VERSION) || (newer.match(/-([^.]+)/)?.[1] ?? "latest") !== channel) return undefined;
   const argv = rerunCommand(`@legendapp/create-spark@${newer}`, args, env);

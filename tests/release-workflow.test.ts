@@ -35,6 +35,29 @@ test("release targets start a new version line from the previous stable release"
   expect(releaseTarget("0.0.2", published)).toEqual({ version: "0.0.2", previous: "v0.0.1" });
   expect(releaseTarget("0.0.2", published, true)).toEqual({ version: "0.0.2", previous: "v0.0.1" });
   expect(releaseTarget("0.1.0", [...published, "0.0.10"])).toEqual({ version: "0.1.0", previous: "v0.0.10" });
+  // A new line whose previews skipped next.0 continues them.
+  expect(releaseTarget("0.0.1", [...published, "0.0.2-next.3"])).toEqual({ version: "0.0.2-next.4", previous: "v0.0.2-next.3" });
+});
+
+test("release targets refuse versions below a published stable", () => {
+  const published = ["0.0.1-next.10", "0.0.1", "0.0.2"];
+  expect(() => releaseTarget("0.0.1", published)).toThrow("npm already has 0.0.2, newer than 0.0.2-next.0. Pull main");
+  expect(() => releaseTarget("0.0.1", [...published, "0.0.2-next.0"])).toThrow("newer than 0.0.2-next.1");
+  expect(() => releaseTarget("0.0.2", ["0.0.1", "0.1.0"], true)).toThrow("npm already has 0.1.0, newer than 0.0.2");
+});
+
+test("version edits rewrite only @legendapp versions and pins, never equal third-party pins", () => {
+  const f = fixture();
+  try {
+    f.write("packages/desktop/skills/spark/UPGRADING.md", "# Upgrading Spark apps\n\n## 0.0.2-next.0\n\nNotes.\n");
+    const lock = JSON.stringify({ workspaces: { "packages/desktop": { name: "@legendapp/spark", version: "0.0.1", dependencies: { "@legendapp/spark-ui": "0.0.1", "concat-map": "0.0.1" } } }, packages: { "concat-map": ["concat-map@0.0.1", "", {}, "sha512-x"] } }, null, 2);
+    f.write("bun.lock", lock);
+    f.write("package.json", '{"version": "0.0.1", "dependencies": {"concat-map": "0.0.1", "@legendapp/spark": "0.0.1"}}\n');
+    f.write("packages/cli/src/project.ts", 'export const VERSION = "0.0.1";\n');
+    const edits = versionEdits(f.root, ["bun.lock", "package.json", "packages/cli/src/project.ts"], "0.0.1", "0.0.2-next.0", "notes");
+    expect(edits.find(edit => edit.file === "bun.lock")!.after).toBe(lock.replace('"version": "0.0.1"', '"version": "0.0.2-next.0"').replace('"@legendapp/spark-ui": "0.0.1"', '"@legendapp/spark-ui": "0.0.2-next.0"'));
+    expect(edits.find(edit => edit.file === "package.json")!.after).toBe('{"version": "0.0.2-next.0", "dependencies": {"concat-map": "0.0.1", "@legendapp/spark": "0.0.2-next.0"}}\n');
+  } finally { f.cleanup(); }
 });
 
 test("release environment loading works without process.loadEnvFile and preserves shell values", () => {
@@ -74,6 +97,7 @@ function fixture() {
   write("feature.ts", "export const feature = true;\n"); git("add", "."); git("commit", "-m", "Fix a native lifecycle");
   git("remote", "add", "origin", "https://github.com/LegendApp/legend-spark.git"); git("update-ref", "refs/remotes/origin/main", "HEAD");
   const commands: string[][] = [];
+  const versions = ["0.0.1-next.2"];
   const tags: Record<string, string> = { next: "0.0.1-next.2", latest: "0.0.1-next.2" };
   const createTags = { ...tags };
   let failTest = false, pendingRunner = false, failPublish = false;
@@ -107,7 +131,7 @@ function fixture() {
       }
       return { code: 0, output: "" };
     }
-    if (argv.includes("versions")) return { code: 0, output: '["0.0.1-next.2"]' };
+    if (argv.includes("versions")) return { code: 0, output: JSON.stringify(versions) };
     if (argv.includes("dist-tags")) return { code: 0, output: JSON.stringify(argv[2] === "@legendapp/create-spark" ? createTags : tags) };
     if (argv[0] === "npm" && argv[1] === "view" && argv.includes("dist.integrity")) {
       const version = argv[2]!.slice(argv[2]!.lastIndexOf("@") + 1);
@@ -139,7 +163,7 @@ function fixture() {
   };
   const release = (resume = false, latest = false, preflight = async () => {}) => releaseWorkflow(root, { resume, latest }, execute, preflight, () => path.join(root, ".spark/runner"));
   const finish = (runner: Execute = execute, latest = false) => releaseWorkflow(root, { resume: false, latest, finish: true }, runner, async () => { throw new Error("Signing must not run"); }, () => { throw new Error("Runner must not be consulted"); });
-  return { root, git, write, commands, tags, createTags, release, finish, execute, setFailures: (test: boolean, runner: boolean, publish: boolean) => { failTest = test; pendingRunner = runner; failPublish = publish; }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, git, write, commands, versions, tags, createTags, release, finish, execute, setFailures: (test: boolean, runner: boolean, publish: boolean) => { failTest = test; pendingRunner = runner; failPublish = publish; }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 test.each(["promote", "workspace"])("stable release versions, resumes and publishes to latest: %s", async mode => {
@@ -318,11 +342,12 @@ test("finish recovers an old checkpoint using published artifacts while preservi
     f.write("draft.ts", "preserve this\n");
     f.write("package.json", '{"version":"0.0.1-next.99"}\n');
     const revision = f.git("rev-parse", "HEAD");
+    f.git("update-ref", "refs/remotes/origin/main", "HEAD");
     await expect(releaseWorkflow(f.root, { resume: false, latest: false, next: true, finish: true }, f.execute, async () => {}, () => "")).rejects.toThrow("Retry without --next");
     const before = f.commands.length;
     expect(await f.finish()).toBe(0);
     const finishing = f.commands.slice(before);
-    expect(finishing.filter(args => args[0] === "git")).toEqual([["git", "remote", "get-url", "origin"]]);
+    expect(finishing.filter(args => args[0] === "git").map(args => args[1])).toEqual(["remote", "fetch", "merge-base"]);
     expect(finishing.some(args => args[0] === "bun" || args[1] === "publish" || args.includes("upload"))).toBe(false);
     expect(finishing).toContainEqual(["npm", "dist-tag", "add", "@legendapp/spark@0.0.1-next.3", "latest"]);
     expect(finishing).toContainEqual(["npm", "dist-tag", "add", "@legendapp/create-spark@0.0.1-next.3", "latest"]);
@@ -376,6 +401,10 @@ test("finish requires a committed candidate and retains its saved channels", asy
     f.setFailures(false, false, true);
     await expect(f.release(true)).rejects.toThrow();
     await expect(f.finish(f.execute, true)).rejects.toThrow("without --latest");
+    // main never received the release commit, so the release stays incomplete.
+    await expect(f.finish()).rejects.toThrow("origin/main does not contain release commit");
+    expect(JSON.parse(readFileSync(path.join(f.root, ".spark/release-workflow.json"), "utf8")).complete).not.toBe(true);
+    f.git("update-ref", "refs/remotes/origin/main", "HEAD");
     expect(await f.finish()).toBe(0);
     expect(f.tags.latest).toBe("0.0.1-next.2");
   } finally { f.cleanup(); }
@@ -475,7 +504,8 @@ test("resume refuses new source commits and preserves unrelated drafts", async (
     f.git("add", "unrelated.ts"); f.git("commit", "-m", "Another change");
     await expect(f.release(true)).rejects.toThrow("Source revision changed");
     // The automatic continuation names the commands that close or abandon the release.
-    await expect(f.release()).rejects.toThrow("If 0.0.1-next.3 is already published, run bun run release --finish");
+    await expect(f.release()).rejects.toThrow("If 0.0.1-next.3 is fully published, push main containing that commit and run bun run release --finish");
+    await expect(releaseWorkflow(f.root, { resume: false, latest: false, resumeFrom: "publish" }, f.execute, async () => {}, () => "")).rejects.toThrow("run bun run release --resume-from publish");
     expect(f.commands.some(args => args.includes("release:publish"))).toBe(false);
   } finally { f.cleanup(); }
 });
@@ -551,5 +581,36 @@ test("publish-only resume verifies staged artifacts and never consults signing o
     expect(commands.filter(args => args.includes("release:publish"))).toHaveLength(1);
     f.write(`artifacts/releases/${state.version}/create-spark.tgz`, "tampered");
     await expect(releaseWorkflow(f.root, { resume: false, latest: false, resumeFrom: "publish" }, f.execute, async () => {}, () => "")).rejects.toThrow("Release artifact changed");
+  } finally { f.cleanup(); }
+});
+
+test("a release after a published stable starts the next line without touching third-party lockfile pins", async () => {
+  const f = fixture();
+  try {
+    f.write("packages/desktop/skills/spark/UPGRADING.md", "# Upgrading Spark apps\n\n## 0.0.2-next.0\n\nNext line.\n\n## 0.0.1\n\nStable.\n");
+    applyVersionEdits(f.root, versionEdits(f.root, f.git("ls-files").split("\n"), "0.0.1-next.2", "0.0.1", "Stable release."));
+    f.write("bun.lock", JSON.stringify({ workspaces: { "": { name: "spark-workspace", devDependencies: { "@legendapp/spark": "0.0.1", "strict-url-sanitise": "0.0.1" } }, "packages/desktop": { name: "@legendapp/spark", version: "0.0.1", dependencies: { "concat-map": "0.0.1" } } }, packages: { "concat-map": ["concat-map@0.0.1", "", {}, "sha512-x"] } }, null, 2) + "\n");
+    f.git("add", "."); f.git("commit", "-m", "release: prepare 0.0.1"); f.git("tag", "v0.0.1");
+    f.write("next.ts", "export const next = true;\n"); f.git("add", "."); f.git("commit", "-m", "Start the next line");
+    f.git("update-ref", "refs/remotes/origin/main", "HEAD");
+    f.versions.push("0.0.1");
+    expect(await f.release()).toBe(0);
+    expect(f.git("log", "-1", "--format=%s", "HEAD")).toBe("release: prepare 0.0.2-next.0");
+    const changed = f.git("diff", "HEAD^", "HEAD", "--", "bun.lock").split("\n").filter(line => /^[-+]\s/.test(line));
+    expect(changed).toHaveLength(4);
+    for (const line of changed) expect(line).toMatch(/"(?:version|@legendapp\/spark)": "0\.0\.(?:1|2-next\.0)"/);
+    expect(readFileSync(path.join(f.root, "bun.lock"), "utf8").match(/"(?:concat-map|strict-url-sanitise)": "0\.0\.1"/g)).toHaveLength(2);
+    expect(releaseNotes(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8"), "0.0.2-next.0")).toContain("- Start the next line");
+    expect(f.tags.next).toBe("0.0.2-next.0");
+  } finally { f.cleanup(); }
+});
+
+test("a release never moves its npm channel backwards", async () => {
+  const f = fixture();
+  try {
+    f.tags.next = "0.0.2-next.5";
+    await expect(f.release()).rejects.toThrow("npm next is 0.0.2-next.5, newer than 0.0.1-next.3; refusing to move it backwards");
+    expect(existsSync(path.join(f.root, ".spark/release-workflow.json"))).toBe(false);
+    expect(JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8")).version).toBe("0.0.1-next.2");
   } finally { f.cleanup(); }
 });

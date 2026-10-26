@@ -62,8 +62,18 @@ const below = (a: number[], b: number[]) => {
   const index = a.findIndex((value, index) => value !== b[index]);
   return index >= 0 && a[index]! < b[index]!;
 };
+const olderThan = (version: string, other: string) => { const r = rank(other); return Boolean(r && below(rank(version)!, r)); };
+const newest = (versions: string[]) => versions.filter(rank).sort((a, b) => olderThan(a, b) ? 1 : -1)[0];
 
-export function releaseTarget(current: string, published: string[], stable?: boolean): { version: string; previous: string } {
+// Never select a version below a published stable: a stale checkout must pull first.
+export function releaseTarget(current: string, published: string[], stable?: boolean) {
+  const target = selectTarget(current, published, stable);
+  const shipped = newest(published.filter(value => !value.includes("-")));
+  if (shipped && olderThan(target.version, shipped)) throw new Error(`npm already has ${shipped}, newer than ${target.version}. Pull main before releasing.`);
+  return target;
+}
+
+function selectTarget(current: string, published: string[], stable?: boolean): { version: string; previous: string } {
   const match = releaseVersion.exec(current);
   if (!match) throw new Error(`Expected a stable or next preview version, received ${current}`);
   const line = `${match[1]}.${match[2]}.${match[3]}`, prefix = `${line}-next.`;
@@ -73,14 +83,16 @@ export function releaseTarget(current: string, published: string[], stable?: boo
   if (published.includes(version)) {
     if (stable) throw new Error(`Stable version ${version} is already published; select a new version`);
     // After a stable release, the next preview starts the following patch line.
-    if (match[4] === undefined) return releaseTarget(`${match[1]}.${match[2]}.${Number(match[3]) + 1}-next.0`, published);
+    if (match[4] === undefined) {
+      const next = `${match[1]}.${match[2]}.${Number(match[3]) + 1}-next.`;
+      return selectTarget(newest([`${next}0`, ...published.filter(value => value.startsWith(next))])!, published);
+    }
     return { version: `${prefix}${latest + 1}`, previous: `v${current}` };
   }
   if (!stable && match[4] !== undefined && latest > Number(match[4])) throw new Error(`A higher ${prefix} version is already published; cannot release ${current}`);
   if (numbers.length) return { version, previous: `v${prefix}${latest}` };
   // A new version line diffs against the highest published version below it.
-  const target = rank(version)!;
-  const previous = published.filter(value => { const r = rank(value); return r && below(r, target); }).sort((a, b) => below(rank(a)!, rank(b)!) ? 1 : -1)[0];
+  const previous = newest(published.filter(value => rank(value) && olderThan(value, version)));
   if (!previous) throw new Error(`No published version below ${version}`);
   return { version, previous: `v${previous}` };
 }
@@ -96,8 +108,12 @@ export function versionEdits(root: string, files: string[], current: string, ver
   for (const file of files) {
     const before = readFileSync(path.join(root, file), "utf8");
     let after = before;
-    if (file.endsWith("package.json") || file === "bun.lock") after = before.replaceAll(JSON.stringify(current), JSON.stringify(version));
-    else if (file === "packages/cli/src/project.ts") {
+    if (file.endsWith("package.json") || file === "bun.lock") {
+      // Only workspace versions and @legendapp pins: third-party pins may equal the old version.
+      after = before.replace(new RegExp(`("version"|"@legendapp/[^"]+")(\\s*:\\s*)${JSON.stringify(current).replaceAll(".", "\\.")}`, "g"), `$1$2${JSON.stringify(version)}`);
+      const values = (text: string) => text.replace(/("version"|"@legendapp\/[^"]+")\s*:\s*"[^"]*"/g, "$1");
+      if (values(after) !== values(before)) throw new Error(`Release version edit of ${file} would change more than @legendapp versions`);
+    } else if (file === "packages/cli/src/project.ts") {
       const declaration = `export const VERSION = ${JSON.stringify(current)};`;
       if (!before.includes(declaration)) throw new Error("CLI version does not match the workspace version");
       after = before.replace(declaration, `export const VERSION = ${JSON.stringify(version)};`);
@@ -185,13 +201,15 @@ async function finishRelease(root: string, state: State, execute: Execute) {
     if (tags[channel] !== state.version) await run(["npm", "dist-tag", "add", `${name}@${state.version}`, channel], false);
     await waitForReleaseTags(state.version, state.latest, execute, undefined, name);
   }
+  await run(["git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main"]);
+  if ((await execute(["git", "merge-base", "--is-ancestor", state.revision, "refs/remotes/origin/main"], true)).code) throw new Error(`origin/main does not contain release commit ${state.revision.slice(0, 12)}. Merge and push main (git pull --no-rebase origin main && git push origin HEAD:main), then rerun bun run release --finish.`);
   state.complete = true;
   writeJson(path.join(root, ".spark/release-workflow.json"), state);
   console.log(`Released ${state.version}. Native UI and clean-recipient Runner acceptance must still be recorded separately.`);
 }
 
 // An unfinished release blocks the next one, so name the commands that close it.
-const movedSource = (state: State) => `Source revision changed since release ${state.version} started from ${state.revision!.slice(0, 12)}. If ${state.version} is already published, run bun run release --finish. Otherwise return main to that commit to resume it, or remove .spark/release-workflow.json to abandon it.`;
+const movedSource = (state: State) => `Source revision changed since release ${state.version} started from ${state.revision!.slice(0, 12)}. If ${state.version} is fully published, push main containing that commit and run bun run release --finish. To continue its publication, check out that commit (git switch --detach ${state.revision}) and run bun run release --resume-from publish. To abandon an unpublished release, remove .spark/release-workflow.json.`;
 
 export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean; stable?: boolean; next?: boolean; finish?: boolean; resumeFrom?: "publish"; skipTests?: boolean }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
   const stateFile = path.join(root, ".spark/release-workflow.json");
@@ -246,6 +264,9 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
       const current = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version as string;
       const versions = JSON.parse(await run(["npm", "view", "@legendapp/spark", "versions", "--json"], true));
       const { version, previous: tag } = releaseTarget(current, Array.isArray(versions) ? versions : [versions], options.stable);
+      const latest = latestChannel(version, options), channel = latest ? "latest" : "next";
+      const tagged = JSON.parse(await run(["npm", "view", "@legendapp/spark", "dist-tags", "--json"], true))[channel];
+      if (tagged && olderThan(version, tagged)) throw new Error(`npm ${channel} is ${tagged}, newer than ${version}; refusing to move it backwards. Pull main before releasing.`);
       let notes = changelogSection(readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), version);
       if (notes === undefined) {
         const hasTag = await execute(["git", "rev-parse", "--verify", `refs/tags/${tag}`], true);
@@ -256,7 +277,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
       }
       const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["bun.lock", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md", "docs/release-support-matrix.json", "docs/release-support-matrix.md"].includes(file));
       const edits = versionEdits(root, files, current, version, notes);
-      state = { schema: 1, version, baseRevision: revision, revision: edits.length ? undefined : revision, latest: latestChannel(version, options), edits };
+      state = { schema: 1, version, baseRevision: revision, revision: edits.length ? undefined : revision, latest, edits };
       writeJson(stateFile, state);
     }
     console.log(`Releasing ${state.version} under ${state.latest ? "latest" : "next"}.`);

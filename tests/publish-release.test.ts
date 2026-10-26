@@ -5,7 +5,7 @@ import path from "node:path";
 const state = vi.hoisted(() => ({
   release: {} as any, commands: [] as string[][], checks: new Map<string, number>(),
   failCreate: false, visible: true, retry: false, draft: false, latest: true,
-  partial: false, newRelease: false, tagError: "", failPush: false, moved: false,
+  partial: false, newRelease: false, tagError: "", failPush: false, failFetch: false, moved: false,
   tags: {} as Record<string, Record<string, string>>,
 }));
 vi.mock("../scripts/release-env.ts", () => ({ loadReleaseEnv: vi.fn() }));
@@ -55,6 +55,7 @@ vi.mock("../packages/cli/src/process.ts", () => ({ spawnProcess: (argv: string[]
 } }));
 vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, argv: string[]) => {
   if (argv[0] === "git") {
+    if (argv[1] === "fetch" && state.failFetch && state.commands.some(argv => argv[1] === "push")) throw new Error("fetch failed");
     if (argv[1] === "push") { state.commands.push(argv); if (state.failPush && argv.includes("--atomic")) throw new Error("push rejected"); }
     if (argv[1] === "merge-base") { state.commands.push(argv); if (state.moved) throw new Error("not an ancestor"); }
     return argv[1] === "rev-parse" ? state.release.revision : "";
@@ -79,7 +80,7 @@ vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, a
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-test.each(["success", "next only", "draft", "stable", "stable draft", "stable next draft", "new preview", "new stable", "E404 tags", "E401 tags", "create failure", "not visible", "push failure", "main moved", "partial moved", "moved retry draft", "retry", "invalid creator", "no terminal"])("release publication publishes to its channel: %s", async scenario => {
+test.each(["success", "next only", "draft", "stable", "stable draft", "stable next draft", "new preview", "new stable", "E404 tags", "E401 tags", "create failure", "not visible", "push failure", "fetch failure", "main moved", "partial moved", "moved retry draft", "retry", "invalid creator", "no terminal"])("release publication publishes to its channel: %s", async scenario => {
   vi.resetModules();
   state.commands = [];
   state.checks.clear();
@@ -88,8 +89,9 @@ test.each(["success", "next only", "draft", "stable", "stable draft", "stable ne
   state.retry = scenario === "retry" || scenario === "moved retry draft";
   state.moved = scenario.includes("moved");
   state.partial = scenario === "partial moved";
-  state.newRelease = scenario.startsWith("new ") || scenario === "push failure";
-  state.failPush = scenario === "push failure" || scenario === "moved retry draft";
+  state.newRelease = scenario.startsWith("new ") || scenario === "push failure" || scenario === "fetch failure";
+  state.failFetch = scenario === "fetch failure";
+  state.failPush = scenario === "push failure" || state.failFetch || scenario === "moved retry draft";
   state.draft = scenario.includes("draft") || state.newRelease;
   state.latest = scenario !== "next only" && scenario !== "stable next draft";
   state.tagError = scenario.endsWith(" tags") ? scenario.slice(0, 4) : "";
@@ -128,10 +130,10 @@ test.each(["success", "next only", "draft", "stable", "stable draft", "stable ne
     expect(order()).toEqual(["merge-base"]);
     return;
   }
-  if (state.failPush && state.moved) {
+  if (state.failPush && (state.moved || state.failFetch)) {
     // npm is live: the tag and release still go public; main is left to the maintainer.
     await expect(publication).rejects.toThrow("push main: git pull --no-rebase origin main && git push origin HEAD:main. Then run bun run release --finish");
-    expect(order()).toEqual(["push", "merge-base", "push tag", "edit"]);
+    expect(order()).toEqual(state.failFetch ? ["merge-base", "create", "upload", "npm spark.tgz", "npm create-spark.tgz", "push", "push tag", "edit"] : ["push", "merge-base", "push tag", "edit"]);
     return;
   }
   if (state.failPush) {
