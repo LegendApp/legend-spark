@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { runOk } from "./subprocess.ts";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +11,7 @@ import { VERSION, writeJson } from "../packages/cli/src/project.ts";
 import { releaseBase, validateRelease, packageSources, materializeReleasePackages, verifyMaterializedReleasePackages, type ReleaseManifest, type RunnerAsset } from "../packages/cli/src/release.ts";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { downloadAsset, installRunner } from "../packages/cli/src/runner-install.ts";
-import { applyOverrides, managerCommand } from "../packages/cli/src/package-manager.ts";
+import { applyOverrides, localArchive, managerCommand } from "../packages/cli/src/package-manager.ts";
 import { spawnProcess, which } from "../packages/cli/src/process.ts";
 
 const bytes = Buffer.from("signed archive fixture");
@@ -51,7 +51,6 @@ test.each(installedManagers)("verified release archives install and reinstall af
     const consumer = path.join(root, "consumer"); mkdirSync(consumer);
     const source = packageSources(undefined, releaseManifest)[packageName]!;
     const pkg: any = { name: "fixture-consumer", version: "1.0.0", private: true, dependencies: { [packageName]: source }, ...(manager === "bun" ? { trustedDependencies: [packageName] } : {}) };
-    if (manager === "npm") pkg.allowScripts = { [packageName]: true };
     applyOverrides(pkg, { [packageName]: source }, manager);
     writeJson(path.join(consumer, "package.json"), pkg);
     writeFileSync(path.join(consumer, ".gitignore"), "spark-packages\n!spark-packages/\n!spark-packages/**\n");
@@ -68,6 +67,9 @@ test.each(installedManagers)("verified release archives install and reinstall af
     async function install(at: string) {
       verifyMaterializedReleasePackages(releaseManifest, at);
       managerInvocations++;
+      // npm 12.0.2 matches file permissions against absolute resolved sources.
+      // Grant only this verified fixture archive at each installation root.
+      if (manager === "npm") writeJson(path.join(at, "package.json"), { ...pkg, allowScripts: { [localArchive(path.join(realpathSync(at), source.slice(5)))]: true } });
       const child = spawnProcess(managerCommand(manager, args, {}), { cwd: at, env: { ...process.env, CI: "1", ...(manager === "npm" ? { npm_config_cache: cache } : {}) }, stdout: "pipe", stderr: "pipe" });
       const [status, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout!).text(), new Response(child.stderr!).text()]);
       if (status !== 0) throw new Error(`${manager} install failed (${status}):\n${stderr}\n${stdout}`);
@@ -78,6 +80,7 @@ test.each(installedManagers)("verified release archives install and reinstall af
     }
     await install(consumer);
     await assertInstalled(consumer);
+    if (manager === "npm") expect(existsSync(marker)).toBe(true);
     rmSync(marker, { force: true });
     cpSync(consumer, clone, { recursive: true, filter: sourcePath => {
       const relative = path.relative(consumer, sourcePath);
