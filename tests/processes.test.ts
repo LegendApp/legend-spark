@@ -76,6 +76,16 @@ test("runCommand closes input and preserves expected nonzero exit status", async
   const result = await runCommand(options);
   expect(result.exit).toEqual({ type: "exited", code: 7 }); expect(new TextDecoder().decode(result.stderr)).toBe("error");
 });
+test("runCommand on a terminal sends unterminated input with the launch, then closes input", async () => {
+  mocks.call.mockImplementation(async (method, json) => {
+    if (method === "closeInput") exit(JSON.parse(json).id);
+    return "null";
+  });
+  await expect(runCommand({ ...options, input: "partial", pty: { cols: 80, rows: 24 } })).resolves.toMatchObject({ exit: { type: "exited", code: 0 } });
+  expect(mocks.call.mock.calls.map(([method]) => method)).toEqual(["spawn", "closeInput"]);
+  expect(JSON.parse(mocks.call.mock.calls[0]![1])).toMatchObject({ pty: { cols: 80, rows: 24 } });
+  expect(new TextDecoder().decode(mocks.call.mock.calls[0]![2])).toBe("partial");
+});
 test("invalid options and unsupported capabilities reject before side effects", async () => {
   for (const extra of [{ args: "bad" }, { captureLimitBytes: -1 }, { signal: {} }, { onOutput: true }, { target: { type: "helper", name: "../escape" } }, { target: { type: "command", name: "/bin/cat" } }, { target: { type: "executable", path: "/bin/cat", name: "bad" } }]) {
     await expect(spawn({ ...options, ...extra } as never)).rejects.toBeDefined();
@@ -107,4 +117,24 @@ test("malformed launch acknowledgement retains a rollback failure", async () => 
     errors: [expect.objectContaining({ code: "E_INVALID_DATA" }), expect.objectContaining({ message: "termination failed" })],
   } });
   expect(mocks.listeners.size).toBe(0);
+});
+test("terminal processes send their size and resize through the native terminal", async () => {
+  const child = await spawn({ ...options, pty: { cols: 120, rows: 40 } });
+  expect(JSON.parse(mocks.call.mock.calls.at(-1)![1])).toMatchObject({ pty: { cols: 120, rows: 40 } });
+  await child.resize({ cols: 200, rows: 50 });
+  expect(mocks.call.mock.calls.at(-1)!.slice(0, 2)).toEqual(["resize", JSON.stringify({ id: child.id, cols: 200, rows: 50 })]);
+  await expect(child.resize({ cols: 0, rows: 50 })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  exit(child.id);
+  await expect(child.resize({ cols: 80, rows: 24 })).rejects.toMatchObject({ code: "E_CLOSED" });
+});
+test("terminal options are validated and typed unsupported where no terminal exists", async () => {
+  await expect(spawn({ ...options, pty: { cols: 1.5, rows: 40 } })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(spawn({ ...options, pty: { cols: 80, rows: 24, shell: true } as never })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  const child = await spawn(options);
+  const calls = mocks.call.mock.calls.length;
+  await expect(child.resize({ cols: 80, rows: 24 })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(mocks.call.mock.calls).toHaveLength(calls);
+  exit(child.id);
+  mocks.platform.OS = "windows";
+  await expect(spawn({ target: { type: "command", name: "cmd" }, pty: { cols: 80, rows: 24 } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
 });

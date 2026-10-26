@@ -1,5 +1,6 @@
 export type ProcessTarget = { type: "executable"; path: string } | { type: "helper"; name: string } | { type: "command"; name: string };
 export type ProcessInput = string | Uint8Array;
+export type TerminalSize = { cols: number; rows: number };
 export type ProcessOutput = { stream: "stdout" | "stderr"; bytes: Uint8Array };
 export type ProcessOptions = {
   target: ProcessTarget;
@@ -12,6 +13,8 @@ export type ProcessOptions = {
   /** Maximum captured bytes per stream, 0–8 MiB; streaming remains complete. */
   captureLimitBytes?: number;
   onOutput?: (output: ProcessOutput) => void;
+  /** Run the child on a pseudo-terminal of this size (macOS). Output, including terminal echo, arrives as one merged `stdout` stream. */
+  pty?: TerminalSize;
 };
 export type RunCommandOptions = ProcessOptions;
 export type ProcessExit = { type: "exited"; code: number } | { type: "terminated"; signal: number | null };
@@ -28,7 +31,10 @@ export interface ProcessHandle {
   readonly exited: Promise<ProcessResult>;
   /** Strings use UTF-8; byte arrays pass through unchanged. Calls preserve order. */
   write(input: ProcessInput): Promise<void>;
+  /** With `pty`, inject two Ctrl+D EOF characters (canonical mode/default VEOF), rather than a pipe half-close. */
   closeInput(): Promise<void>;
   /** Resolve after the process tree exits and its output drains. Retry on failure. */
   terminate(): Promise<void>;
+  /** Resize the terminal of a process spawned with `pty`; the child receives SIGWINCH. */
+  resize(size: TerminalSize): Promise<void>;
 }

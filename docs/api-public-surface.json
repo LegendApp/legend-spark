@@ -380,6 +380,7 @@
     "ProcessResult",
     "ProcessTarget",
     "RunCommandOptions",
+    "TerminalSize",
     "getProcessAvailability",
     "resolveCommand",
     "runCommand",
