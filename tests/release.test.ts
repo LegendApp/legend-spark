@@ -1,5 +1,5 @@
 import { sessionStatus } from "../packages/cli/src/session-status.ts";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { runOk } from "./subprocess.ts";
@@ -140,7 +140,10 @@ test("Runner download retries interrupted streams and rejects mismatched bytes",
   let calls = 0;
   const request = (async () => { calls++; if (calls === 1) throw new Error("connection reset"); return new Response(bytes); }) as typeof fetch;
   try {
-    await downloadAsset(asset, path.join(root, "valid"), request);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {}); let lines: string[] = [];
+    try { await downloadAsset(asset, path.join(root, "valid"), request); }
+    finally { lines = log.mock.calls.map(args => String(args[0])); log.mockRestore(); }
+    expect(lines).toContain("Downloading Spark Runner ██████████ 100%");
     expect(calls).toBe(2); expect(readFileSync(path.join(root, "valid"))).toEqual(bytes);
     await expect(downloadAsset({ ...asset, sha256: "0".repeat(64) }, path.join(root, "invalid"), request)).rejects.toThrow("checksum");
     expect(existsSync(path.join(root, "invalid"))).toBe(false);
@@ -168,7 +171,11 @@ test.skipIf(process.platform !== "darwin").each(["arm64", "x64"])("Runner %s ins
     },
   };
   try {
-    const app = await installRunner(asset, root, deps);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {}); let lines: string[] = [];
+    let app: string;
+    try { app = await installRunner(asset, root, deps); }
+    finally { lines = log.mock.calls.map(args => String(args[0])); log.mockRestore(); }
+    expect(lines).toContain("Spark Runner installed, opening your app…");
     expect(existsSync(app)).toBe(true); expect(downloads).toBe(1);
     expect(await installRunner(asset, root, deps)).toBe(app); expect(downloads).toBe(1);
     expect(commands.some(args => args[0] === "spctl")).toBe(true);
@@ -182,7 +189,11 @@ test.skipIf(process.platform !== "darwin").each(["arm64", "x64"])("Runner %s ins
 });
 
 test("published SDK sessions explain automatic Runner installation", () => {
-  expect(sessionStatus("go", false, [], false, true).actions).toContain("Download and open");
+  const manual = sessionStatus("go", false, [], false, { auto: false, size: 20_579_682 });
+  expect(manual.message).toContain("Press d"); expect(manual.actions).toContain("Download and open");
+  const auto = sessionStatus("go", false, [], false, { auto: true, size: 20_579_682 });
+  expect(auto.message).toBe("Downloading Spark Runner (20.6 MB)…"); expect(auto.message + auto.actions).not.toContain("Press d"); expect(auto.actions).not.toContain("Download and open");
+  expect(sessionStatus("go", false, [], false, { auto: true }).message).toBe("Downloading Spark Runner…");
   expect(sessionStatus("go", false, [], false, false).message).toContain("register");
 });
 

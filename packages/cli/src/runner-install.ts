@@ -133,7 +133,7 @@ export async function downloadAsset(asset: { url: string; size: number; sha256: 
         hash.update(chunk);
         await handle.writeFile(chunk);
         const percent = Math.floor(bytes / asset.size * 10) * 10;
-        if (percent !== reported) { console.log(`Downloading Spark Runner: ${percent}%`); reported = percent; }
+        if (percent !== reported) { console.log(`Downloading Spark Runner ${"█".repeat(percent / 10)}${"░".repeat(10 - percent / 10)} ${percent}%`); reported = percent; }
       }
       if (bytes !== asset.size || hash.digest("hex") !== asset.sha256) throw new Error("Download checksum or size mismatch");
       await handle.close(); handle = undefined;
@@ -183,7 +183,7 @@ export async function installRunner(asset: RunnerAsset, cache = sparkHome(), dep
     }
     releaseLock.assertAlive();
     registerRuntime(app);
-    console.log("Spark Runner installed and verified.");
+    console.log("Spark Runner installed, opening your app…");
     return app;
   } finally {
     if (staging) rmSync(staging, { recursive: true, force: true });

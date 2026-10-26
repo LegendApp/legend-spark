@@ -102,6 +102,8 @@ export async function dev(
   let restartPending = false;
   let reopenPending = false;
   let closing = false;
+  // Without --no-open the session opens the desktop app itself, so a missing Runner downloads without a keypress.
+  let autoOpen = !noOpen;
   let metro: ReturnType<typeof spawnProcess> | undefined;
   let finish!: () => void;
   const finished = new Promise<void>((resolve) => {
@@ -207,7 +209,8 @@ export async function dev(
       }
       issues.push(...goConfigurationIssues(readAppConfig(root)));
     }
-    const view = sessionStatus(target, !!current, issues, appProcess?.exitCode === null, !!installedRelease()?.runners[`${platform}-${architecture(platform)}`]);
+    const asset = installedRelease()?.runners[`${platform}-${architecture(platform)}`];
+    const view = sessionStatus(target, !!current, issues, appProcess?.exitCode === null, asset ? { auto: autoOpen, size: asset.size } : false);
     if (view.compatible && current && appProcess?.exitCode === null &&
       (launchedRuntime?.app !== current.app || launchedRuntime.fingerprint !== current.runtime.fingerprint)) {
       // Discovery can find a different compatible binary after a native edit.
@@ -242,6 +245,7 @@ export async function dev(
     return view.compatible;
   }
   async function open() {
+    autoOpen = true;
     if (platform === "windows" ? process.platform !== "win32" : process.platform !== "darwin") {
       throw new Error(`Open ${platform} on a matching desktop host. Mobile and web remain available.`);
     }
