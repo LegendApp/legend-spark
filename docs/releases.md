@@ -164,7 +164,9 @@ and runs the packed-consumer integration against the **exact staged npm archive*
 After successful checks it tags the release locally, creates a draft GitHub release
 with verified assets, and publishes both npm packages to the release's channel. Only
 after both packages are verified on the registry does it atomically push `main` and
-the tag and publish the GitHub release.
+the tag and publish the GitHub release. Before publishing npm it fetches and stops if
+`origin/main` is not an ancestor of the release. If `main` moves after npm is live, it
+pushes the tag alone, publishes the GitHub release, and stops so you can rebase and push `main`.
 
 If notarization is pending or a later step fails, retry the same release command
 to continue the unfinished release automatically, or run:
