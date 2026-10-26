@@ -134,6 +134,10 @@ test("creator continues when npm's bundled semver cannot load", async () => {
   try {
     const { rerunNewerCreator } = await import("../packages/create-spark/src/version.ts");
     expect(await rerunNewerCreator(undefined, ["MyApp"], tags({ latest: "9.0.0" }), {})).toBeUndefined();
+    const debug = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await rerunNewerCreator(undefined, ["MyApp"], tags({ latest: "9.0.0" }), { SPARK_DEBUG: "1" })).toBeUndefined();
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining("Skipped the newer-creator check: Error: Cannot find module"));
+    debug.mockRestore();
   } finally { vi.doUnmock("node:module"); vi.resetModules(); }
 });
 

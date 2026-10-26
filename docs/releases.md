@@ -126,14 +126,17 @@ bun run release --stable
 ```
 
 `--stable` removes the `-next.N` suffix, uses the latest published preview on
-that version line as the release-notes baseline, and defaults both npm packages
-to `latest`. A checkout already versioned `0.0.1` can use `bun run release`.
+that version line (or, with none, the highest published version below it) as the
+release-notes baseline, and defaults both npm packages to `latest`. While `0.0.1`
+is unpublished, a checkout already versioned `0.0.1` can use `bun run release`.
 `--stable` rejects an already published stable version. Without it, `bun run release`
-on a published stable `0.0.1` starts the next line at `0.0.2-next.0`. A new version
-line with no published previews (`0.0.2-next.0`, or a checkout already versioned
-`0.0.2`) uses the highest published version below it, such as `v0.0.1`, as its
-release-notes baseline.
-Add reviewed `UPGRADING.md` notes for `0.0.1` before starting. Finish any unfinished
+on a published stable `0.0.1` starts the next line at `0.0.2-next.0`, or continues
+that line's published previews. A new version line with no published previews
+(`0.0.2-next.0`, or a checkout already versioned `0.0.2`) uses the highest published
+version below it, such as `v0.0.1`, as its release-notes baseline. The release
+refuses a version below a published stable or below its channel's current npm
+dist-tag; pull main first.
+Add reviewed `UPGRADING.md` notes for the selected version before starting. Finish any unfinished
 preview release before promoting. Stable releases are normal GitHub releases marked
 Latest; preview versions stay GitHub prereleases even with npm `--latest`.
 
@@ -217,7 +220,8 @@ bun run release --finish
 
 This uses the saved version and channels, verifies local artifact checksums, the
 remote release tag, published GitHub asset digests and npm archive integrity, then
-promotes only missing tags and marks the checkpoint complete. It never builds,
+promotes only missing tags and marks the checkpoint complete once `origin/main`
+contains the release commit. It never builds,
 signs, uploads or runs `npm publish`. It can preserve newer commits and drafts in
 the checkout because it uses the original candidate's artifacts and revision.
 If npm is still processing, a saved successful-submission record lets it wait.
@@ -339,9 +343,10 @@ The publisher verifies staged checksums and repository visibility, creates a
 draft release, uploads and verifies assets, publishes both exact assembled npm archives (`@legendapp/spark` and the peer-free `@legendapp/create-spark`) under the version's channel (`next` for a prerelease, `latest` for a stable version; `--latest` or `--next` overrides it) with matching versions and tags, then atomically pushes `main` and the tag,
 requires the remote tag to resolve to the staged revision, and publishes the
 GitHub release. After a failure at any step, rerun the same command to continue,
-except when `origin/main` moved after npm publication: then it still pushes the tag
-and publishes the release, and you merge `origin/main` and push `main`, then run
-`bun run release --finish`. It does not replace
+except when `origin/main` moved (or could not be checked) after npm publication: then
+it still pushes the tag and publishes the release, and you merge `origin/main` and push
+`main`, then run `bun run release --finish`, which marks the release complete only once
+`origin/main` contains the release commit. It does not replace
 existing assets or move tags. Run interactively if npm needs browser
 authentication. Inspect registry tags after publication: npm may assign `latest`
 to an initial release, and `--tag next` does not by itself prove that no
