@@ -124,4 +124,18 @@ function prepareNativePatches(root, installed = []) {
   return packages;
 }
 
-module.exports = { prepareNativePatches };
+// RN macOS 0.83 declares UIApplication itself, so Expo's guarded duplicate breaks the build.
+// The 55 template's Podfile removes it during pod install, after Spark fingerprints
+// expo-modules-core; remove it first so the native fingerprint stays stable.
+const applicationAlias = "#ifndef UIApplication\n@compatibility_alias UIApplication NSApplication;\n#endif";
+function removeExpoApplicationAlias(rn, expo) {
+  const file = path.join(expo, "ios/Platform/Platform.h"), compat = path.join(rn, "ReactApple/Libraries/RCTUIKit/RCTUIKitCompat.h");
+  if (!fs.existsSync(file) || !fs.existsSync(compat) || !fs.readFileSync(compat, "utf8").includes("@compatibility_alias UIApplication NSApplication;")) return;
+  const source = fs.readFileSync(file, "utf8");
+  if (!source.includes(applicationAlias)) return;
+  const temporary = `${file}.spark-${process.pid}.tmp`;
+  fs.writeFileSync(temporary, source.replace(applicationAlias, ""));
+  fs.renameSync(temporary, file); // Preserve package-manager cache hardlinks.
+}
+
+module.exports = { prepareNativePatches, removeExpoApplicationAlias };

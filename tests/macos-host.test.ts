@@ -1,11 +1,12 @@
 import { expect, test } from "vitest";
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 const require = createRequire(import.meta.url);
 const xcode = require("xcode");
 const { installHostFiles, installHostProject } = require("../packages/config-plugin/macos-host.cjs");
+const { removeExpoApplicationAlias } = require("../packages/config-plugin/native-patches.cjs");
 const template = path.join(path.dirname(require.resolve("expo-desktop-template-bare-minimum/package.json")), "macos");
 
 test("the SwiftUI template host is replaced by Spark's AppKit host files", () => {
@@ -36,4 +37,22 @@ test("the macOS target compiles the AppKit host and its menu storyboard", () => 
   expect(files("PBXResourcesBuildPhase").find((file: any) => file.path === '"Main.storyboard"').lastKnownFileType).toBe("file.storyboard");
   const group = Object.values(objects.PBXGroup).find((entry: any) => entry.path?.replaceAll('"', "") === "HelloWorld-macOS") as any;
   expect(group.children.map((child: any) => child.comment)).toEqual(expect.arrayContaining(["AppDelegate.mm", "main.m", "Main.storyboard"]));
+});
+
+test("Expo's duplicate UIApplication alias is removed before native fingerprinting", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-expo-alias-"));
+  try {
+    const write = (file: string, contents: string) => { mkdirSync(path.dirname(path.join(root, file)), { recursive: true }); writeFileSync(path.join(root, file), contents); };
+    write("node_modules/react-native-macos/package.json", "{}");
+    write("node_modules/react-native-macos/ReactApple/Libraries/RCTUIKit/RCTUIKitCompat.h", "@compatibility_alias UIApplication NSApplication;\n");
+    write("node_modules/expo-modules-core/package.json", "{}");
+    const header = "#import <Foundation/Foundation.h>\n\n#ifndef UIApplication\n@compatibility_alias UIApplication NSApplication;\n#endif\n";
+    write("node_modules/expo-modules-core/ios/Platform/Platform.h", header);
+    const roots = [path.join(root, "node_modules/react-native-macos"), path.join(root, "node_modules/expo-modules-core")];
+    removeExpoApplicationAlias(...roots);
+    const patched = readFileSync(path.join(root, "node_modules/expo-modules-core/ios/Platform/Platform.h"), "utf8");
+    expect(patched).toBe("#import <Foundation/Foundation.h>\n\n\n");
+    removeExpoApplicationAlias(...roots);
+    expect(readFileSync(path.join(root, "node_modules/expo-modules-core/ios/Platform/Platform.h"), "utf8")).toBe(patched);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -1,6 +1,6 @@
 import { assertEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { nativeWindowOptions } from "@legendapp/spark-window-options";
-import { prepareNativePatches } from "@legendapp/spark-desktop-config/native-patches.cjs";
+import { prepareNativePatches, removeExpoApplicationAlias } from "@legendapp/spark-desktop-config/native-patches.cjs";
 import { macOSReleaseSettings } from "./macos-release.ts";
 import { projectPlatform, architecture, type DesktopPlatform } from "./platform.ts";
 import { resolveHelpers } from "./helpers.ts";
@@ -168,6 +168,9 @@ export function nativePackages(root: string, { applyExcludes = true } = {}): Nat
   const installed = installedPackages(root);
   prepareNativePatches(root, installed);
   if (projectPlatform(root) === "windows") return windowsNativePackages(root, installed);
+  const rootOf = (name: string) => installed.find(pkg => pkg.name === name)?.root;
+  const [macOS, expoCore] = [rootOf("react-native-macos"), rootOf("expo-modules-core")];
+  if (macOS && expoCore) removeExpoApplicationAlias(macOS, expoCore);
   const excluded: string[] = ["app.json", "desktop.config.json"].some(file => existsSync(path.join(root, file)))
     ? readAppConfig(root).expo?.autolinking?.exclude ?? [] : [];
   if (!applyExcludes) {
