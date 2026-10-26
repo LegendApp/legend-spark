@@ -1,3 +1,4 @@
+import { runnerDownloadMessage } from "./session-status.ts";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, ftruncateSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -119,6 +120,7 @@ export async function acquireRunnerLock(lock: string, waitMs = 600_000): Promise
   });
 }
 export async function downloadAsset(asset: { url: string; size: number; sha256: string }, file: string, request: typeof fetch = globalThis.fetch) {
+  console.log(runnerDownloadMessage(asset.size));
   for (let attempt = 0; attempt < 3; attempt++) {
     let handle: Awaited<ReturnType<typeof open>> | undefined;
     try {

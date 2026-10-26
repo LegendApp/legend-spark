@@ -1,4 +1,4 @@
-import { sessionStatus } from "../packages/cli/src/session-status.ts";
+import { runnerDownloadMessage, sessionStatus } from "../packages/cli/src/session-status.ts";
 import { expect, test, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
@@ -143,6 +143,10 @@ test("Runner download retries interrupted streams and rejects mismatched bytes",
     const log = vi.spyOn(console, "log").mockImplementation(() => {}); let lines: string[] = [];
     try { await downloadAsset(asset, path.join(root, "valid"), request); }
     finally { lines = log.mock.calls.map(args => String(args[0])); log.mockRestore(); }
+    const heading = lines.indexOf(runnerDownloadMessage(asset.size));
+    const bar = lines.findIndex(line => /^Downloading Spark Runner [█░]{10} \d+%$/.test(line));
+    expect(heading).toBeGreaterThanOrEqual(0); expect(bar).toBeGreaterThan(heading);
+    expect(lines.filter(line => line === lines[heading])).toHaveLength(1);
     expect(lines).toContain("Downloading Spark Runner ██████████ 100%");
     expect(calls).toBe(2); expect(readFileSync(path.join(root, "valid"))).toEqual(bytes);
     await expect(downloadAsset({ ...asset, sha256: "0".repeat(64) }, path.join(root, "invalid"), request)).rejects.toThrow("checksum");
@@ -192,8 +196,9 @@ test("published SDK sessions explain automatic Runner installation", () => {
   const manual = sessionStatus("go", false, [], false, { auto: false, size: 20_579_682 });
   expect(manual.message).toContain("Press d"); expect(manual.actions).toContain("Download and open");
   const auto = sessionStatus("go", false, [], false, { auto: true, size: 20_579_682 });
-  expect(auto.message).toBe("Downloading Spark Runner (20.6 MB)…"); expect(auto.message + auto.actions).not.toContain("Press d"); expect(auto.actions).not.toContain("Download and open");
-  expect(sessionStatus("go", false, [], false, { auto: true }).message).toBe("Downloading Spark Runner…");
+  expect(auto.message).toBe(""); expect(auto.actions).not.toContain("Download and open");
+  expect(runnerDownloadMessage(20_579_682)).toBe("Downloading Spark Runner (20.6 MB)…");
+  expect(runnerDownloadMessage()).toBe("Downloading Spark Runner…");
   expect(sessionStatus("go", false, [], false, false).message).toContain("register");
 });
 
