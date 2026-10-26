@@ -49,13 +49,13 @@ export function rerunCommand(spec: string, args: string[], env: Record<string, s
 
 export async function rerunNewerCreator(requested: string | undefined, args: string[], fetcher: typeof fetch = fetch, env: Record<string, string | undefined> = process.env) {
   if (env.SPARK_CREATOR_RERUN || (requested && exactVersion.test(requested))) return undefined;
-  let tags: Record<string, string>;
+  let tags: Record<string, string>, valid: (version: string) => string | null, gt: (a: string, b: string) => boolean;
   try {
     const response = await fetcher("https://registry.npmjs.org/-/package/@legendapp%2fcreate-spark/dist-tags", { signal: AbortSignal.timeout(1_500) });
     if (!response.ok) return undefined;
     tags = await response.json() as Record<string, string>;
+    ({ valid, gt } = createRequire(createRequire(import.meta.url).resolve("npm/package.json"))("semver"));
   } catch { return undefined; }
-  const { valid, gt } = createRequire(createRequire(import.meta.url).resolve("npm/package.json"))("semver");
   // Without a flag, the user asked for latest; a prerelease creator may also come from @next.
   const channels = requested ? [requested] : VERSION.includes("-") ? ["latest", "next"] : ["latest"];
   const newer = channels.map(tag => tags[tag]).filter(version => version && valid(version) && gt(version, VERSION)).sort((a, b) => gt(a, b) ? -1 : 1)[0];

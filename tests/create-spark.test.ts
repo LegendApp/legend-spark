@@ -122,6 +122,21 @@ test("creator continues when offline, current, guarded, or given an exact versio
   expect(spawnProcess).not.toHaveBeenCalled();
 });
 
+test("creator continues when npm's bundled semver cannot load", async () => {
+  vi.resetModules();
+  vi.doMock("node:module", async importOriginal => {
+    const original = await importOriginal<typeof import("node:module")>();
+    return { ...original, createRequire: (from: string) => {
+      const require = original.createRequire(from);
+      return Object.assign((id: string) => require(id), require, { resolve: (id: string) => { if (id === "npm/package.json") throw new Error("Cannot find module"); return require.resolve(id); } });
+    } };
+  });
+  try {
+    const { rerunNewerCreator } = await import("../packages/create-spark/src/version.ts");
+    expect(await rerunNewerCreator(undefined, ["MyApp"], tags({ latest: "9.0.0" }), {})).toBeUndefined();
+  } finally { vi.doUnmock("node:module"); vi.resetModules(); }
+});
+
 test("creator prints the exact command when it cannot rerun", async () => {
   vi.mocked(spawnProcess).mockReturnValue({ exited: Promise.reject(new Error("spawn pnpm ENOENT")) } as ManagedProcess);
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
