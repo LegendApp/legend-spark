@@ -69,7 +69,8 @@ export async function create(root: string, archiveManifest: string | undefined, 
     for (const [name, file] of Object.entries(archives)) {
       overrides[name] = file;
       if (pkg.dependencies[name]) pkg.dependencies[name] = file;
-      if (pkg.allowScripts?.[name]) pkg.allowScripts[file] = true;
+      // Spark itself comes from the registry as a bare version, which npm would read as a package name.
+      if (pkg.allowScripts?.[name] && file.startsWith("file:")) pkg.allowScripts[file] = true;
     }
     applyOverrides(pkg, overrides, manager);
     writePackageConfig(temporary, pkg, manager, root);
