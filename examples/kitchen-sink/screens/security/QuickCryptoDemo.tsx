@@ -17,7 +17,7 @@ async function check() {
   return [
     QuickCrypto.createHash("sha256").update("abc").digest("hex") !== "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" && "sha256",
     QuickCrypto.createHmac("sha256", "key").update("The quick brown fox jumps over the lazy dog").digest("hex") !== "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8" && "hmac",
-    QuickCrypto.pbkdf2Sync("password", "salt", 1, 20, "sha1").toString("hex") !== "0c60c80f961f0e71f3a9b524af6012062fe037a6" && "pbkdf2",
+    QuickCrypto.pbkdf2Sync("password", "salt", 4096, 20, "sha1").toString("hex") !== "4b007901b765489abead49d926f721d065a429c1" && "pbkdf2",
     opened !== "desktop 🔐" && "aes-256-gcm",
     hex(digest) !== "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" && "subtle.digest",
     (key.length !== 32 || hex(key) === hex(QuickCrypto.randomBytes(32))) && "randomBytes",
