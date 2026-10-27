@@ -199,5 +199,12 @@
     "integrity": "sha512-XwuQoW7/GEgWRMovOQtX3A4PrXhyaZm0lVUiY8qJDvdngjLms9Cpdck6SmGAUNqQwcj2EadHC1HwL0bEyoa/SQ==",
     "patch": "react-native-masked-view-masked-view@0.3.2.patch",
     "optional": true
+  },
+  "expo-glass-effect": {
+    "version": "55.0.11",
+    "url": "https://registry.npmjs.org/expo-glass-effect/-/expo-glass-effect-55.0.11.tgz",
+    "integrity": "sha512-wqq7GUOqSkfoFJzreZvBG0jzjsq5c582m3glhWSjcmIuByxXXWp6j6GY6hyFuYKzpOXhbuvusVxGCQi0yWnp3g==",
+    "patch": "expo-glass-effect@55.0.11.patch",
+    "optional": true
   }
 }

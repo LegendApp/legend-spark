@@ -1,0 +1,304 @@
+diff --git a/build/GlassContainer.macos.js b/build/GlassContainer.macos.js
+new file mode 100644
+index 0000000..7218bec
+--- /dev/null
++++ b/build/GlassContainer.macos.js
+@@ -0,0 +1,3 @@
++// macOS uses the native glass views, like iOS.
++export * from './GlassContainer.ios';
++export { default } from './GlassContainer.ios';
+diff --git a/build/GlassView.macos.js b/build/GlassView.macos.js
+new file mode 100644
+index 0000000..181ff73
+--- /dev/null
++++ b/build/GlassView.macos.js
+@@ -0,0 +1,3 @@
++// macOS uses the native glass views, like iOS.
++export * from './GlassView.ios';
++export { default } from './GlassView.ios';
+diff --git a/build/isGlassEffectAPIAvailable.macos.js b/build/isGlassEffectAPIAvailable.macos.js
+new file mode 100644
+index 0000000..561ff57
+--- /dev/null
++++ b/build/isGlassEffectAPIAvailable.macos.js
+@@ -0,0 +1,2 @@
++// macOS uses the native glass views, like iOS.
++export * from './isGlassEffectAPIAvailable.ios';
+diff --git a/build/isLiquidGlassAvailable.macos.js b/build/isLiquidGlassAvailable.macos.js
+new file mode 100644
+index 0000000..178f450
+--- /dev/null
++++ b/build/isLiquidGlassAvailable.macos.js
+@@ -0,0 +1,2 @@
++// macOS uses the native glass views, like iOS.
++export * from './isLiquidGlassAvailable.ios';
+diff --git a/ios/ExpoGlassEffect.podspec b/ios/ExpoGlassEffect.podspec
+index c05b50d..241f6b2 100644
+--- a/ios/ExpoGlassEffect.podspec
++++ b/ios/ExpoGlassEffect.podspec
+@@ -13,6 +13,7 @@ Pod::Spec.new do |s|
+   s.platforms      = {
+     :ios => '15.1',
+     :tvos => '15.1',
++    :osx => '14.0',
+   }
+   s.source         = { git: 'https://github.com/expo/expo.git' }
+ 
+diff --git a/ios/GlassContainer.swift b/ios/GlassContainer.swift
+index 61fb67c..3866f84 100644
+--- a/ios/GlassContainer.swift
++++ b/ios/GlassContainer.swift
+@@ -1,5 +1,6 @@
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
++#if !os(macOS)
+ import ExpoModulesCore
+ 
+ public final class GlassContainer: ExpoView {
+@@ -54,3 +55,4 @@ public final class GlassContainer: ExpoView {
+     childComponentView.removeFromSuperview()
+   }
+ }
++#endif
+diff --git a/ios/GlassEffectModule.swift b/ios/GlassEffectModule.swift
+index e036302..2e47cfa 100644
+--- a/ios/GlassEffectModule.swift
++++ b/ios/GlassEffectModule.swift
+@@ -23,6 +23,9 @@ public final class GlassEffectModule: Module {
+     Constant("isGlassEffectAPIAvailable") {
+       #if compiler(>=6.2)
+       if #available(iOS 26.0, tvOS 26.0, macOS 26.0, *) {
++        #if os(macOS)
++        return NSClassFromString("NSGlassEffectView") != nil
++        #endif
+         guard let glassEffectClass = NSClassFromString("UIGlassEffect") as? NSObject.Type else {
+           return false
+         }
+diff --git a/ios/GlassStyle.swift b/ios/GlassStyle.swift
+index bfd913c..239e7d2 100644
+--- a/ios/GlassStyle.swift
++++ b/ios/GlassStyle.swift
+@@ -1,12 +1,14 @@
+ import ExpoModulesCore
++#if !os(macOS)
+ import UIKit
++#endif
+ 
+ public enum GlassStyle: String, Enumerable {
+   case clear
+   case regular
+   case none
+ 
+-  #if compiler(>=6.2) // Xcode 26
++  #if compiler(>=6.2) && !os(macOS) // Xcode 26
+   @available(iOS 26.0, tvOS 26.0, macOS 26.0, *)
+   func toUIGlassEffectStyle() -> UIGlassEffect.Style? {
+     switch self {
+@@ -37,6 +39,18 @@ internal enum GlassColorScheme: String, Enumerable {
+   case light
+   case dark
+ 
++  #if os(macOS)
++  func toAppearance() -> NSAppearance? {
++    switch self {
++    case .auto:
++      return nil
++    case .light:
++      return NSAppearance(named: .aqua)
++    case .dark:
++      return NSAppearance(named: .darkAqua)
++    }
++  }
++  #else
+   func toUIUserInterfaceStyle() -> UIUserInterfaceStyle {
+     switch self {
+     case .auto:
+@@ -47,4 +61,5 @@ internal enum GlassColorScheme: String, Enumerable {
+       return .dark
+     }
+   }
++  #endif
+ }
+diff --git a/ios/GlassView.swift b/ios/GlassView.swift
+index 35cd8f3..23d9a01 100644
+--- a/ios/GlassView.swift
++++ b/ios/GlassView.swift
+@@ -1,5 +1,6 @@
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
++#if !os(macOS)
+ import ExpoModulesCore
+ import React
+ 
+@@ -279,3 +280,4 @@ public final class GlassView: ExpoView {
+     childComponentView.removeFromSuperview()
+   }
+ }
++#endif
+diff --git a/ios/GlassViewMacOS.swift b/ios/GlassViewMacOS.swift
+new file mode 100644
+index 0000000..3e3816c
+--- /dev/null
++++ b/ios/GlassViewMacOS.swift
+@@ -0,0 +1,161 @@
++// macOS: NSGlassEffectView (macOS 26) hosts the children; earlier systems show them without glass.
++#if os(macOS)
++import ExpoModulesCore
++
++// React frames children from the top-left, so their container must be flipped.
++final class GlassContentView: NSView {
++  override var isFlipped: Bool { true }
++}
++
++public final class GlassView: ExpoView {
++  private let contentView = GlassContentView()
++  private var glassView: NSView?
++  private var glassStyle: GlassStyle = .regular
++  private var glassTintColor: NSColor?
++  private var radius: CGFloat?
++  private var cornerRadii = [String: CGFloat]()
++
++  public required init(appContext: AppContext? = nil) {
++    super.init(appContext: appContext)
++    contentView.autoresizingMask = [.width, .height]
++    #if compiler(>=6.2)
++    if #available(macOS 26.0, *) {
++      let glass = NSGlassEffectView(frame: bounds)
++      glass.autoresizingMask = [.width, .height]
++      glass.contentView = contentView
++      glassView = glass
++      addSubview(glass)
++      return
++    }
++    #endif
++    addSubview(contentView)
++  }
++
++  // Children are framed by React; size the glass and its content to this view explicitly.
++  public override func layoutSubviews() {
++    super.layoutSubviews()
++    glassView?.frame = bounds
++    contentView.frame = glassView?.bounds ?? bounds
++  }
++
++  func setGlassStyle(_ config: GlassEffectStyleConfig) {
++    setGlassStyle(config.style)
++  }
++
++  func setGlassStyle(_ style: GlassStyle) {
++    glassStyle = style
++    updateEffect()
++  }
++
++  func setTintColor(_ color: NSColor?) {
++    glassTintColor = color
++    updateEffect()
++  }
++
++  // AppKit glass has no interactive variant.
++  func setInteractive(_ interactive: Bool) {}
++
++  func setColorScheme(_ colorScheme: GlassColorScheme) {
++    glassView?.appearance = colorScheme.toAppearance()
++  }
++
++  // NSGlassEffectView has one corner radius; per-corner radii use the largest given.
++  func setBorderRadius(_ radius: CGFloat?) {
++    self.radius = radius
++    updateEffect()
++  }
++  func setBorderCurve(_: String?) {}
++  func setBorderBottomLeftRadius(_ radius: CGFloat?) { setCornerRadius("bottomLeft", radius) }
++  func setBorderBottomRightRadius(_ radius: CGFloat?) { setCornerRadius("bottomRight", radius) }
++  func setBorderTopLeftRadius(_ radius: CGFloat?) { setCornerRadius("topLeft", radius) }
++  func setBorderTopRightRadius(_ radius: CGFloat?) { setCornerRadius("topRight", radius) }
++  func setBorderBottomStartRadius(_ radius: CGFloat?) { setCornerRadius("bottomStart", radius) }
++  func setBorderBottomEndRadius(_ radius: CGFloat?) { setCornerRadius("bottomEnd", radius) }
++  func setBorderTopStartRadius(_ radius: CGFloat?) { setCornerRadius("topStart", radius) }
++  func setBorderTopEndRadius(_ radius: CGFloat?) { setCornerRadius("topEnd", radius) }
++
++  private func setCornerRadius(_ corner: String, _ value: CGFloat?) {
++    cornerRadii[corner] = value
++    updateEffect()
++  }
++
++  private func updateEffect() {
++    #if compiler(>=6.2)
++    if #available(macOS 26.0, *), let glass = glassView as? NSGlassEffectView {
++      // `none` keeps the children but drops the glass.
++      if glassStyle == .none {
++        glass.contentView = nil
++        contentView.frame = bounds
++        addSubview(contentView)
++      } else if glass.contentView !== contentView {
++        contentView.removeFromSuperview()
++        glass.contentView = contentView
++      }
++      glass.isHidden = glassStyle == .none
++      glass.style = glassStyle == .clear ? .clear : .regular
++      glass.tintColor = glassTintColor
++      glass.cornerRadius = radius ?? cornerRadii.values.max() ?? 0
++    }
++    #endif
++  }
++
++  public override func mountChildComponentView(_ childComponentView: UIView, index: Int) {
++    if index < contentView.subviews.count {
++      contentView.addSubview(childComponentView, positioned: .below, relativeTo: contentView.subviews[index])
++    } else {
++      contentView.addSubview(childComponentView)
++    }
++  }
++
++  public override func unmountChildComponentView(_ childComponentView: UIView, index: Int) {
++    childComponentView.removeFromSuperview()
++  }
++}
++
++public final class GlassContainer: ExpoView {
++  private let contentView = GlassContentView()
++  private var containerView: NSView?
++
++  public required init(appContext: AppContext? = nil) {
++    super.init(appContext: appContext)
++    contentView.autoresizingMask = [.width, .height]
++    #if compiler(>=6.2)
++    if #available(macOS 26.0, *) {
++      let container = NSGlassEffectContainerView(frame: bounds)
++      container.autoresizingMask = [.width, .height]
++      container.contentView = contentView
++      containerView = container
++      addSubview(container)
++      return
++    }
++    #endif
++    addSubview(contentView)
++  }
++
++  public override func layoutSubviews() {
++    super.layoutSubviews()
++    containerView?.frame = bounds
++    contentView.frame = bounds
++  }
++
++  func setSpacing(_ spacing: CGFloat?) {
++    #if compiler(>=6.2)
++    if #available(macOS 26.0, *), let container = containerView as? NSGlassEffectContainerView {
++      container.spacing = spacing ?? 0
++    }
++    #endif
++  }
++
++  public override func mountChildComponentView(_ childComponentView: UIView, index: Int) {
++    if index < contentView.subviews.count {
++      contentView.addSubview(childComponentView, positioned: .below, relativeTo: contentView.subviews[index])
++    } else {
++      contentView.addSubview(childComponentView)
++    }
++  }
++
++  public override func unmountChildComponentView(_ childComponentView: UIView, index: Int) {
++    childComponentView.removeFromSuperview()
++  }
++}
++#endif
