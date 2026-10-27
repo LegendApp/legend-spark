@@ -10,6 +10,17 @@ function readManifest(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
+// Find a package's manifest even when its exports map hides package.json, as Node finds the package.
+function resolveManifest(req, name) {
+  try { return req.resolve(`${name}/package.json`); }
+  catch (error) {
+    if (error.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
+    const file = (req.resolve.paths(name) ?? []).map(directory => path.join(directory, name, "package.json")).find(fs.existsSync);
+    if (!file) throw error;
+    return file;
+  }
+}
+
 function prepareNativePatches(root, installed = []) {
   const manifestFile = path.join(root, "package.json");
   if (!fs.existsSync(manifestFile)) return {};
@@ -51,7 +62,7 @@ function prepareNativePatches(root, installed = []) {
     for (const name of active) {
       if (optionalOnly && name !== "react-native-nitro-modules" && !cameraPackages.includes(name) && !optionalBackends.includes(name)) continue;
       let file;
-      try { file = req.resolve(`${name}/package.json`); }
+      try { file = resolveManifest(req, name); }
       catch (error) {
         if (error.code !== "MODULE_NOT_FOUND") throw error;
         continue;
