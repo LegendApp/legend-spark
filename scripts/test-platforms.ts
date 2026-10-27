@@ -137,7 +137,7 @@ try {
       writeJson(stateFile(root, "session.json"), { compatible: true, target: "test", port });
       mkdirSync(path.dirname(stateFile(root, "contract-metro.log")), { recursive: true });
       metro = spawnProcess(nodeCommand(root, "expo", "expo", ["start", "--localhost", "--port", String(port), "--max-workers", "2"]), {
-        cwd: root, env: { ...process.env, CI: "1" }, stdout: processLog(stateFile(root, "contract-metro.log")), stderr: processLog(stateFile(root, "contract-metro-errors.log")),
+        cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1" }, stdout: processLog(stateFile(root, "contract-metro.log")), stderr: processLog(stateFile(root, "contract-metro-errors.log")),
       });
       stage = "runtime.launch";
       await until(() => fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok, () => false), "Metro", 60_000);

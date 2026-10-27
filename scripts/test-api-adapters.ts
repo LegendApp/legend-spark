@@ -62,7 +62,7 @@ try {
   const executable = path.join(application, "Contents/MacOS", executableName);
   writeJson(path.join(root, ".spark/session.json"), { compatible: true, target: "test", port });
   const log = processLog(path.join(directory, "metro.log"));
-  metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, CI: "1" }, stdout: log, stderr: log });
+  metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1" }, stdout: log, stderr: log });
   await waitFor(async () => fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok ? true : undefined, () => undefined), "Metro", 60000);
   const bundleURL = `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false`;
   const summary: Record<string, unknown> = {};

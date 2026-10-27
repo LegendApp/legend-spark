@@ -28,7 +28,7 @@ rmSync(appPath, { recursive: true, force: true }); cpSync(source, appPath, { rec
 const port = await availablePort();
 const report = path.join(directory, "report.json"); rmSync(report, { force: true });
 const metroLog = processLog(path.join(directory, "metro.log"));
-const metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, CI: "1", SPARK_PLATFORM: "macos" }, stdout: metroLog, stderr: metroLog });
+const metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1", SPARK_PLATFORM: "macos" }, stdout: metroLog, stderr: metroLog });
 let app: ReturnType<typeof spawnProcess> | undefined;
 try {
   const deadline = Date.now() + 60000;

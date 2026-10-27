@@ -1,10 +1,11 @@
 import { spawnProcess } from "../packages/cli/src/process.ts";
 import { expect, test } from "vitest";
 import { createRequire } from "node:module";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { createContext, runInContext } from "node:vm";
 import path from "node:path";
+import ts from "typescript";
 
 const require = createRequire(import.meta.url);
 const { preparePatch, VERSION } = require("../packages/cli/src/expo-dev-patch.cjs");
@@ -251,6 +252,34 @@ test("Expo's localhost server stays reachable on 127.0.0.1", async () => {
   });
   expect((await new Response(child.stdout).text()).trim()).toBe("127.0.0.1");
   expect(await child.exited).toBe(0);
+});
+
+test("localhost test harnesses preserve Node options and bind an IPv4 server", async () => {
+  const environments: NodeJS.ProcessEnv[] = [];
+  for (const file of readdirSync(path.join(root, "scripts")).filter(file => /^test-.*\.ts$/.test(file))) {
+    const source = ts.createSourceFile(file, readFileSync(path.join(root, "scripts", file), "utf8"), ts.ScriptTarget.Latest, true);
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && node.expression.getText(source) === "spawnProcess" && /['"]--localhost['"]/.test(node.arguments[0]!.getText(source))) {
+        const options = node.arguments[1] as ts.ObjectLiteralExpression;
+        const env = options.properties.find(property => property.name?.getText(source) === "env") as ts.PropertyAssignment;
+        for (const inherited of [undefined, "--title=spark-localhost-test --dns-result-order=verbatim"]) {
+          const environment = runInContext(`(${env.initializer.getText(source)})`, createContext({ process: { env: { NODE_OPTIONS: inherited } } }));
+          expect(environment.NODE_OPTIONS, file).toBe(`${inherited ?? ""} --dns-result-order=ipv4first`);
+          environments.push(environment);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  expect(environments).toHaveLength(32);
+  const child = spawnProcess(["node", "-e", "const http = require('node:http'); const server = http.createServer((req, res) => res.end('reachable')).listen(0, 'localhost', async () => { try { console.log(await (await fetch('http://127.0.0.1:' + server.address().port)).text()); } finally { server.close(); } });"], {
+    env: { ...process.env, ...environments.at(-1) }, stdout: "pipe", stderr: "pipe",
+  });
+  try {
+    expect((await new Response(child.stdout).text()).trim()).toBe("reachable");
+    expect(await child.exited).toBe(0);
+  } finally { if (child.exitCode === null) child.kill(); }
 });
 
 test("Metro child processes ignore the inherited preload", async () => {

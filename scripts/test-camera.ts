@@ -39,7 +39,7 @@ try {
   if (mode === "dev") {
     writeJson(path.join(root, ".spark/session.json"), { compatible: true, target: "camera-proof", port });
     const log = processLog(path.join(directory, "metro.log"));
-    metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, CI: "1" }, stdout: log, stderr: log });
+    metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1" }, stdout: log, stderr: log });
     const deadline = Date.now() + 120000; let ready = false;
     while (!ready && Date.now() < deadline) {
       ready = await fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok, () => false);

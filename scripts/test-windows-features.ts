@@ -143,7 +143,7 @@ try {
     coverage.runtime = product.runtime; record(coverage, { id: "build.native", status: "passed" }); coverageStage = "runtime.launch";
     writeJson(stateFile(root, "session.json"), { compatible: true, target: "test", port });
     const log = processLog(stateFile(root, "features-metro.log"));
-    metro = spawnProcess(nodeCommand(root, "expo", "expo", ["start", "--localhost", "--port", String(port), "--max-workers", "2"]), { cwd: root, env: { ...process.env, CI: "1" }, stdout: log, stderr: log });
+    metro = spawnProcess(nodeCommand(root, "expo", "expo", ["start", "--localhost", "--port", String(port), "--max-workers", "2"]), { cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1" }, stdout: log, stderr: log });
     for (let i = 0; i < 120; i++) {
       if (await fetch(`http://127.0.0.1:${port}/status`).then(r => r.ok, () => false)) break;
       await sleep(500);

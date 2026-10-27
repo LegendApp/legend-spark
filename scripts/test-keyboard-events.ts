@@ -37,7 +37,7 @@ const bundlePath = path.relative(metroRoot, entry).replaceAll(path.sep, "/").rep
 const port = await availablePort();
 const metroLog = processLog(path.join(directory, "metro.log"));
 const metro = spawnProcess(nodeCommand(root, "expo", "expo", ["start", "--localhost", "--port", String(port), "--max-workers", "2"]), {
-  cwd: root, env: { ...process.env, CI: "1", SPARK_PLATFORM: "macos" }, stdout: metroLog, stderr: metroLog,
+  cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1", SPARK_PLATFORM: "macos" }, stdout: metroLog, stderr: metroLog,
 });
 let app: ReturnType<typeof spawnProcess> | undefined;
 try {
