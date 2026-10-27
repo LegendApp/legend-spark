@@ -29,6 +29,15 @@ const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export function screenTitle(screen: Screen, locale: Locale): string { return locale === "en" ? screen.title : screen.titles[locale]; }
 export function screenSummary(screen: Screen, locale: Locale): string { return locale === "en" ? screen.summary : screen.summaries[locale]; }
 
+/**
+ * A screen whose module loads on its first render, so a library without a build for this platform
+ * breaks only its own screen, not the catalog at import.
+ */
+export function lazyScreen(load: () => ComponentType): ComponentType {
+  let component: ComponentType | undefined;
+  return function LazyScreen() { component ??= load(); return createElement(component); };
+}
+
 /** The test driver waits for this ID to confirm a navigated screen has rendered. */
 export function screenRootTestID(area: string, screen: string) { return `${area}-${screen}-root`; }
 
