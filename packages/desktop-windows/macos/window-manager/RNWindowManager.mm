@@ -1310,7 +1310,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
     ? representedObject[@"windowIdentifier"]
     : @"";
-  NSWindow *window = (NSWindow *)self.windows[identifier];
+  NSWindow *window = [self windowForIdentifier:identifier];
   [window makeKeyAndOrderFront:nil];
   [window makeFirstResponder:searchField];
 }
@@ -2858,7 +2858,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
   // AppKit's window list includes precreated/restored document windows and has
   // no stable ordering. Both supported hosts own the main window on the delegate.
   id<RNWindowManagerRootViewFactoryProvider> delegate = (id)NSApplication.sharedApplication.delegate;
-  return [delegate respondsToSelector:@selector(window)] ? delegate.window : nil;
+  NSWindow *window = [delegate respondsToSelector:@selector(window)] ? delegate.window : nil;
+  if (window && !objc_getAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId"))) {
+    objc_setAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId"), NSUUID.UUID.UUIDString, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  return window;
 }
 
 - (void)setupMainWindowObservers
