@@ -100,7 +100,8 @@
     "expo-symbols": "55.0.9",
     "@react-native-masked-view/masked-view": "0.3.2",
     "expo-glass-effect": "55.0.11",
-    "expo-splash-screen": "55.0.25"
+    "expo-splash-screen": "55.0.25",
+    "expo-system-ui": "55.0.22"
   },
   "expo": {
     "install": {
