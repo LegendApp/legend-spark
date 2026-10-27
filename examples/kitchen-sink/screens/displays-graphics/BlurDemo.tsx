@@ -2,9 +2,9 @@ import { useState } from "react";
 import { ScrollView, Text, UIManager, View } from "react-native";
 import { BlurView, VibrancyView } from "@react-native-community/blur";
 
-// Test IDs: displays-graphics-blur-registered when both native components are registered;
+// Test IDs: displays-graphics-blur-<BlurView|VibrancyView>-registered per registered native component;
 // displays-graphics-blur-<type>-laid-out once each BlurView has a native frame; displays-graphics-blur-vibrancy-child
-// is a VibrancyView child, mounted above the material.
+// is a VibrancyView child, mounted inside the material.
 const ID = "displays-graphics-blur";
 const types = ["light", "dark", "material", "thinMaterialDark"] as const;
 const stripes = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#a855f7"];
@@ -12,9 +12,11 @@ const stripes = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#a855f7"];
 /** @react-native-community/blur through its own components; Spark adds the AppKit views. */
 export function BlurDemo() {
   const [laidOut, setLaidOut] = useState<Record<string, boolean>>({});
-  const registered = UIManager.hasViewManagerConfig("BlurView") && UIManager.hasViewManagerConfig("VibrancyView");
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-6">
-    <Text className="text-sm text-muted" testID={registered ? `${ID}-registered` : undefined}>{`Native BlurView and VibrancyView registered: ${registered ? "yes" : "no"}`}</Text>
+    {(["BlurView", "VibrancyView"] as const).map(name => {
+      const registered = UIManager.hasViewManagerConfig(name);
+      return <Text key={name} className="text-sm text-muted" testID={registered ? `${ID}-${name}-registered` : undefined}>{`Native ${name} registered: ${registered ? "yes" : "no"}`}</Text>;
+    })}
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>
       {types.map(type => <View key={type} style={{ width: 200, height: 120, borderRadius: 12, overflow: "hidden" }}>
         <View style={{ position: "absolute", inset: 0, flexDirection: "row" }}>{stripes.map(color => <View key={color} style={{ flex: 1, backgroundColor: color }} />)}</View>

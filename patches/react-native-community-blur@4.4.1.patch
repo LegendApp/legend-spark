@@ -145,16 +145,17 @@ index 17bb10e..a0ca18f 100644
 +#endif
 diff --git a/ios/macos/RNBlurMacOS.mm b/ios/macos/RNBlurMacOS.mm
 new file mode 100644
-index 0000000..30b8d6c
+index 0000000..e365754
 --- /dev/null
 +++ b/ios/macos/RNBlurMacOS.mm
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,218 @@
 +#include <TargetConditionals.h>
 +#if TARGET_OS_OSX
 +
 +// AppKit BlurView and VibrancyView: NSVisualEffectView takes a material instead of a
 +// UIBlurEffectStyle and has no blur radius, so blurAmount has no effect on macOS.
 +#import <AppKit/AppKit.h>
++#import <React/RCTAssert.h>
 +#import <React/RCTConversions.h>
 +#import <React/RCTFabricComponentsPlugins.h>
 +#import <React/RCTViewComponentView.h>
@@ -181,9 +182,48 @@ index 0000000..30b8d6c
 +  return nil; // Adaptive materials follow the window.
 +}
 +
++// Flipped like React's views, so children mounted inside get React's coordinates.
++@interface RNBlurEffectView : NSVisualEffectView
++@end
++
++@implementation RNBlurEffectView
++- (BOOL)isFlipped
++{
++  return YES;
++}
++@end
++
++// Resolves its color in updateLayer, under the view's appearance, so dynamic colors follow Dark Mode.
++@interface RNBlurFallbackView : NSView
++@property (nonatomic, strong) NSColor *color;
++@end
++
++@implementation RNBlurFallbackView
++- (BOOL)isFlipped
++{
++  return YES;
++}
++
++- (BOOL)wantsUpdateLayer
++{
++  return YES;
++}
++
++- (void)setColor:(NSColor *)color
++{
++  _color = color;
++  self.needsDisplay = YES;
++}
++
++- (void)updateLayer
++{
++  self.layer.backgroundColor = _color.CGColor;
++}
++@end
++
 +@interface BlurView : RCTViewComponentView
 +@property (nonatomic, readonly) NSVisualEffectView *effectView;
-+@property (nonatomic, readonly) NSView *fallbackView;
++@property (nonatomic, readonly) RNBlurFallbackView *fallbackView;
 +@property (nonatomic, copy) NSString *blurType;
 +@property (nonatomic, strong) NSColor *fallbackColor;
 +@end
@@ -203,11 +243,11 @@ index 0000000..30b8d6c
 +  if (self = [super initWithFrame:frame]) {
 +    static const auto defaultProps = std::make_shared<const BlurViewProps>();
 +    _props = defaultProps;
-+    _effectView = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
++    _effectView = [[RNBlurEffectView alloc] initWithFrame:self.bounds];
 +    _effectView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 +    _effectView.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-+    _effectView.state = NSVisualEffectStateActive;
-+    _fallbackView = [[NSView alloc] initWithFrame:self.bounds];
++    _effectView.state = NSVisualEffectStateFollowsWindowActiveState;
++    _fallbackView = [[RNBlurFallbackView alloc] initWithFrame:self.bounds];
 +    _fallbackView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 +    _fallbackView.wantsLayer = YES;
 +    self.blurType = @"dark";
@@ -243,12 +283,19 @@ index 0000000..30b8d6c
 +{
 +  BOOL fallback = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency && self.fallbackColor;
 +  NSView *shown = fallback ? _fallbackView : _effectView, *hidden = fallback ? _effectView : _fallbackView;
-+  _fallbackView.layer.backgroundColor = self.fallbackColor.CGColor;
-+  [hidden removeFromSuperview];
-+  if (shown.superview != self) {
-+    shown.frame = self.bounds;
-+    [self addSubview:shown positioned:NSWindowBelow relativeTo:nil];
++  _fallbackView.color = self.fallbackColor;
++  if (shown.superview) {
++    return;
 +  }
++  // VibrancyView mounts its children inside the material, so they move with it.
++  for (NSView *child in [hidden.subviews copy]) {
++    [shown addSubview:child];
++  }
++  // React may have moved the material into its clipping container; swap it in place.
++  NSView *parent = hidden.superview ?: self;
++  [hidden removeFromSuperview];
++  shown.frame = parent.bounds;
++  [parent addSubview:shown positioned:NSWindowBelow relativeTo:nil];
 +}
 +
 +@end
@@ -275,15 +322,26 @@ index 0000000..30b8d6c
 +  return self;
 +}
 +
-+// iOS mounts children inside the vibrancy effect view; here they go above the material,
-+// which (or the reduced-transparency fallback) always sits at index 0.
++// Like iOS, children mount inside the material (or the reduced-transparency fallback).
++- (NSView *)contentView
++{
++  return self.effectView.superview ? self.effectView : self.fallbackView;
++}
++
 +- (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
 +{
-+  [self insertSubview:childComponentView atIndex:index + 1];
++  NSView *contentView = self.contentView;
++  if (index < (NSInteger)contentView.subviews.count) {
++    [contentView addSubview:childComponentView positioned:NSWindowBelow relativeTo:contentView.subviews[index]];
++  } else {
++    [contentView addSubview:childComponentView];
++  }
 +}
 +
 +- (void)unmountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
 +{
++  RCTAssert(childComponentView.superview == self.contentView, @"Attempt to unmount a view which is mounted inside a different view.");
++  RCTAssert(self.contentView.subviews[index] == childComponentView, @"Attempt to unmount a view which has a different index.");
 +  [childComponentView removeFromSuperview];
 +}
 +
