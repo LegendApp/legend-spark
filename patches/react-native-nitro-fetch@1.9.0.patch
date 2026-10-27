@@ -11,6 +11,50 @@ index 8b08083..d08a41d 100644
    s.source       = { :git => "https://github.com/margelo/react-native-nitro-fetch.git", :tag => "v#{s.version}" }
  
  
+diff --git a/ios/HybridNativeStorage.swift b/ios/HybridNativeStorage.swift
+index 68e5246..51bcf3b 100644
+--- a/ios/HybridNativeStorage.swift
++++ b/ios/HybridNativeStorage.swift
+@@ -10,7 +10,11 @@ import Security
+ /// Keep `keychainService` and `encPrefix` in sync with `NitroWSSecureAtRest.swift` in nitro-websockets.
+ internal enum NitroFetchSecureAtRest {
+   static let encPrefix = "nfc1:"
++#if os(macOS)
++  private static let keychainService = "com.margelo.nitrofetch.aesgcm.v1.\(AppNamespace.value)"
++#else
+   private static let keychainService = "com.margelo.nitrofetch.aesgcm.v1"
++#endif
+   private static let keychainAccount = "master"
+ 
+   private static func loadOrCreateSymmetricKey() throws -> SymmetricKey {
+@@ -119,7 +123,11 @@ internal enum NitroFetchSecureAtRest {
+ }
+ 
+ final class HybridNativeStorage: HybridNativeStorageSpec {
++#if os(macOS)
++  private static let suiteName = "nitro_fetch_storage.\(AppNamespace.value)"
++#else
+   private static let suiteName = "nitro_fetch_storage"
++#endif
+ 
+   private let userDefaults: UserDefaults
+ 
+diff --git a/ios/NitroAutoPrefetcher.swift b/ios/NitroAutoPrefetcher.swift
+index 18ffea9..8b69d1f 100644
+--- a/ios/NitroAutoPrefetcher.swift
++++ b/ios/NitroAutoPrefetcher.swift
+@@ -6,7 +6,11 @@ public final class NitroAutoPrefetcher: NSObject {
+   // Serializes queue reads/writes and keeps Keychain work off the launch thread.
+   private static let workQueue = DispatchQueue(label: "com.margelo.nitrofetch.autoprefetch")
+   private static let queueKey = "nitrofetch_autoprefetch_queue"
++#if os(macOS)
++  private static let suiteName = "nitro_fetch_storage.\(AppNamespace.value)"
++#else
+   private static let suiteName = "nitro_fetch_storage"
++#endif
+   private static let tokenRefreshKey = "nitro_token_refresh_fetch"
+   private static let tokenCacheKey = "nitro_token_refresh_fetch_cache"
+ 
 diff --git a/ios/NitroBootstrap.mm b/ios/NitroBootstrap.mm
 index 8e23106..41ad6fc 100644
 --- a/ios/NitroBootstrap.mm
@@ -41,10 +85,10 @@ index 8e23106..41ad6fc 100644
  }
  @end
 diff --git a/ios/NitroURLSession.swift b/ios/NitroURLSession.swift
-index 871df60..58b03d6 100644
+index 871df60..0505ac4 100644
 --- a/ios/NitroURLSession.swift
 +++ b/ios/NitroURLSession.swift
-@@ -18,11 +18,32 @@ private final class NitroPinningURLSessionDelegate: NSObject, URLSessionDelegate
+@@ -18,12 +18,39 @@ private final class NitroPinningURLSessionDelegate: NSObject, URLSessionDelegate
  }
  
  enum NitroURLCache {
@@ -55,18 +99,9 @@ index 871df60..58b03d6 100644
 +    memoryCapacity: 32 * 1024 * 1024,
 +    diskCapacity: 100 * 1024 * 1024,
 +    directory: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-+      .appendingPathComponent(namespace, isDirectory: true)
++      .appendingPathComponent(AppNamespace.value, isDirectory: true)
 +      .appendingPathComponent("nitrofetch_urlcache", isDirectory: true)
 +  )
-+
-+  private static var namespace: String {
-+    // Spark's host exports SparkNamespace(); look it up at runtime so Nitro Fetch keeps no link dependency on Spark.
-+    typealias Namespace = @convention(c) () -> Unmanaged<NSString>
-+    if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "SparkNamespace") {
-+      return unsafeBitCast(symbol, to: Namespace.self)().takeUnretainedValue() as String
-+    }
-+    return Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
-+  }
 +#else
    static let shared = URLCache(
      memoryCapacity: 32 * 1024 * 1024,
@@ -74,6 +109,22 @@ index 871df60..58b03d6 100644
      diskPath: "nitrofetch_urlcache"
    )
 +#endif
++}
++
++#if os(macOS)
++/// Mac apps share ~/Library, user defaults suites and Keychain services, so Nitro Fetch's stores are
++/// scoped like Spark's other app data.
++enum AppNamespace {
++  static let value: String = {
++    // Spark's host exports SparkNamespace(); look it up at runtime so Nitro Fetch keeps no link dependency on Spark.
++    typealias Namespace = @convention(c) () -> Unmanaged<NSString>
++    if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "SparkNamespace") {
++      return unsafeBitCast(symbol, to: Namespace.self)().takeUnretainedValue() as String
++    }
++    return Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
++  }()
  }
++#endif
  
  enum NitroURLSession {
+   static let shared = make(configuration: .default)
