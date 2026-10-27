@@ -52,5 +52,12 @@
     "integrity": "sha512-XBSsRiYxE/MOEln2ayunShfJtWztHwUxLFcSL20o+HNNRnuUDv+GXkF6FmM2zE8ZUfrnhQ/zeTqvnuDPGw6O8A==",
     "patch": "react-native-community-blur@4.4.1.patch",
     "optional": true
+  },
+  "react-native-worklets-core": {
+    "version": "1.6.3",
+    "url": "https://registry.npmjs.org/react-native-worklets-core/-/react-native-worklets-core-1.6.3.tgz",
+    "integrity": "sha512-r3Q40XQBccx/iAI5tlyiua+micvO1UGzzUOskNweZUXyfrrE+rb5aqxqruBPqXf90rO+bBiplylLMEAXCLTyGA==",
+    "patch": "react-native-worklets-core@1.6.3.patch",
+    "optional": true
   }
 }
