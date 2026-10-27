@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-safe-area-context on macOS
+intent: >
+  The Safe area screen wraps its content in SafeAreaProvider. The native provider reports a frame and
+  finite insets through the hooks, and a SafeAreaView lays out its child.
+checks: [WIN-SAFEAREA-01]
+tags: [windows]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/safe-area" }
+- extendedWaitUntil: { visible: { id: windows-safe-area-provider-ready }, timeout: 10s }
+- assertVisible: { id: windows-safe-area-view-laid-out }
+- takeScreenshot: safe-area
