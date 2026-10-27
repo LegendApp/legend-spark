@@ -48,7 +48,8 @@
     "react-native-enriched-markdown": "1.1.1",
     "react-native-enriched-html": "1.1.1",
     "react-native-webview": "16.0.0",
-    "@op-engineering/op-sqlite": "18.2.1"
+    "@op-engineering/op-sqlite": "18.2.1",
+    "react-native-mmkv": "4.3.2"
   },
   "expo": {
     "install": {

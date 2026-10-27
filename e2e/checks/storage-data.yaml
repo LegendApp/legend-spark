@@ -1,0 +1,13 @@
+area: storage-data
+prefix: DATA
+checks:
+  DATA-MMKV-01:
+    title: react-native-mmkv round-trips strings, numbers, booleans and buffers, lists and removes keys, and notifies value-change listeners on macOS
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-mmkv.md"
+  DATA-MMKV-02:
+    title: MMKV data persists across launches in the app's namespaced Application Support folder, so clearState removes it
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-mmkv.md"

@@ -64,6 +64,10 @@ function prepareNativePatches(root, installed = []) {
       queue.push({ req: createRequire(file), optionalOnly });
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       const pin = pins[name];
+      if (pin.optional && manifest.version !== pin.version) {
+        console.warn(`Spark's desktop patch for ${name} needs ${pin.version}; found ${manifest.version}, so it stays unpatched.`);
+        continue;
+      }
       if (manifest.version !== pin.version) {
         const owner = readManifest(req.resolve("./package.json"));
         throw new Error(`Spark needs ${name}@${pin.version}; found ${manifest.version} at ${packageRoot}, required by ${owner.name ?? root}. Add an override/resolution for the pinned version.`);
@@ -103,7 +107,7 @@ function prepareNativePatches(root, installed = []) {
       }
       const patched = JSON.parse(fs.readFileSync(file, "utf8"));
       patched.spark ??= {};
-      if (name !== "react-native-nitro-modules") {
+      if (name !== "react-native-nitro-modules" && !pin.optional) {
         patched.spark.sdk = true;
         patched.spark.requires = pin.requires ?? [];
       }

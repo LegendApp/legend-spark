@@ -1,0 +1,40 @@
+diff --git a/ios/HybridMMKVPlatformContext.swift b/ios/HybridMMKVPlatformContext.swift
+index 0d19d4a..0644cbc 100644
+--- a/ios/HybridMMKVPlatformContext.swift
++++ b/ios/HybridMMKVPlatformContext.swift
+@@ -12,6 +12,8 @@ class HybridMMKVPlatformContext: HybridMMKVPlatformContextSpec {
+   static var directory: FileManager.SearchPathDirectory {
+ #if os(tvOS)
+     return .cachesDirectory
++#elseif os(macOS)
++    return .applicationSupportDirectory
+ #else
+     return .documentDirectory
+ #endif
+@@ -25,10 +27,26 @@ class HybridMMKVPlatformContext: HybridMMKVPlatformContextSpec {
+     }
+     
+     // append /mmkv to it
++#if os(macOS)
++    // Application Support is shared by every Mac app, so scope MMKV like Spark's other app data.
++    let basePath = documentsPath.appendingPathComponent(Self.namespace, isDirectory: true).appendingPathComponent("mmkv", conformingTo: .directory)
++#else
+     let basePath = documentsPath.appendingPathComponent("mmkv", conformingTo: .directory)
++#endif
+     return basePath.path
+   }
+   
++#if os(macOS)
++  private static var namespace: String {
++    // Spark's host exports SparkNamespace(); look it up at runtime so MMKV keeps no link dependency on Spark.
++    typealias Namespace = @convention(c) () -> Unmanaged<NSString>
++    if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "SparkNamespace") {
++      return unsafeBitCast(symbol, to: Namespace.self)().takeUnretainedValue() as String
++    }
++    return Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
++  }
++#endif
++
+   func getAppGroupDirectory() throws -> String? {
+     // Read `AppGroupIdentifier` from `Info.plist`
+     guard let appGroupID = Bundle.main.object(forInfoDictionaryKey: "AppGroupIdentifier") as? String else {
