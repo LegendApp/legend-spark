@@ -28,3 +28,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-unistyles.md"
+  APPR-SYSTEMUI-01:
+    title: expo-system-ui sets, reads and resets the main window's background color on macOS
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-system-ui.md"

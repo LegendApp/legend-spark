@@ -1,0 +1,61 @@
+diff --git a/ios/ExpoSystemUI/ExpoSystemUIModule.swift b/ios/ExpoSystemUI/ExpoSystemUIModule.swift
+index 79e7b61..703babf 100644
+--- a/ios/ExpoSystemUI/ExpoSystemUIModule.swift
++++ b/ios/ExpoSystemUI/ExpoSystemUIModule.swift
+@@ -28,6 +28,36 @@ public class ExpoSystemUIModule: Module {
+     }
+   }
+ 
++  #if os(macOS)
++  // The app delegate owns the main window, as on iOS.
++  static var mainWindow: NSWindow? {
++    guard let delegate = NSApp.delegate as? NSObject, delegate.responds(to: Selector(("window"))) else {
++      return nil
++    }
++    return delegate.value(forKey: "window") as? NSWindow
++  }
++
++  static func getBackgroundColor() -> String? {
++    var color: String?
++    EXUtilities.performSynchronously {
++      if let backgroundColor = mainWindow?.backgroundColor.usingColorSpace(.sRGB)?.cgColor {
++        color = EXUtilities.hexString(with: backgroundColor)
++      }
++    }
++    return color
++  }
++
++  static func setBackgroundColorAsync(color: Int?) {
++    EXUtilities.performSynchronously {
++      if let color {
++        UserDefaults.standard.set(color, forKey: colorKey)
++      } else {
++        UserDefaults.standard.removeObject(forKey: colorKey)
++      }
++      mainWindow?.backgroundColor = color.flatMap { EXUtilities.uiColor($0) } ?? .windowBackgroundColor
++    }
++  }
++  #else
+   static func getBackgroundColor() -> String? {
+     var color: String?
+     EXUtilities.performSynchronously {
+@@ -70,4 +100,5 @@ public class ExpoSystemUIModule: Module {
+       }
+     }
+   }
++  #endif
+ }
+diff --git a/ios/ExpoSystemUI.podspec b/ios/ExpoSystemUI.podspec
+index 6cf5c56..0723ef6 100644
+--- a/ios/ExpoSystemUI.podspec
++++ b/ios/ExpoSystemUI.podspec
+@@ -12,7 +12,8 @@ Pod::Spec.new do |s|
+   s.homepage       = package['homepage']
+   s.platforms      = {
+     :ios => '15.1',
+-    :tvos => '15.1'
++    :tvos => '15.1',
++    :osx => '14.0'
+   }
+   s.swift_version  = '5.9'
+   s.source         = { git: 'https://github.com/expo/expo.git' }
