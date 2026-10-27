@@ -104,7 +104,8 @@
     "expo-system-ui": "55.0.22",
     "expo-image-picker": "55.0.24",
     "expo-image-manipulator": "55.0.21",
-    "expo-location": "55.1.15"
+    "expo-location": "55.1.15",
+    "@react-native-community/datetimepicker": "9.2.2"
   },
   "expo": {
     "install": {
