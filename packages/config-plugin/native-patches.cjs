@@ -60,14 +60,14 @@ function prepareNativePatches(root, installed = []) {
       const packageRoot = fs.realpathSync(path.dirname(file));
       if (visited.has(packageRoot)) continue;
       visited.add(packageRoot);
-      packages[name] = { root: packageRoot };
-      queue.push({ req: createRequire(file), optionalOnly });
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       const pin = pins[name];
       if (pin.optional && manifest.version !== pin.version) {
         console.warn(`Spark's desktop patch for ${name} needs ${pin.version}; found ${manifest.version}, so it stays unpatched.`);
         continue;
       }
+      packages[name] = { root: packageRoot };
+      queue.push({ req: createRequire(file), optionalOnly });
       if (manifest.version !== pin.version) {
         const owner = readManifest(req.resolve("./package.json"));
         throw new Error(`Spark needs ${name}@${pin.version}; found ${manifest.version} at ${packageRoot}, required by ${owner.name ?? root}. Add an override/resolution for the pinned version.`);
