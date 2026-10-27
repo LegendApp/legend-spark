@@ -85,7 +85,9 @@
     "expo-localization": "55.0.19",
     "expo-haptics": "55.0.18",
     "react-native-svg": "15.15.3",
-    "@react-native-community/netinfo": "11.5.2"
+    "@react-native-community/netinfo": "11.5.2",
+    "@expo/vector-icons": "15.1.1",
+    "expo-font": "55.0.8"
   },
   "expo": {
     "install": {

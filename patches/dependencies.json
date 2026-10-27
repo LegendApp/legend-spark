@@ -164,5 +164,12 @@
     "integrity": "sha512-/k4KYwPBLGcx2f5d4FjE+vCScK7QOX14cl2lIASJ28u4slHHtIhL0SZKU7u9qmRBHxTCKPoPBtN6haT1NENJNA==",
     "patch": "react-native-svg@15.15.3.patch",
     "optional": true
+  },
+  "expo-font": {
+    "version": "55.0.8",
+    "url": "https://registry.npmjs.org/expo-font/-/expo-font-55.0.8.tgz",
+    "integrity": "sha512-WyP75pnKqhLNktYwDn3xKAUNt5rLihRDv8XWGhhz6VEhVqypixpT86NA3uGtiDTlM3gGjhrYCY7o7ypXgCUOZg==",
+    "patch": "expo-font@55.0.8.patch",
+    "optional": true
   }
 }
