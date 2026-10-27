@@ -91,7 +91,8 @@
     "react-native-drawer-layout": "4.2.12",
     "@gorhom/bottom-sheet": "5.2.14",
     "react-native-pressable-opacity": "1.0.10",
-    "expo-status-bar": "55.0.6"
+    "expo-status-bar": "55.0.6",
+    "expo-blur": "55.0.18"
   },
   "expo": {
     "install": {
