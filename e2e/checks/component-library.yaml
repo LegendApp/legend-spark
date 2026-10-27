@@ -16,3 +16,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-gesture-handler.md"
+  COMP-NAVIGATION-01:
+    title: React Navigation's native stack shows a header and navigates forward and back on macOS, and bottom tabs switch tabs
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-navigation.md"
