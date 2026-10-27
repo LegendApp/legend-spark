@@ -342,3 +342,25 @@ test("optional pins patch only the app's own installs of the pinned version, wit
     expect(readFileSync(path.join(directory, "Native.podspec"), "utf8")).toBe("upstream\n");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("package.json hunks apply to tab-indented manifests and still converge after the receipt rewrites them", () => {
+  const { root, spark, packages } = fixture();
+  const name = "tabbed";
+  try {
+    const directory = path.join(packages, name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "1.0.0", codegenConfig: { name: "spec" } }, null, "\t") + "\n");
+    const app = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ ...app, dependencies: { ...app.dependencies, [name]: "1.0.0" } }));
+    writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ [name]: { version: "1.0.0", integrity: "sha512-fixture", patch: `${name}.patch`, optional: true } }));
+    writeFileSync(path.join(spark, "patches", `${name}.patch`), [
+      "diff --git a/package.json b/package.json", "--- a/package.json", "+++ b/package.json", "@@ -3,5 +3,6 @@",
+      '   "version": "1.0.0",', '   "codegenConfig": {', '-    "name": "spec"', '+    "name": "spec",', '+    "ios": {}', "   }", " }", "",
+    ].join("\n"));
+    prepareNativePatches(root);
+    const first = readFileSync(path.join(directory, "package.json"), "utf8");
+    expect(JSON.parse(first).codegenConfig).toEqual({ name: "spec", ios: {} });
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(directory, "package.json"), "utf8")).toBe(first);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
