@@ -1,0 +1,114 @@
+diff --git a/src/ExpoImage.macos.tsx b/src/ExpoImage.macos.tsx
+new file mode 100644
+index 0000000..bff00b2
+--- /dev/null
++++ b/src/ExpoImage.macos.tsx
+@@ -0,0 +1,84 @@
++// expo-image on macOS: React Native's Image stands in for the native view, which is UIKit
++// only. Sources (uri, headers, require(); the largest of several sizes), placeholders while
++// loading, contentFit, tintColor, the load events and reloadAsync work. Its SDWebImage
++// caches, blurhash/thumbhash and SF Symbol sources, contentPosition, transitions and
++// ImageRef sources are not supported.
++import React from 'react';
++import { Image, StyleSheet, View, type ImageResizeMode } from 'react-native';
++
++import type { ImageContentFit, ImageNativeProps, ImageSource } from './Image.types';
++
++const fits: Record<ImageContentFit, ImageResizeMode> = {
++  cover: 'cover',
++  contain: 'contain',
++  fill: 'stretch',
++  none: 'center',
++  'scale-down': 'center',
++};
++
++function largest(sources: ImageNativeProps['source']): ImageSource | undefined {
++  if (!Array.isArray(sources)) return undefined;
++  const area = (source: ImageSource) => (source.width ?? 0) * (source.height ?? 0);
++  const drawable = sources.filter(source => source.uri && !/^(blurhash|thumbhash|sf):\//.test(source.uri));
++  return drawable.reduce<ImageSource | undefined>((best, next) => (best && area(best) >= area(next) ? best : next), undefined);
++}
++
++class ExpoImage extends React.PureComponent<ImageNativeProps, { attempt: number; loaded: boolean }> {
++  state = { attempt: 0, loaded: false };
++
++  startAnimating = () => {};
++  stopAnimating = () => {};
++  lockResourceAsync = async () => {};
++  unlockResourceAsync = async () => {};
++  reloadAsync = async () => this.setState(({ attempt }) => ({ attempt: attempt + 1, loaded: false }));
++
++  componentDidMount() {
++    // Image calls startAnimating and reloadAsync through this ref, which holds the native view on iOS.
++    const ref = this.props.nativeViewRef as React.MutableRefObject<unknown> | undefined;
++    if (ref) ref.current = this;
++  }
++
++  render() {
++    const { source, placeholder, contentFit = 'cover', placeholderContentFit = 'scale-down', tintColor, style, accessibilityLabel, alt,
++      onLoadStart, onProgress, onLoad, onError, onLoadEnd, onDisplay, containerViewRef, nativeViewRef, ...props } = this.props;
++    const image = largest(source);
++    const fallback = largest(placeholder);
++    const tint = tintColor == null ? null : { tintColor: tintColor as string };
++    return (
++      <View ref={containerViewRef as never} {...(props as object)} accessibilityLabel={accessibilityLabel ?? alt} style={[styles.container, style]}>
++        {!this.state.loaded && fallback && (
++          <Image source={{ uri: fallback.uri, headers: fallback.headers }} resizeMode={fits[placeholderContentFit]} style={[StyleSheet.absoluteFill, tint]} />
++        )}
++        {image && (
++          <Image
++            key={this.state.attempt}
++            source={{ uri: image.uri, headers: image.headers }}
++            resizeMode={fits[contentFit]}
++            style={[StyleSheet.absoluteFill, tint]}
++            onLoadStart={() => onLoadStart?.()}
++            onProgress={event => onProgress?.({ loaded: event.nativeEvent.loaded, total: event.nativeEvent.total })}
++            onLoad={event => {
++              const loaded = (width: number, height: number) => {
++                this.setState({ loaded: true });
++                onLoad?.({ cacheType: 'none', source: { url: image.uri!, width, height, mediaType: null } });
++                onLoadEnd?.();
++                onDisplay?.();
++              };
++              // React Native macOS scales a 1x image's size by the screen's; getSize reads its pixels.
++              const { width, height } = event.nativeEvent.source;
++              Image.getSize(image.uri!).then(size => loaded(size.width, size.height), () => loaded(width, height));
++            }}
++            onError={event => {
++              onError?.({ error: String(event.nativeEvent.error) });
++              onLoadEnd?.();
++            }}
++          />
++        )}
++      </View>
++    );
++  }
++}
++
++const styles = StyleSheet.create({ container: { overflow: 'hidden' } });
++
++export default ExpoImage;
+diff --git a/src/ImageModule.macos.ts b/src/ImageModule.macos.ts
+new file mode 100644
+index 0000000..1ffc9e3
+--- /dev/null
++++ b/src/ImageModule.macos.ts
+@@ -0,0 +1,18 @@
++// expo-image on macOS has no native module; see ExpoImage.macos.tsx.
++import { Image } from 'react-native';
++
++import type { ImageNativeModule } from './Image.types';
++
++const unsupported = (name: string) => () => Promise.reject(new Error(`Image.${name} is not supported on macOS`));
++
++export default {
++  Image: class {},
++  prefetch: (urls: string[]) => Promise.all(urls.map(url => Image.prefetch(url))).then(() => true, () => false),
++  clearMemoryCache: async () => false,
++  clearDiskCache: async () => false,
++  configureCache: () => {},
++  getCachePathAsync: async () => null,
++  loadAsync: unsupported('loadAsync'),
++  generateBlurhashAsync: unsupported('generateBlurhashAsync'),
++  generateThumbhashAsync: unsupported('generateThumbhashAsync'),
++} as unknown as ImageNativeModule;

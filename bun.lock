@@ -117,6 +117,7 @@
         "expo-device": "55.0.21",
         "expo-font": "55.0.8",
         "expo-haptics": "55.0.18",
+        "expo-image": "55.0.11",
         "expo-keep-awake": "55.0.8",
         "expo-linear-gradient": "55.0.18",
         "expo-linking": "55.0.17",
@@ -1786,6 +1787,8 @@
     "expo-font": ["expo-font@55.0.8", "", { "dependencies": { "fontfaceobserver": "^2.1.0" }, "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-WyP75pnKqhLNktYwDn3xKAUNt5rLihRDv8XWGhhz6VEhVqypixpT86NA3uGtiDTlM3gGjhrYCY7o7ypXgCUOZg=="],
 
     "expo-haptics": ["expo-haptics@55.0.18", "", { "peerDependencies": { "expo": "*" } }, "sha512-bEH0bf5bBGn7U2eTZVdiXBUk4vTfNGbfv9/9PCYLg3gL7L/WE2g8WKs2vYg1B4/BDSucyO8prZofH3IgvLJojQ=="],
+
+    "expo-image": ["expo-image@55.0.11", "", { "dependencies": { "sf-symbols-typescript": "^2.2.0" }, "peerDependencies": { "expo": "*", "react": "*", "react-native": "*", "react-native-web": "*" }, "optionalPeers": ["react-native-web"] }, "sha512-PVIBYQJW/h1f6Zb9xnoWlgfqyOPVm2yb6eo6ZogaKbvMrhb/Q/fiERbagi4oqmR6IPljWPEpkXXQyFBUh7TjpQ=="],
 
     "expo-keep-awake": ["expo-keep-awake@55.0.8", "", { "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-PfIpMfM+STOBwkR5XOE+yVtER86c44MD+W8QD8JxuO0sT9pF7Y1SJYakWlpvX8xsGA+bjKLxftm9403s9kQhKA=="],
 
