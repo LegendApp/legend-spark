@@ -61,3 +61,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/masked-view.md"
+  DISP-EXPOGLASS-01:
+    title: expo-glass-effect hosts GlassView and GlassContainer children in AppKit glass on macOS 26
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-glass-effect.md"

@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-glass-effect on macOS
+intent: >
+  The Expo Glass screen finds the native module linked and the glass API available (macOS 26), and lays out
+  the children of regular, clear and tinted glass views and of two views in a glass container. The capture
+  records the glass.
+checks: [DISP-EXPOGLASS-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/expo-glass-effect" }
+- extendedWaitUntil: { visible: { id: displays-graphics-expo-glass-native }, timeout: 10s }
+- assertVisible: { id: displays-graphics-expo-glass-available-yes }
+- assertVisible: { id: displays-graphics-expo-glass-regular-child }
+- assertVisible: { id: displays-graphics-expo-glass-clear-child }
+- assertVisible: { id: displays-graphics-expo-glass-tinted-child }
+- assertVisible: { id: displays-graphics-expo-glass-merged-a-child }
+- assertVisible: { id: displays-graphics-expo-glass-merged-b-child }
+- takeScreenshot: expo-glass-effect
