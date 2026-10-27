@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-quick-crypto on macOS
+intent: >
+  The Quick Crypto screen runs hashes, HMAC, PBKDF2, AES-256-GCM, random bytes and a WebCrypto digest
+  through the native OpenSSL build and shows passed when every result matches its known vector.
+checks: [SEC-QUICKCRYPTO-01]
+tags: [security]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://security/quick-crypto" }
+- extendedWaitUntil: { visible: { id: security-quick-crypto-passed }, timeout: 10s }
