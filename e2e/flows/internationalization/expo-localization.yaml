@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-localization on macOS
+intent: >
+  The Expo Localization screen reads the user's preferred locale and calendar from expo-localization's
+  native module and shows the language tag and time zone.
+checks: [I18N-EXPOLOCALIZATION-01]
+tags: [internationalization]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://internationalization/expo-localization" }
+- extendedWaitUntil: { visible: { id: internationalization-expo-localization-ready }, timeout: 10s }
