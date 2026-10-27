@@ -1,0 +1,8 @@
+area: security
+prefix: SEC
+checks:
+  SEC-QUICKCRYPTO-01:
+    title: react-native-quick-crypto computes SHA-256, HMAC, PBKDF2 and WebCrypto digests matching published vectors, round-trips AES-256-GCM and produces random bytes and UUIDs on macOS
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-quick-crypto.md"
