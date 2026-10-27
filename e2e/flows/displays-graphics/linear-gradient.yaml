@@ -1,12 +1,14 @@
 appId: so.legend.spark.examples.kitchensink
 name: expo-linear-gradient on macOS
 intent: >
-  The Linear gradient screen finds the native module linked and lays out a three-color diagonal gradient.
+  The Linear gradient screen finds the native module linked and lays out a three-color diagonal gradient that matches the approved golden (an undrawn gradient leaves the
+  area empty).
 checks: [DISP-GRADIENT-01]
 tags: [displays-graphics]
 platforms: [macos]
+matrix: { appearance: [dark], locale: [en] }
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/linear-gradient" }
 - extendedWaitUntil: { visible: { id: displays-graphics-linear-gradient-native }, timeout: 15s }
 - assertVisible: { id: displays-graphics-linear-gradient-laid-out }
-- takeScreenshot: linear-gradient
+- assertScreenshot: { golden: displays-graphics-linear-gradient, mask: [{ id: infra-shell-sidebar }] }
