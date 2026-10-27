@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-fast-image.md"
+  DISP-SKIA-01:
+    title: "@shopify/react-native-skia draws a declarative Canvas in its macOS native view and an offscreen raster surface, both read back with the expected pixels"
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/shopify-react-native-skia.md"

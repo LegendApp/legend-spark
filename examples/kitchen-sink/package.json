@@ -61,7 +61,8 @@
     "@babel/plugin-transform-template-literals": "7.29.7",
     "react-native-fast-image": "10.9.9",
     "react-native-release-profiler": "0.4.5",
-    "react-native-tracking-transparency": "0.1.2"
+    "react-native-tracking-transparency": "0.1.2",
+    "@shopify/react-native-skia": "2.14.0"
   },
   "expo": {
     "install": {
