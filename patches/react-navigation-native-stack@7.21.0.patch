@@ -1,0 +1,16 @@
+diff --git a/lib/module/views/NativeStackView.macos.js b/lib/module/views/NativeStackView.macos.js
+new file mode 100644
+index 0000000..c42b5d6
+--- /dev/null
++++ b/lib/module/views/NativeStackView.macos.js
+@@ -0,0 +1,2 @@
++// macOS has no native stack: use the JavaScript stack view, which draws headers with @react-navigation/elements.
++export * from "./NativeStackView.js";
+diff --git a/src/views/NativeStackView.macos.tsx b/src/views/NativeStackView.macos.tsx
+new file mode 100644
+index 0000000..82511c8
+--- /dev/null
++++ b/src/views/NativeStackView.macos.tsx
+@@ -0,0 +1,2 @@
++// macOS has no native stack: use the JavaScript stack view, which draws headers with @react-navigation/elements.
++export * from './NativeStackView.tsx';
