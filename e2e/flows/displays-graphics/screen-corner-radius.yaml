@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-screen-corner-radius on macOS
+intent: >
+  The Screen corner radius screen imports the library, whose native module is iOS only, and shows a 0 radius
+  with square corners instead of failing at import.
+checks: [DISP-CORNER-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/screen-corner-radius" }
+- extendedWaitUntil: { visible: { id: displays-graphics-screen-corner-radius-0-false }, timeout: 10s }

@@ -21,3 +21,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-blurhash.md"
+  DISP-CORNER-01:
+    title: react-native-screen-corner-radius imports on macOS without its iOS-only native module and reports a 0 radius and square corners
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-screen-corner-radius.md"
