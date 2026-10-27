@@ -1,0 +1,160 @@
+diff --git a/src/components/DebugContainer.macos.tsx b/src/components/DebugContainer.macos.tsx
+new file mode 100644
+index 0000000..7526909
+--- /dev/null
++++ b/src/components/DebugContainer.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './DebugContainer.web';
++export { default } from './DebugContainer.web';
+diff --git a/src/components/FullWindowOverlay.macos.tsx b/src/components/FullWindowOverlay.macos.tsx
+new file mode 100644
+index 0000000..43c70ba
+--- /dev/null
++++ b/src/components/FullWindowOverlay.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './FullWindowOverlay.web';
++export { default } from './FullWindowOverlay.web';
+diff --git a/src/components/Screen.macos.tsx b/src/components/Screen.macos.tsx
+new file mode 100644
+index 0000000..2cd1f2a
+--- /dev/null
++++ b/src/components/Screen.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './Screen.web';
++export { default } from './Screen.web';
+diff --git a/src/components/ScreenContainer.macos.tsx b/src/components/ScreenContainer.macos.tsx
+new file mode 100644
+index 0000000..710309d
+--- /dev/null
++++ b/src/components/ScreenContainer.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './ScreenContainer.web';
++export { default } from './ScreenContainer.web';
+diff --git a/src/components/ScreenContentWrapper.macos.tsx b/src/components/ScreenContentWrapper.macos.tsx
+new file mode 100644
+index 0000000..ff03c98
+--- /dev/null
++++ b/src/components/ScreenContentWrapper.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './ScreenContentWrapper.web';
++export { default } from './ScreenContentWrapper.web';
+diff --git a/src/components/ScreenFooter.macos.tsx b/src/components/ScreenFooter.macos.tsx
+new file mode 100644
+index 0000000..8a6e94e
+--- /dev/null
++++ b/src/components/ScreenFooter.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './ScreenFooter.web';
++export { default } from './ScreenFooter.web';
+diff --git a/src/components/ScreenStack.macos.tsx b/src/components/ScreenStack.macos.tsx
+new file mode 100644
+index 0000000..48b1e73
+--- /dev/null
++++ b/src/components/ScreenStack.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './ScreenStack.web';
++export { default } from './ScreenStack.web';
+diff --git a/src/components/ScreenStackHeaderConfig.macos.tsx b/src/components/ScreenStackHeaderConfig.macos.tsx
+new file mode 100644
+index 0000000..b613332
+--- /dev/null
++++ b/src/components/ScreenStackHeaderConfig.macos.tsx
+@@ -0,0 +1,2 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './ScreenStackHeaderConfig.web';
+diff --git a/src/components/SearchBar.macos.tsx b/src/components/SearchBar.macos.tsx
+new file mode 100644
+index 0000000..939c989
+--- /dev/null
++++ b/src/components/SearchBar.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './SearchBar.web';
++export { default } from './SearchBar.web';
+diff --git a/src/components/gamma/split/SplitHost.macos.tsx b/src/components/gamma/split/SplitHost.macos.tsx
+new file mode 100644
+index 0000000..7f7f91a
+--- /dev/null
++++ b/src/components/gamma/split/SplitHost.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './SplitHost.web';
++export { default } from './SplitHost.web';
+diff --git a/src/components/gamma/split/SplitScreen.macos.tsx b/src/components/gamma/split/SplitScreen.macos.tsx
+new file mode 100644
+index 0000000..049aa9f
+--- /dev/null
++++ b/src/components/gamma/split/SplitScreen.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './SplitScreen.web';
++export { default } from './SplitScreen.web';
+diff --git a/src/components/gamma/stack/StackHost.macos.tsx b/src/components/gamma/stack/StackHost.macos.tsx
+new file mode 100644
+index 0000000..ea6c2a9
+--- /dev/null
++++ b/src/components/gamma/stack/StackHost.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './StackHost.web';
++export { default } from './StackHost.web';
+diff --git a/src/components/gamma/stack/StackScreen.macos.tsx b/src/components/gamma/stack/StackScreen.macos.tsx
+new file mode 100644
+index 0000000..f6b6910
+--- /dev/null
++++ b/src/components/gamma/stack/StackScreen.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './StackScreen.web';
++export { default } from './StackScreen.web';
+diff --git a/src/components/safe-area/SafeAreaView.macos.tsx b/src/components/safe-area/SafeAreaView.macos.tsx
+new file mode 100644
+index 0000000..e96a644
+--- /dev/null
++++ b/src/components/safe-area/SafeAreaView.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './SafeAreaView.web';
++export { default } from './SafeAreaView.web';
+diff --git a/src/components/tabs/TabsHost.macos.tsx b/src/components/tabs/TabsHost.macos.tsx
+new file mode 100644
+index 0000000..fa5d559
+--- /dev/null
++++ b/src/components/tabs/TabsHost.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './TabsHost.web';
++export { default } from './TabsHost.web';
+diff --git a/src/components/tabs/TabsScreen.macos.tsx b/src/components/tabs/TabsScreen.macos.tsx
+new file mode 100644
+index 0000000..8d72134
+--- /dev/null
++++ b/src/components/tabs/TabsScreen.macos.tsx
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './TabsScreen.web';
++export { default } from './TabsScreen.web';
+diff --git a/src/fabric/NativeScreensModule.macos.ts b/src/fabric/NativeScreensModule.macos.ts
+new file mode 100644
+index 0000000..f242de2
+--- /dev/null
++++ b/src/fabric/NativeScreensModule.macos.ts
+@@ -0,0 +1,3 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './NativeScreensModule.web';
++export { default } from './NativeScreensModule.web';
+diff --git a/src/gesture-handler/fabricUtils.macos.ts b/src/gesture-handler/fabricUtils.macos.ts
+new file mode 100644
+index 0000000..56afb7a
+--- /dev/null
++++ b/src/gesture-handler/fabricUtils.macos.ts
+@@ -0,0 +1,2 @@
++// macOS has no native screens: use the web implementation's plain views.
++export * from './fabricUtils.web';
