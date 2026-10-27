@@ -38,5 +38,12 @@
     "integrity": "sha512-EjUP2U7WqKmlMmoY7XGyHomy8bM0q4+yCDCRg4ZezQ6zedYRwc7yVk4V2O/iSftKaLEzhuW98lpyPMdk1iPHXQ==",
     "patch": "react-native-quick-base64@3.0.1.patch",
     "optional": true
+  },
+  "react-native-nitro-fetch": {
+    "version": "1.9.0",
+    "url": "https://registry.npmjs.org/react-native-nitro-fetch/-/react-native-nitro-fetch-1.9.0.tgz",
+    "integrity": "sha512-4rxaPcXKudZW1Ma1Y63rHF8/7hbanOyqr01Gac6ROUYApcCH8/YtS0d02cm0ZEbSzwPvmcvFRzPoT4cHWxhJGA==",
+    "patch": "react-native-nitro-fetch@1.9.0.patch",
+    "optional": true
   }
 }
