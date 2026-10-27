@@ -10,5 +10,12 @@
     "url": "https://registry.npmjs.org/react-native-enriched-html/-/react-native-enriched-html-1.1.1.tgz",
     "integrity": "sha512-OlJLESOgA4eqgWQe3BXOK9kFk7iypOnQo22sIce5k/x2eGsOtnAwDPqHnaVfnOZlzzNWh+wXRzxuSL1tSBOkgA==",
     "patch": "react-native-enriched-html@1.1.1.patch"
+  },
+  "react-native-mmkv": {
+    "version": "4.3.2",
+    "url": "https://registry.npmjs.org/react-native-mmkv/-/react-native-mmkv-4.3.2.tgz",
+    "integrity": "sha512-49OAyfkg0/TMWiWELZN6VuVQPZPhizwL4DTmp8b7B1md3dB/s3LH3mGfC3T+lp9W0y/rqxZMEnotLFTIbOAenQ==",
+    "patch": "react-native-mmkv@4.3.2.patch",
+    "optional": true
   }
 }
