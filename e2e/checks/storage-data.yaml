@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-mmkv.md"
+  DATA-NITROSQLITE-01:
+    title: react-native-nitro-sqlite runs parameterized, batched and async queries on macOS alongside Spark's OP-SQLite
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-nitro-sqlite.md"
