@@ -1,0 +1,15 @@
+appId: so.legend.spark.examples.kitchensink
+name: React Navigation on macOS
+intent: >
+  The React Navigation screen runs a native stack that navigates from Home to Details and back by
+  itself, showing each screen's header title, and bottom tabs that switch to the second tab.
+checks: [COMP-NAVIGATION-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/navigation" }
+- extendedWaitUntil: { visible: { id: component-library-navigation-stack-done }, timeout: 10s }
+- assertVisible: { id: component-library-navigation-stack-header-Home }
+- assertVisible: { id: component-library-navigation-stack-Home }
+- assertVisible: { id: component-library-navigation-tab-Second }
+- takeScreenshot: navigation
