@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-device on macOS
+intent: >
+  The Expo Device screen reads the Mac's model identifier, macOS version and build, device name, memory, CPU
+  architecture, desktop device type and uptime from expo-device, then shows passed.
+checks: [SYS-EXPODEVICE-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/expo-device" }
+- extendedWaitUntil: { visible: { id: system-integration-expo-device-passed }, timeout: 10s }

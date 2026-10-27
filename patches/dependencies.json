@@ -136,5 +136,12 @@
     "integrity": "sha512-RFer4T46/OaIkNQEweA9PQj6xlXKor71IPNydWxlupx/XG05Yv/269HJJ3Q9zejdY9M7R3jTeTlAYYmXwbLBgA==",
     "patch": "expo-application@55.0.19.patch",
     "optional": true
+  },
+  "expo-device": {
+    "version": "55.0.21",
+    "url": "https://registry.npmjs.org/expo-device/-/expo-device-55.0.21.tgz",
+    "integrity": "sha512-W2DNWWnjk3KSdAy2BtK9ie1lByO6IsJIpriQAnvS1+d/e12wXhq14iZLUB5iA0CCVftU3eliQRIzkyT2cdL9Ng==",
+    "patch": "expo-device@55.0.21.patch",
+    "optional": true
   }
 }
