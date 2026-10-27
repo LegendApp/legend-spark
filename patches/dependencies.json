@@ -241,5 +241,12 @@
     "integrity": "sha512-0cZGrK61UZ8VxpKKV/lun/L/b5wKus55IhvqqdewUayHwIc73lrLI0l5CIlHw8tA0/yQEzHEMEdtHQglAD+hKA==",
     "patch": "react-native-community-datetimepicker@9.2.2.patch",
     "optional": true
+  },
+  "react-native-keyboard-controller": {
+    "version": "1.22.9",
+    "url": "https://registry.npmjs.org/react-native-keyboard-controller/-/react-native-keyboard-controller-1.22.9.tgz",
+    "integrity": "sha512-nLoXvTbIy/9cI4p/bAXUP7Vfi6Mf2Q7g/gsh2H29C7hgUSQQLdoQjl8inhKC25oxaEibB0CMR++h3HP/k/+BVw==",
+    "patch": "react-native-keyboard-controller@1.22.9.patch",
+    "optional": true
   }
 }
