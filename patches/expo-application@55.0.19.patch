@@ -1,0 +1,54 @@
+diff --git a/ios/ApplicationModule.swift b/ios/ApplicationModule.swift
+index 30eebcb..9626a66 100644
+--- a/ios/ApplicationModule.swift
++++ b/ios/ApplicationModule.swift
+@@ -24,13 +24,23 @@ public class ApplicationModule: Module {
+     }
+ 
+     AsyncFunction("getIosIdForVendorAsync") { () -> String? in
++      #if os(macOS)
++      // macOS has no identifier for vendor.
++      return nil
++      #else
+       return UIDevice.current.identifierForVendor?.uuidString
++      #endif
+     }
+ 
+     AsyncFunction("getInstallationTimeAsync") { () -> Double in
++      #if os(macOS)
++      // ~/Documents is the user's folder on a Mac (shared and privacy-protected); the app bundle is the installation.
++      let urlToDocumentsFolder = Bundle.main.bundleURL
++      #else
+       guard let urlToDocumentsFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).last else {
+         throw UrlDocumentDirectoryException()
+       }
++      #endif
+ 
+       do {
+         let fileAttributes = try FileManager.default.attributesOfItem(atPath: urlToDocumentsFolder.path)
+diff --git a/ios/EXApplication/EXProvisioningProfile.m b/ios/EXApplication/EXProvisioningProfile.m
+index 5c06b26..b88d888 100644
+--- a/ios/EXApplication/EXProvisioningProfile.m
++++ b/ios/EXApplication/EXProvisioningProfile.m
+@@ -42,6 +42,9 @@ - (EXAppReleaseType)appReleaseType {
+     // provisioning profile does not exist
+ #if TARGET_IPHONE_SIMULATOR
+     return EXAppReleaseSimulator;
++#elif TARGET_OS_OSX
++    // Mac apps carry embedded.provisionprofile, not embedded.mobileprovision.
++    return EXAppReleaseTypeUnknown;
+ #else
+     return EXAppReleaseAppStore;
+ #endif
+diff --git a/ios/EXApplication.podspec b/ios/EXApplication.podspec
+index 3c178ae..6f4e6d7 100644
+--- a/ios/EXApplication.podspec
++++ b/ios/EXApplication.podspec
+@@ -12,6 +12,7 @@ Pod::Spec.new do |s|
+   s.homepage       = package['homepage']
+   s.platforms       = {
+     :ios => '15.1',
++    :osx => '11.0',
+     :tvos => '15.1'
+   }
+   s.swift_version  = '5.9'
