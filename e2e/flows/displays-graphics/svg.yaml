@@ -1,0 +1,14 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-svg on macOS
+intent: >
+  The SVG screen finds the native SVG components registered and draws a gradient rectangle, a circle, a
+  stroked path and text, matching the approved golden (an undrawn SVG leaves the area empty).
+checks: [DISP-SVG-01]
+tags: [displays-graphics]
+platforms: [macos]
+matrix: { appearance: [dark], locale: [en] }
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/svg" }
+- extendedWaitUntil: { visible: { id: displays-graphics-svg-native }, timeout: 10s }
+- assertVisible: { id: displays-graphics-svg-laid-out }
+- assertScreenshot: { golden: displays-graphics-svg, mask: [{ id: infra-shell-sidebar }] }
