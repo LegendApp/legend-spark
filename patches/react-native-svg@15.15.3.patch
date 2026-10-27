@@ -1,0 +1,31 @@
+diff --git a/apple/Elements/RNSVGSvgView.mm b/apple/Elements/RNSVGSvgView.mm
+index d03d5c0..a3e679f 100644
+--- a/apple/Elements/RNSVGSvgView.mm
++++ b/apple/Elements/RNSVGSvgView.mm
+@@ -315,6 +315,15 @@ - (void)drawToContext:(CGContextRef)context withRect:(CGRect)rect
+   }
+ }
+ 
++#if TARGET_OS_OSX
++// React Native macOS component views draw through updateLayer, so AppKit never calls drawRect:,
++// which is where the SVG renders.
++- (BOOL)wantsUpdateLayer
++{
++  return NO;
++}
++#endif
++
+ - (void)drawRect:(CGRect)rect
+ {
+   RNSVGPlatformView *parent = self.superview;
+diff --git a/apple/RNSVGUIKit.macos.mm b/apple/RNSVGUIKit.macos.mm
+index aa9f94b..f3bbf76 100644
+--- a/apple/RNSVGUIKit.macos.mm
++++ b/apple/RNSVGUIKit.macos.mm
+@@ -1,5 +1,6 @@
+ #import "RNSVGUIKit.h"
+ #import <objc/runtime.h>
++#import <React/RCTAssert.h>
+ 
+ #if TARGET_OS_OSX
+ 

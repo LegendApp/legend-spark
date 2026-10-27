@@ -157,5 +157,12 @@
     "integrity": "sha512-bEH0bf5bBGn7U2eTZVdiXBUk4vTfNGbfv9/9PCYLg3gL7L/WE2g8WKs2vYg1B4/BDSucyO8prZofH3IgvLJojQ==",
     "patch": "expo-haptics@55.0.18.patch",
     "optional": true
+  },
+  "react-native-svg": {
+    "version": "15.15.3",
+    "url": "https://registry.npmjs.org/react-native-svg/-/react-native-svg-15.15.3.tgz",
+    "integrity": "sha512-/k4KYwPBLGcx2f5d4FjE+vCScK7QOX14cl2lIASJ28u4slHHtIhL0SZKU7u9qmRBHxTCKPoPBtN6haT1NENJNA==",
+    "patch": "react-native-svg@15.15.3.patch",
+    "optional": true
   }
 }

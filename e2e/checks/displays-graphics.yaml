@@ -31,3 +31,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-linear-gradient.md"
+  DISP-SVG-01:
+    title: react-native-svg's native components are registered on macOS and an SVG with shapes, a path, a gradient and text lays out
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-svg.md"
