@@ -101,5 +101,12 @@
     "integrity": "sha512-Nyxwx92vJRTIBdIRiHlFrz0IFJq+rKIsq6XFRiYT7ZBA1jQIPBYX/kx9kCRwqLDGnSBzec2oYwPScGEllRpNCw==",
     "patch": "react-native-app-logs@0.3.1.patch",
     "optional": true
+  },
+  "react-native-nitro-zxing": {
+    "version": "0.3.0",
+    "url": "https://registry.npmjs.org/react-native-nitro-zxing/-/react-native-nitro-zxing-0.3.0.tgz",
+    "integrity": "sha512-SQ/qwmfakdPcOMVzph99vFOPbPkVg3JZaTGrjVVXG6RS8ZUqMocHqbeM4V17qPDTzFK+rsAp6T7u2aFe3Hot/w==",
+    "patch": "react-native-nitro-zxing@0.3.0.patch",
+    "optional": true
   }
 }
