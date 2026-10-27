@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@react-native-community/netinfo on macOS"
+intent: >
+  The NetInfo screen fetches the network state from the native monitor; on a connected Mac it shows a
+  connected wifi or ethernet state.
+checks: [WEB-NETINFO-01]
+tags: [networking-webview]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://networking-webview/netinfo" }
+- extendedWaitUntil: { visible: { id: networking-webview-netinfo-connected }, timeout: 10s }

@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-web-browser.md"
+  WEB-NETINFO-01:
+    title: "@react-native-community/netinfo reports a connected wifi or ethernet state on macOS"
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-community-netinfo.md"
