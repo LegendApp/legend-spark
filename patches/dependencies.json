@@ -227,5 +227,12 @@
     "integrity": "sha512-BlVl692hVDKuWzOCnbUsfp1u0XqujOABm/Kv3ISMg0qRMchvD6vUSJ/XOIj80+6B9CCm1hNgklgeJ0SIEHiCVQ==",
     "patch": "expo-image-manipulator@55.0.21.patch",
     "optional": true
+  },
+  "expo-location": {
+    "version": "55.1.15",
+    "url": "https://registry.npmjs.org/expo-location/-/expo-location-55.1.15.tgz",
+    "integrity": "sha512-4wTDpVZg2/ZH4FnLkobY+PeIrfPz0uFTQqx7LIkxgviucNcRUPGstODBd+XRBOd8mIU1tN1vf6TSs8qEzOOJAw==",
+    "patch": "expo-location@55.1.15.patch",
+    "optional": true
   }
 }

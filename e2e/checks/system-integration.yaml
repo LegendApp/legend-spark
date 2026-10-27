@@ -75,3 +75,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-haptics.md"
+  SYS-EXPOLOCATION-01:
+    title: expo-location reports permission, Location Services and provider status from CoreLocation on macOS, and no compass heading
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-location.md"
