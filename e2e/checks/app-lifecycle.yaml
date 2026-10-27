@@ -46,3 +46,8 @@ checks:
     spec: "#60 LIFE.api"
     covers:
       - ./app#getAppContext
+  LIFE-SPLASH-01:
+    title: expo-splash-screen's API resolves without effect on macOS, which has no launch splash
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-splash-screen.md"
