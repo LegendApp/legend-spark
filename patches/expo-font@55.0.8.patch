@@ -1,0 +1,55 @@
+diff --git a/ios/FontFamilyAliasManager.swift b/ios/FontFamilyAliasManager.swift
+index f785185..7766c11 100644
+--- a/ios/FontFamilyAliasManager.swift
++++ b/ios/FontFamilyAliasManager.swift
+@@ -67,6 +67,16 @@ private func maybeSwizzleUIFont() {
+   } else {
+     log.error("expo-font is unable to swizzle `UIFont.fontNames(forFamilyName:)`")
+   }
++#else
++  // React Native macOS resolves font families through NSFontManager.
++  let originalMembersMethod = class_getInstanceMethod(NSFontManager.self, #selector(NSFontManager.availableMembers(ofFontFamily:)))
++  let newMembersMethod = class_getInstanceMethod(NSFontManager.self, #selector(NSFontManager._expo_availableMembers(ofFontFamily:)))
++
++  if let originalMembersMethod, let newMembersMethod {
++    method_exchangeImplementations(originalMembersMethod, newMembersMethod)
++  } else {
++    log.error("expo-font is unable to swizzle `NSFontManager.availableMembers(ofFontFamily:)`")
++  }
+ #endif
+   hasSwizzled = true
+ }
+diff --git a/ios/UIFont+FontFamilyAlias.swift b/ios/UIFont+FontFamilyAlias.swift
+index a5e3bf1..222a717 100644
+--- a/ios/UIFont+FontFamilyAlias.swift
++++ b/ios/UIFont+FontFamilyAlias.swift
+@@ -26,4 +26,29 @@ public extension UIFont {
+     return fontNames
+   }
+ }
++#else
++/**
++ An extension to ``NSFontManager`` that adds a custom implementation of `availableMembers(ofFontFamily:)` that supports aliasing font families.
++ */
++public extension NSFontManager {
++  /**
++   Returns the members of the specified font family or of the font its alias names. React Native reads the
++   PostScript name, the first element of each member.
++   */
++  @objc
++  dynamic func _expo_availableMembers(ofFontFamily familyName: String) -> [[Any]]? {
++    // Get members from the original function.
++    let members = _expo_availableMembers(ofFontFamily: familyName)
++
++    // If no members were found, let's try with the alias.
++    if members?.isEmpty ?? true, let postScriptName = FontFamilyAliasManager.familyName(forAlias: familyName) {
++      if let family = NSFont(name: postScriptName, size: 12)?.familyName, let members = _expo_availableMembers(ofFontFamily: family), !members.isEmpty {
++        return members
++      }
++      return [[postScriptName]]
++    }
++
++    return members
++  }
++}
+ #endif
