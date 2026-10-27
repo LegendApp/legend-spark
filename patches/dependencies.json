@@ -24,5 +24,19 @@
     "integrity": "sha512-eYqixPy6auBj6k/ica9fCYIPgFQsLzUwRoxGZ04hX3hkANTNjaz3/LzNfXPfgJbwF/fQrhaK0qII4nhtSqUPfA==",
     "patch": "react-native-unistyles@3.6.0.patch",
     "optional": true
+  },
+  "react-native-quick-crypto": {
+    "version": "1.1.9",
+    "url": "https://registry.npmjs.org/react-native-quick-crypto/-/react-native-quick-crypto-1.1.9.tgz",
+    "integrity": "sha512-u60Kr4EdAYI1ksGq7uwJfOXNJR/iWkCQ1AxfoVbjM/pEpiydddzsFXFYqwyv7EeB7eTDgg5/LiCGwNxA7W7NKA==",
+    "patch": "react-native-quick-crypto@1.1.9.patch",
+    "optional": true
+  },
+  "react-native-quick-base64": {
+    "version": "3.0.1",
+    "url": "https://registry.npmjs.org/react-native-quick-base64/-/react-native-quick-base64-3.0.1.tgz",
+    "integrity": "sha512-EjUP2U7WqKmlMmoY7XGyHomy8bM0q4+yCDCRg4ZezQ6zedYRwc7yVk4V2O/iSftKaLEzhuW98lpyPMdk1iPHXQ==",
+    "patch": "react-native-quick-base64@3.0.1.patch",
+    "optional": true
   }
 }
