@@ -45,7 +45,11 @@ int main(int argc, const char **argv) { @autoreleasepool {
   assert(module.recursiveWatches.count == 0);
   assert([@"bye" writeToFile:[root stringByAppendingPathComponent:@"after.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil]);
   assert(dispatch_semaphore_wait(changes, dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC)) != 0);
-  assert([call(module, @"watch", @{ @"path": [root stringByAppendingPathComponent:@"after.txt"], @"id": @"file", @"recursive": @YES }) isEqual:@"E_INVALID_ARGUMENT"]);
+  NSString *regularFile = [root stringByAppendingPathComponent:@"after.txt"];
+  for (NSString *path in @[regularFile, [regularFile stringByAppendingPathComponent:@"child"], [regularFile stringByAppendingPathComponent:@"missing/nested"]]) {
+    assert([call(module, @"watch", @{ @"path": path, @"id": @"file", @"recursive": @YES }) isEqual:@"E_NOT_FOUND"]);
+    assert(module.recursiveWatches.count == 0);
+  }
   assert(!call(module, @"watch", @{ @"path": root, @"id": @"existing", @"recursive": @YES }));
   drain(module);
   assert([fm removeItemAtPath:root error:nil]); changed(module, root, "deleting existing watched root");
