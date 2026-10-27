@@ -1,0 +1,13 @@
+diff --git a/ios/WebBrowserSession.swift b/ios/WebBrowserSession.swift
+index d3d2981..1ac7c6b 100644
+--- a/ios/WebBrowserSession.swift
++++ b/ios/WebBrowserSession.swift
+@@ -126,6 +126,8 @@ internal class WebBrowserSession: NSObject, WKNavigationDelegate, WKUIDelegate,
+   }
+ 
+   func dismiss(completion: ((String) -> Void)? = nil) {
++    // Closing reports "cancel" through windowWillClose, as for the user; a dismiss reports "dismiss", as on iOS.
++    window?.delegate = nil
+     window?.close()
+     let type = "dismiss"
+     finish(type: type)
