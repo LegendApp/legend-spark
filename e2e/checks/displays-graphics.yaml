@@ -2,7 +2,7 @@ area: displays-graphics
 prefix: DISP
 checks:
   DISP-BLUR-01:
-    title: "@react-native-community/blur registers native BlurView and VibrancyView components on macOS and lays out blur materials over content"
+    title: "@react-native-community/blur registers native BlurView and VibrancyView components on macOS and lays out blur materials over content, with VibrancyView children inside the material"
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-community-blur.md"
