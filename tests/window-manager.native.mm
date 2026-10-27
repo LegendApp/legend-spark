@@ -154,6 +154,41 @@ int main() { @autoreleasepool {
     styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
   window.releasedWhenClosed = NO;
   MainWindowOwner *owner = [MainWindowOwner new]; owner.window = window; NSApp.delegate = owner;
+  // The host owns "main": it reaches the registry only after a window module call, so early calls must not depend on it.
+  assert(manager.windows[@"main"] == nil);
+  [manager setWindowOptions:@"main" optionsJson:SparkJSON(@{ @"title": @"Early" }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert([window.title isEqual:@"Early"]);
+  [manager setWindowToolbarItemText:@"main" itemId:@"missing" text:@"" resolve:^(id result) { assert(![result containsString:@"Window not found"]); } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  window.identifier = @"spark.main";
+  [manager setWindowOptions:@"main" optionsJson:SparkJSON(@{ @"windowStyle": @{ @"toolbarItems": @[
+    @{ @"id": @"early-button", @"type": @"button", @"label": @"Click" },
+    @{ @"id": @"early-search", @"type": @"search", @"collapses": @YES }
+  ] } }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  [manager setMainWindowOptions:SparkJSON(@{ @"windowStyle": @{ @"titlebarControls": @[
+    @{ @"id": @"early-titlebar", @"type": @"button", @"label": @"Click" }
+  ] } }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  NSToolbarItem *earlyButton = nil, *earlySearch = nil;
+  for (NSToolbarItem *item in window.toolbar.items) {
+    if ([item.itemIdentifier isEqual:@"legend.toolbar.early-button"]) earlyButton = item;
+    if ([item.itemIdentifier isEqual:@"legend.toolbar.early-search"]) earlySearch = item;
+  }
+  assert(earlyButton && earlySearch);
+  [manager focusToolbarSearchItem:@"main" itemId:@"early-search" value:@"early query" resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  NSSearchField *earlyField = objc_getAssociatedObject(earlySearch, &LegendToolbarSearchFieldKey);
+  BOOL earlyFocused = earlyField.currentEditor != nil && window.firstResponder == earlyField.currentEditor;
+  assert([earlyField.stringValue isEqual:@"early query"]);
+  assert(manager.windows[@"main"] == nil);
+  __block NSDictionary *observed;
+  [[RNDesktopWindows new] call:@"observe" args:SparkJSON(@{ @"id": @"main" }) resolve:^(id result) { observed = SparkArgs(result); } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  NSDate *observeDeadline = [NSDate dateWithTimeIntervalSinceNow:2];
+  while (!observed && observeDeadline.timeIntervalSinceNow > 0) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+  assert([observed[@"instanceId"] length] > 0);
+  [events removeAllObjects];
+  assert([NSApp sendAction:earlyButton.action to:earlyButton.target from:earlyButton]);
+  NSSegmentedControl *earlyTitlebar = (NSSegmentedControl *)manager.titlebarAccessoryControllers[@"main"].firstObject.view;
+  [earlyTitlebar performClick:nil];
+  puts([SparkJSON(@{ @"earlyChrome": @{ @"focused": @(earlyFocused), @"observed": observed, @"events": [events copy] } }) UTF8String]);
+  [manager setMainWindowOptions:SparkJSON(@{ @"windowStyle": @{ @"toolbarItems": @[], @"titlebarControls": @[] } }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
   NSDictionary *split = @{ @"restoreOnLaunch": @YES, @"sidebar": @{ @"width": @240 } };
   for (NSString *mode in @[@"safe", @"driver"]) {
     testSafeMode = [mode isEqual:@"safe"]; testDriverMode = !testSafeMode;
