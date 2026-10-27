@@ -129,5 +129,12 @@
     "integrity": "sha512-masGrfbi/jqMezm/8cHHZ8chW+ifxumzt7QOCPiL+9aix0BSwuwDIBryEm2QPVmqJX51jckS0n245vWhwheQuQ==",
     "patch": "expo-web-browser@55.0.20.patch",
     "optional": true
+  },
+  "expo-application": {
+    "version": "55.0.19",
+    "url": "https://registry.npmjs.org/expo-application/-/expo-application-55.0.19.tgz",
+    "integrity": "sha512-RFer4T46/OaIkNQEweA9PQj6xlXKor71IPNydWxlupx/XG05Yv/269HJJ3Q9zejdY9M7R3jTeTlAYYmXwbLBgA==",
+    "patch": "expo-application@55.0.19.patch",
+    "optional": true
   }
 }

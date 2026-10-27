@@ -60,3 +60,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-keep-awake.md"
+  SYS-EXPOAPP-01:
+    title: expo-application reports the bundle identifier, version and an installation time from the app bundle on macOS, and Mac answers (no vendor ID, unknown release type) for iOS-only queries
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-application.md"
