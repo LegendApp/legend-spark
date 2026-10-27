@@ -313,3 +313,32 @@ test.each(["react-native-enriched-markdown", "react-native-enriched-html"])("%s 
     prepareNativePatches(root, installedPackages(root));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("optional pins patch only the app's own installs of the pinned version, without marking them SDK packages", () => {
+  const { root, spark, packages } = fixture();
+  const name = "react-native-mmkv";
+  try {
+    const directory = path.join(packages, name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "4.3.2" }, null, 2) + "\n");
+    writeFileSync(path.join(directory, "Native.podspec"), "upstream\n");
+    writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ [name]: { version: "4.3.2", integrity: "sha512-fixture", patch: `${name}.patch`, optional: true } }));
+    writeFileSync(path.join(spark, "patches", `${name}.patch`), readFileSync(path.join(spark, "patches/camera", `${names[0]}.patch`)));
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(directory, "Native.podspec"), "utf8")).toBe("upstream\n");
+    const app = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ ...app, dependencies: { ...app.dependencies, [name]: "4.3.2" } }));
+    expect(prepareNativePatches(root)[name]).toEqual({ root: realpathSync(directory) });
+    expect(readFileSync(path.join(directory, "macos/View.swift"), "utf8")).toBe("AppKit\n");
+    const receipt = JSON.parse(readFileSync(path.join(directory, "package.json"), "utf8")).spark;
+    expect(receipt).toMatchObject({ dependencyPatch: { version: "4.3.2" } });
+    expect(receipt.sdk).toBeUndefined();
+    // Another version keeps upstream behavior instead of failing the app's native preparation.
+    rmSync(directory, { recursive: true });
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "4.2.0" }, null, 2) + "\n");
+    writeFileSync(path.join(directory, "Native.podspec"), "upstream\n");
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(directory, "Native.podspec"), "utf8")).toBe("upstream\n");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
