@@ -36,3 +36,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-svg.md"
+  DISP-ICONS-01:
+    title: "@expo/vector-icons loads its icon fonts through expo-font on macOS and draws the glyphs"
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-vector-icons.md"
