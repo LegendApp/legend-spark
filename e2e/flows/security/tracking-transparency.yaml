@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-tracking-transparency on macOS
+intent: >
+  The Tracking transparency screen asks ATTrackingManager for the status. The Kitchen Sink has no tracking
+  usage description and never prompts, so a fresh launch reports not-determined rather than unavailable.
+checks: [SEC-ATT-01]
+tags: [security]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://security/tracking-transparency" }
+- extendedWaitUntil: { visible: { id: security-tracking-transparency-status-not-determined }, timeout: 10s }
