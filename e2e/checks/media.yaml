@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-image-picker.md"
+  MEDIA-IMAGEMANIP-01:
+    title: expo-image-manipulator rotates, flips, resizes and crops images on macOS with correct pixels
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-image-manipulator.md"

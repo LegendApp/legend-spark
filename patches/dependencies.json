@@ -220,5 +220,12 @@
     "integrity": "sha512-scbtvQIgiqiOxQx/lFEocJkWPzYANHjwFLnzfKjdZNWh3RJjjMmtHaEoeu7lM9RzqE3EwF+JQecgy+FATXNfiQ==",
     "patch": "expo-image-picker@55.0.24.patch",
     "optional": true
+  },
+  "expo-image-manipulator": {
+    "version": "55.0.21",
+    "url": "https://registry.npmjs.org/expo-image-manipulator/-/expo-image-manipulator-55.0.21.tgz",
+    "integrity": "sha512-BlVl692hVDKuWzOCnbUsfp1u0XqujOABm/Kv3ISMg0qRMchvD6vUSJ/XOIj80+6B9CCm1hNgklgeJ0SIEHiCVQ==",
+    "patch": "expo-image-manipulator@55.0.21.patch",
+    "optional": true
   }
 }
