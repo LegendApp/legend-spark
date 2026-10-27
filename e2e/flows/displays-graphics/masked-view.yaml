@@ -1,0 +1,14 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@react-native-masked-view/masked-view on macOS"
+intent: >
+  The Masked view screen finds the native view manager registered and masks colored stripes with the text
+  MASK and a half-transparent circle, matching the approved golden (an unmasked view shows the full stripes).
+checks: [DISP-MASKED-01]
+tags: [displays-graphics]
+platforms: [macos]
+matrix: { appearance: [dark], locale: [en] }
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/masked-view" }
+- extendedWaitUntil: { visible: { id: displays-graphics-masked-view-registered }, timeout: 10s }
+- assertVisible: { id: displays-graphics-masked-view-laid-out }
+- assertScreenshot: { golden: displays-graphics-masked-view, mask: [{ id: infra-shell-sidebar }] }
