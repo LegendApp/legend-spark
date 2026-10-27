@@ -1,0 +1,8 @@
+area: media
+prefix: MEDIA
+checks:
+  MEDIA-ZXING-01:
+    title: react-native-nitro-zxing scans a QR code in a still Nitro Image on macOS and returns its format and value
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-nitro-zxing.md"

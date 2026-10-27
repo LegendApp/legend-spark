@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-nitro-zxing on macOS
+intent: >
+  The Barcode scanning screen writes a QR code PNG to the app's data folder, loads it with Nitro Image and
+  scans it with ZXing, which returns the value spark-kitchen-sink.
+checks: [MEDIA-ZXING-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://media/nitro-zxing" }
+- extendedWaitUntil: { visible: { id: media-nitro-zxing-spark-kitchen-sink }, timeout: 10s }

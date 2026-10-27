@@ -117,6 +117,7 @@
         "react-native-nitro-fetch": "1.9.0",
         "react-native-nitro-modules": "0.37.0",
         "react-native-nitro-sqlite": "10.2.0",
+        "react-native-nitro-zxing": "0.3.0",
         "react-native-quick-base64": "3.0.1",
         "react-native-quick-crypto": "1.1.9",
         "react-native-release-profiler": "0.4.5",
@@ -2253,6 +2254,8 @@
     "react-native-nitro-modules": ["react-native-nitro-modules@0.37.0", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-ULS2CBZcdwGw5d4Y35EV/tbCOsNsQOnQ9LC9CehMhDNm5c90lwF/LxRamzKuFpjI547G7teTQgD0peqYSGnP9g=="],
 
     "react-native-nitro-sqlite": ["react-native-nitro-sqlite@10.2.0", "", { "dependencies": { "typeorm": "1.1.1" }, "peerDependencies": { "better-sqlite3": "^12.11.1", "react": ">=17.0.0", "react-native": ">=0.75.0", "react-native-nitro-modules": ">=0.35.0" }, "optionalPeers": ["better-sqlite3"] }, "sha512-lB0yc4SzVNTZoe0ItyBJqOQ9qAc2SY3ku7PzFwP97e4NpZIOX0ec7p49sLK04MdWRmInt96Q7NU4rPfbNyg7Nw=="],
+
+    "react-native-nitro-zxing": ["react-native-nitro-zxing@0.3.0", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-nitro-image": "*", "react-native-nitro-modules": "*", "react-native-vision-camera": "*" }, "optionalPeers": ["react-native-nitro-modules"] }, "sha512-SQ/qwmfakdPcOMVzph99vFOPbPkVg3JZaTGrjVVXG6RS8ZUqMocHqbeM4V17qPDTzFK+rsAp6T7u2aFe3Hot/w=="],
 
     "react-native-quick-base64": ["react-native-quick-base64@3.0.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-EjUP2U7WqKmlMmoY7XGyHomy8bM0q4+yCDCRg4ZezQ6zedYRwc7yVk4V2O/iSftKaLEzhuW98lpyPMdk1iPHXQ=="],
 
