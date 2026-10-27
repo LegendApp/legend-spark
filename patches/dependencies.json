@@ -178,5 +178,12 @@
     "integrity": "sha512-eXuVAahonZXLrXa//isvq72ed1to/MmbHUyd2WTkRH2/FjC9X91rZ4BUNIFBZnAxaNXQrKw/ITfG/VMVz1DIhQ==",
     "patch": "expo-blur@55.0.18.patch",
     "optional": true
+  },
+  "expo-image": {
+    "version": "55.0.11",
+    "url": "https://registry.npmjs.org/expo-image/-/expo-image-55.0.11.tgz",
+    "integrity": "sha512-PVIBYQJW/h1f6Zb9xnoWlgfqyOPVm2yb6eo6ZogaKbvMrhb/Q/fiERbagi4oqmR6IPljWPEpkXXQyFBUh7TjpQ==",
+    "patch": "expo-image@55.0.11.patch",
+    "optional": true
   }
 }
