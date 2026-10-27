@@ -6,3 +6,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-community-blur.md"
+  DISP-FASTIMAGE-01:
+    title: react-native-fast-image renders through Spark's macOS stand-in, reports onLoad with the image size, reloads through its ref and preloads with the size
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-fast-image.md"
