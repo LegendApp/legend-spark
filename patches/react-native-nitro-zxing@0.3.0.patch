@@ -1,0 +1,13 @@
+diff --git a/VisionCameraZxing.podspec b/VisionCameraZxing.podspec
+index 301b92f..e2f5578 100644
+--- a/VisionCameraZxing.podspec
++++ b/VisionCameraZxing.podspec
+@@ -20,7 +20,7 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => min_ios_version_supported, :visionos => 1.0 }
++  s.platforms    = { :ios => min_ios_version_supported, :visionos => 1.0, :osx => "11.0" }
+   s.source       = { :git => "https://github.com/margelo/react-native-vision-camera-zxing.git", :tag => "v#{s.version}" }
+ 
+   s.source_files = [
