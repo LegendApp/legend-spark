@@ -206,5 +206,12 @@
     "integrity": "sha512-wqq7GUOqSkfoFJzreZvBG0jzjsq5c582m3glhWSjcmIuByxXXWp6j6GY6hyFuYKzpOXhbuvusVxGCQi0yWnp3g==",
     "patch": "expo-glass-effect@55.0.11.patch",
     "optional": true
+  },
+  "expo-system-ui": {
+    "version": "55.0.22",
+    "url": "https://registry.npmjs.org/expo-system-ui/-/expo-system-ui-55.0.22.tgz",
+    "integrity": "sha512-/ma8XGdwXvWkeZN++pHQt66jEQ4ZsaV9B5nP/+PAmXa4hAukPxG2bXjZaNOOOlTssWlaJRclJgGeC+Wo2uJlXQ==",
+    "patch": "expo-system-ui@55.0.22.patch",
+    "optional": true
   }
 }
