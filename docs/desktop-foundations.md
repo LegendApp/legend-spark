@@ -45,7 +45,8 @@ const subscription = await watch(libraryPath, () => scheduleRescan(), {
 await subscription.remove();
 ```
 
-On macOS, recursive watches can target a missing path. Windows requires an existing
+On macOS, recursive watches can target a missing path. An existing file at the
+target or an ancestor rejects with `E_NOT_FOUND`. Windows requires an existing
 directory. Nested edits, new directories, and replacement of the watched root
 invalidate that root. The callback receives
 the originally watched path, not a precise per-file change record. Events can be

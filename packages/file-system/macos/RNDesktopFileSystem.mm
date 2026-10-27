@@ -178,7 +178,7 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
             [missing insertObject:existing.lastPathComponent atIndex:0];
             existing = existing.stringByDeletingLastPathComponent;
           }
-          if (!S_ISDIR(info.st_mode)) { SparkInvalid(reject, @"Recursive watch requires a directory"); return; }
+          if (!S_ISDIR(info.st_mode)) { SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:ENOTDIR userInfo:nil]); return; }
           SparkRecursiveWatch *watch = [SparkRecursiveWatch new];
           // Keep real filesystem paths: Foundation can strip /private while a path
           // exists, then preserve it after deletion, breaking event comparisons.
