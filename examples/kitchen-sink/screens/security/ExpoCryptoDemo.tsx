@@ -8,7 +8,8 @@ const ID = "security-expo-crypto";
 async function check() {
   const sha256 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, "abc");
   const sha1 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA1, "abc", { encoding: Crypto.CryptoEncoding.BASE64 });
-  const bytes = Crypto.getRandomBytes(16);
+  // The sync getRandomBytes falls back to Math.random in development builds; the async one always asks the native module.
+  const bytes = await Crypto.getRandomBytesAsync(16);
   return [
     sha256 !== "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" && "sha256",
     sha1 !== "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=" && `sha1 (${sha1})`,

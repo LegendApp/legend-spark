@@ -14,7 +14,11 @@ function pixel(image: ReturnType<typeof Skia.Image.MakeImageFromEncoded>, x: num
 export function SkiaDemo() {
   const canvas = useCanvasRef();
   const [result, setResult] = useState<string>();
+  // Snapshotting a Canvas before AppKit has inserted its view dereferences a null native view, so
+  // the check waits for the Canvas to lay out.
+  const [laidOut, setLaidOut] = useState(false);
   useEffect(() => {
+    if (!laidOut) return;
     const timer = setTimeout(async () => {
       try {
         // Offscreen raster: a red square with a blue circle.
@@ -36,12 +40,12 @@ export function SkiaDemo() {
         ].filter(Boolean);
         setResult(failures.length ? `failed: ${failures.join(", ")}` : "passed");
       } catch (error) { setResult(`failed: ${String(error)}`); }
-    }, 500);
+    }, 100);
     return () => clearTimeout(timer);
-  }, [canvas]);
+  }, [canvas, laidOut]);
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-3 p-6">
     <Text className="text-sm text-muted">A Skia Canvas (green circle on yellow) and an offscreen raster surface, both read back by pixel.</Text>
-    <Canvas ref={canvas} style={{ width: 160, height: 160 }}>
+    <Canvas ref={canvas} style={{ width: 160, height: 160 }} onLayout={() => setLaidOut(true)}>
       <Rect x={0} y={0} width={160} height={160} color="yellow" />
       <Circle cx={80} cy={80} r={50} color="green" />
     </Canvas>
