@@ -21,3 +21,23 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-navigation.md"
+  COMP-DRAWER-01:
+    title: react-native-drawer-layout opens and closes a drawer on macOS, reporting onOpen and onClose
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-drawer-layout.md"
+  COMP-SHEET-01:
+    title: "@gorhom/bottom-sheet snaps to its second point on macOS and reports the index"
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/gorhom-bottom-sheet.md"
+  COMP-PRESSABLE-01:
+    title: react-native-pressable-opacity's PressableOpacity and NativePressableOpacity render on macOS
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-pressable-opacity.md"
+  COMP-STATUSBAR-01:
+    title: expo-status-bar's component renders and its setters return on macOS, where there is no status bar
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-status-bar.md"

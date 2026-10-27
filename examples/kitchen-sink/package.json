@@ -87,7 +87,11 @@
     "react-native-svg": "15.15.3",
     "@react-native-community/netinfo": "11.5.2",
     "@expo/vector-icons": "15.1.1",
-    "expo-font": "55.0.8"
+    "expo-font": "55.0.8",
+    "react-native-drawer-layout": "4.2.12",
+    "@gorhom/bottom-sheet": "5.2.14",
+    "react-native-pressable-opacity": "1.0.10",
+    "expo-status-bar": "55.0.6"
   },
   "expo": {
     "install": {
