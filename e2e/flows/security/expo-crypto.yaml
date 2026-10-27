@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-crypto on macOS
+intent: >
+  The Expo Crypto screen checks SHA-256 and SHA-1 digests of "abc" against published vectors, random
+  bytes and a v4 UUID, then shows passed.
+checks: [SEC-EXPOCRYPTO-01]
+tags: [security]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://security/expo-crypto" }
+- extendedWaitUntil: { visible: { id: security-expo-crypto-passed }, timeout: 15s }
