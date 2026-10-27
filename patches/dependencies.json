@@ -143,5 +143,12 @@
     "integrity": "sha512-W2DNWWnjk3KSdAy2BtK9ie1lByO6IsJIpriQAnvS1+d/e12wXhq14iZLUB5iA0CCVftU3eliQRIzkyT2cdL9Ng==",
     "patch": "expo-device@55.0.21.patch",
     "optional": true
+  },
+  "expo-localization": {
+    "version": "55.0.19",
+    "url": "https://registry.npmjs.org/expo-localization/-/expo-localization-55.0.19.tgz",
+    "integrity": "sha512-rw8pcC4QL8HC3K8Vs5pdVCB+ayFkaVD0f+Ul+jHgM6W7XdzGtCzd0x7rI3M/9PzP1YpAgQ4jYZid/g+UKi9IIA==",
+    "patch": "expo-localization@55.0.19.patch",
+    "optional": true
   }
 }
