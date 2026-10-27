@@ -96,7 +96,8 @@
     "@babel/plugin-transform-shorthand-properties": "7.27.1",
     "@babel/plugin-transform-arrow-functions": "7.27.1",
     "react-native-nitro-image": "0.15.2",
-    "expo-image": "55.0.11"
+    "expo-image": "55.0.11",
+    "expo-symbols": "55.0.9"
   },
   "expo": {
     "install": {
