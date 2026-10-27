@@ -234,6 +234,17 @@ export function dependencyStamp(root: string) {
     "react-native.config.js",
   ]);
 }
+// CocoaPods skips a pod whose podspec lists platforms without macOS, but codegen still registers
+// the library's components and modules, mapping them to classes that were never built.
+export function lacksMacOSPod(pkg: Package) {
+  if (!pkg.json.codegenConfig || ["react-native", "react-native-macos"].includes(pkg.name)) return false;
+  const specs = readdirSync(pkg.root).filter(name => name.endsWith(".podspec")).map(name => readFileSync(path.join(pkg.root, name), "utf8"));
+  return specs.length > 0 && specs.every(spec => {
+    // `s.platform = :ios, '13.4'` or `s.platforms = { :ios => ..., osx: ... }`; a computed value proves nothing.
+    const platforms = spec.match(/\.platforms?\s*=\s*(\{[^}]*\}|.*)/)?.[1] ?? "";
+    return /\b(ios|tvos|visionos)\b/.test(platforms) && !/\b(osx|macos)\b/.test(platforms) && !/\.(osx|macos)\./.test(spec);
+  });
+}
 export function selection(
   packages: NativePackage[],
   used: Set<string>,
