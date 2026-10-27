@@ -86,12 +86,15 @@ function prepareNativePatches(root, installed = []) {
           writes.push([target, next]);
           continue;
         }
-        if (relative === "package.json" && manifest.spark?.dependencyPatch) {
+        // The receipt rewrites package.json with two-space JSON, so its patch hunks target that form.
+        if (relative === "package.json") {
           const original = JSON.parse(current);
-          delete original.spark.dependencyPatch;
-          delete original.spark.sdk;
-          delete original.spark.requires;
-          if (!Object.keys(original.spark).length) delete original.spark;
+          if (manifest.spark?.dependencyPatch) {
+            delete original.spark.dependencyPatch;
+            delete original.spark.sdk;
+            delete original.spark.requires;
+            if (!Object.keys(original.spark).length) delete original.spark;
+          }
           current = JSON.stringify(original, null, 2) + "\n";
         }
         if (applyPatch(current, reversePatch(patch)) !== false) continue;
