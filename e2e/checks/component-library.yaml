@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-reanimated.md"
+  COMP-GESTURE-01:
+    title: react-native-gesture-handler's native module and button component are registered on macOS and a GestureDetector mounts in a GestureHandlerRootView
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-gesture-handler.md"
