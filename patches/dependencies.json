@@ -66,5 +66,12 @@
     "integrity": "sha512-Dev69p1kcTxx7qLLFwax5hB/3X5wMNpviUIXS6K6KnITyhu+O2AEUhenZoq2OmGnT9UzHBIYHkEKoFebZNK/lA==",
     "patch": "react-native-fast-image@10.9.9.patch",
     "optional": true
+  },
+  "react-native-release-profiler": {
+    "version": "0.4.5",
+    "url": "https://registry.npmjs.org/react-native-release-profiler/-/react-native-release-profiler-0.4.5.tgz",
+    "integrity": "sha512-1w05jDlKRdIMxTuSPep67eMc+FW805SJZjWJwBVsPIQHmRYttxBdrdbzF0mG5XVvMVRNji4RHLidu54+V54lRQ==",
+    "patch": "react-native-release-profiler@0.4.5.patch",
+    "optional": true
   }
 }
