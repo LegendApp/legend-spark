@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-image on macOS
+intent: >
+  The Expo Image screen writes a 4×2 PNG to the app's data folder and shows it with expo-image. onLoad reports
+  4×2, reloadAsync through the ref loads it again, and Image.prefetch resolves true, so the screen shows passed.
+checks: [DISP-EXPOIMAGE-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/expo-image" }
+- extendedWaitUntil: { visible: { id: displays-graphics-expo-image-passed }, timeout: 10s }
+- takeScreenshot: expo-image

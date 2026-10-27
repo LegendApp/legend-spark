@@ -46,3 +46,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-blur.md"
+  DISP-EXPOIMAGE-01:
+    title: expo-image renders on macOS through Spark's stand-in, with load events, reloadAsync and prefetch
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-image.md"
