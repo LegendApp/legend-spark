@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-mmkv on macOS
+intent: >
+  The MMKV screen round-trips typed values and a buffer, removes a key and sees every change through a
+  listener, then shows passed. Its launch counter lives in MMKV: a plain relaunch shows launch 2, and a
+  relaunch with clearState shows launch 1 again because MMKV stores its files in the app's data folder.
+checks: [DATA-MMKV-01, DATA-MMKV-02]
+tags: [storage-data]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://storage-data/mmkv" }
+- extendedWaitUntil: { visible: { id: storage-data-mmkv-passed }, timeout: 10s }
+- assertVisible: { id: storage-data-mmkv-launch-1 }
+- launchApp: { openUrl: "spark-ks://storage-data/mmkv" }
+- extendedWaitUntil: { visible: { id: storage-data-mmkv-passed }, timeout: 10s }
+- assertVisible: { id: storage-data-mmkv-launch-2 }
+- launchApp: { clearState: true, openUrl: "spark-ks://storage-data/mmkv" }
+- extendedWaitUntil: { visible: { id: storage-data-mmkv-passed }, timeout: 10s }
+- assertVisible: { id: storage-data-mmkv-launch-1 }
