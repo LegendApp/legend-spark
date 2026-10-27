@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@shopify/react-native-skia on macOS"
+intent: >
+  The Skia screen draws a green circle on a yellow Canvas and reads the native view back as an image; its
+  center pixel is green. An offscreen raster surface with a blue circle on red reads back the same way. The
+  screen then shows passed.
+checks: [DISP-SKIA-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/skia" }
+- extendedWaitUntil: { visible: { id: displays-graphics-skia-passed }, timeout: 15s }
+- takeScreenshot: skia
