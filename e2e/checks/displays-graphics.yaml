@@ -16,3 +16,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/shopify-react-native-skia.md"
+  DISP-BLURHASH-01:
+    title: react-native-blurhash decodes a Blurhash in its native view on macOS and encodes a local image to a valid Blurhash with the image's color
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-blurhash.md"
