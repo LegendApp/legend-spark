@@ -56,3 +56,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-symbols.md"
+  DISP-MASKED-01:
+    title: "@react-native-masked-view/masked-view masks its children by the mask element's alpha on macOS"
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/masked-view.md"
