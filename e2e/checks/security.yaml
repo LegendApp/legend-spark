@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-tracking-transparency.md"
+  SEC-EXPOCRYPTO-01:
+    title: expo-crypto computes SHA digests matching published vectors and produces random bytes and v4 UUIDs on macOS
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-crypto.md"
