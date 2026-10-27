@@ -150,5 +150,12 @@
     "integrity": "sha512-rw8pcC4QL8HC3K8Vs5pdVCB+ayFkaVD0f+Ul+jHgM6W7XdzGtCzd0x7rI3M/9PzP1YpAgQ4jYZid/g+UKi9IIA==",
     "patch": "expo-localization@55.0.19.patch",
     "optional": true
+  },
+  "expo-haptics": {
+    "version": "55.0.18",
+    "url": "https://registry.npmjs.org/expo-haptics/-/expo-haptics-55.0.18.tgz",
+    "integrity": "sha512-bEH0bf5bBGn7U2eTZVdiXBUk4vTfNGbfv9/9PCYLg3gL7L/WE2g8WKs2vYg1B4/BDSucyO8prZofH3IgvLJojQ==",
+    "patch": "expo-haptics@55.0.18.patch",
+    "optional": true
   }
 }
