@@ -1,0 +1,41 @@
+diff --git a/ios/KeepAwakeModule.swift b/ios/KeepAwakeModule.swift
+index 835b4f1..22aac25 100644
+--- a/ios/KeepAwakeModule.swift
++++ b/ios/KeepAwakeModule.swift
+@@ -30,7 +30,9 @@ public final class KeepAwakeModule: Module {
+         return UIApplication.shared.isIdleTimerDisabled
+       }
+       #elseif os(macOS)
+-      return false
++      return DispatchQueue.main.sync {
++        return displaySleepActivity != nil
++      }
+       #endif
+     }
+ 
+@@ -48,10 +50,25 @@ public final class KeepAwakeModule: Module {
+   }
+ }
+ 
++#if os(macOS)
++// macOS has no idle timer to disable; a process activity holds the display and system awake instead.
++private var displaySleepActivity: NSObjectProtocol?
++#endif
++
+ private func setActivated(_ activated: Bool) {
+   #if os(iOS) || os(tvOS)
+   DispatchQueue.main.async {
+     UIApplication.shared.isIdleTimerDisabled = activated
+   }
++  #elseif os(macOS)
++  DispatchQueue.main.async {
++    if activated, displaySleepActivity == nil {
++      displaySleepActivity = ProcessInfo.processInfo.beginActivity(
++        options: [.idleDisplaySleepDisabled, .idleSystemSleepDisabled], reason: "expo-keep-awake")
++    } else if !activated, let activity = displaySleepActivity {
++      ProcessInfo.processInfo.endActivity(activity)
++      displaySleepActivity = nil
++    }
++  }
+   #endif
+ }

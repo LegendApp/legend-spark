@@ -108,5 +108,12 @@
     "integrity": "sha512-SQ/qwmfakdPcOMVzph99vFOPbPkVg3JZaTGrjVVXG6RS8ZUqMocHqbeM4V17qPDTzFK+rsAp6T7u2aFe3Hot/w==",
     "patch": "react-native-nitro-zxing@0.3.0.patch",
     "optional": true
+  },
+  "expo-keep-awake": {
+    "version": "55.0.8",
+    "url": "https://registry.npmjs.org/expo-keep-awake/-/expo-keep-awake-55.0.8.tgz",
+    "integrity": "sha512-PfIpMfM+STOBwkR5XOE+yVtER86c44MD+W8QD8JxuO0sT9pF7Y1SJYakWlpvX8xsGA+bjKLxftm9403s9kQhKA==",
+    "patch": "expo-keep-awake@55.0.8.patch",
+    "optional": true
   }
 }
