@@ -171,5 +171,12 @@
     "integrity": "sha512-WyP75pnKqhLNktYwDn3xKAUNt5rLihRDv8XWGhhz6VEhVqypixpT86NA3uGtiDTlM3gGjhrYCY7o7ypXgCUOZg==",
     "patch": "expo-font@55.0.8.patch",
     "optional": true
+  },
+  "expo-blur": {
+    "version": "55.0.18",
+    "url": "https://registry.npmjs.org/expo-blur/-/expo-blur-55.0.18.tgz",
+    "integrity": "sha512-eXuVAahonZXLrXa//isvq72ed1to/MmbHUyd2WTkRH2/FjC9X91rZ4BUNIFBZnAxaNXQrKw/ITfG/VMVz1DIhQ==",
+    "patch": "expo-blur@55.0.18.patch",
+    "optional": true
   }
 }

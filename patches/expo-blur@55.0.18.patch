@@ -1,0 +1,130 @@
+diff --git a/ios/BlurEffectView.swift b/ios/BlurEffectView.swift
+index 185f69a..b1e0ed6 100644
+--- a/ios/BlurEffectView.swift
++++ b/ios/BlurEffectView.swift
+@@ -1,8 +1,41 @@
+ // Copyright 2015-present 650 Industries. All rights reserved.
+ 
+-import UIKit
+ import ExpoModulesCore
+ 
++#if os(macOS)
++import AppKit
++
++/**
++ AppKit has no blur radius: intensity fades the material in, and the tint picks a material and appearance.
++ */
++final class BlurEffectView: NSVisualEffectView {
++  @Clamping(lowerBound: 0.01, upperBound: 1)
++  var intensity: Double = 0.5 {
++    didSet {
++      alphaValue = CGFloat(intensity)
++    }
++  }
++
++  var tint: TintStyle = .light {
++    didSet {
++      material = tint.toMaterial()
++      appearance = tint.toAppearance()
++    }
++  }
++
++  init() {
++    super.init(frame: .zero)
++    blendingMode = .withinWindow
++    state = .active
++    material = TintStyle.default.toMaterial()
++    alphaValue = CGFloat(intensity)
++  }
++
++  required init?(coder aDecoder: NSCoder) { nil }
++}
++#else
++import UIKit
++
+ /**
+  This class is based on https://gist.github.com/darrarski/29a2a4515508e385c90b3ffe6f975df7
+  */
+@@ -57,6 +90,8 @@ final class BlurEffectView: UIVisualEffectView {
+   }
+ }
+ 
++#endif
++
+ private func isDetoxPresent() -> Bool {
+   let args = ProcessInfo.processInfo.arguments
+ 
+diff --git a/ios/ExpoBlur.podspec b/ios/ExpoBlur.podspec
+index e4fb69d..33dcde0 100644
+--- a/ios/ExpoBlur.podspec
++++ b/ios/ExpoBlur.podspec
+@@ -12,6 +12,7 @@ Pod::Spec.new do |s|
+   s.homepage       = package['homepage']
+   s.platforms      = {
+     :ios => '15.1',
++    :osx => '11.0',
+     :tvos => '15.1'
+   }
+   s.source         = { git: 'https://github.com/expo/expo.git' }
+diff --git a/ios/ExpoBlurView.swift b/ios/ExpoBlurView.swift
+index e0dd06b..b357b6f 100644
+--- a/ios/ExpoBlurView.swift
++++ b/ios/ExpoBlurView.swift
+@@ -8,7 +8,11 @@ public final class ExpoBlurView: ExpoView {
+   public required init(appContext: AppContext? = nil) {
+     super.init(appContext: appContext)
+ 
++    #if os(macOS)
++    blurEffectView.autoresizingMask = [.width, .height]
++    #else
+     blurEffectView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
++    #endif
+     clipsToBounds = true
+ 
+     addSubview(blurEffectView)
+diff --git a/ios/TintStyle.swift b/ios/TintStyle.swift
+index ca79ed4..144d5f5 100644
+--- a/ios/TintStyle.swift
++++ b/ios/TintStyle.swift
+@@ -23,6 +23,35 @@ public enum TintStyle: String, Enumerable {
+   case systemThickMaterialDark
+   case systemChromeMaterialDark
+ 
++#if os(macOS)
++  func toMaterial() -> NSVisualEffectView.Material {
++    switch self {
++    case .systemUltraThinMaterial, .systemUltraThinMaterialLight, .systemUltraThinMaterialDark:
++      return .hudWindow
++    case .systemThinMaterial, .systemThinMaterialLight, .systemThinMaterialDark:
++      return .popover
++    case .systemThickMaterial, .systemThickMaterialLight, .systemThickMaterialDark:
++      return .windowBackground
++    case .systemChromeMaterial, .systemChromeMaterialLight, .systemChromeMaterialDark:
++      return .titlebar
++    case .systemMaterial, .systemMaterialLight, .systemMaterialDark, .regular, .prominent, .default:
++      return .contentBackground
++    case .extraLight, .light, .dark:
++      return .fullScreenUI
++    }
++  }
++
++  func toAppearance() -> NSAppearance? {
++    switch self {
++    case .dark, .systemUltraThinMaterialDark, .systemThinMaterialDark, .systemMaterialDark, .systemThickMaterialDark, .systemChromeMaterialDark:
++      return NSAppearance(named: .darkAqua)
++    case .extraLight, .light, .systemUltraThinMaterialLight, .systemThinMaterialLight, .systemMaterialLight, .systemThickMaterialLight, .systemChromeMaterialLight:
++      return NSAppearance(named: .aqua)
++    default:
++      return nil
++    }
++  }
++#else
+   func toBlurEffect() -> UIBlurEffect.Style {
+ #if os(tvOS)
+     switch self {
+@@ -116,4 +145,5 @@ public enum TintStyle: String, Enumerable {
+     }
+ #endif
+   }
++#endif
+ }
