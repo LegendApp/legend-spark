@@ -6,3 +6,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-nitro-fetch.md"
+  WEB-EXPOBROWSER-01:
+    title: expo-web-browser opens a page in its macOS web window and dismissBrowser closes it, resolving openBrowserAsync with dismiss
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-web-browser.md"
