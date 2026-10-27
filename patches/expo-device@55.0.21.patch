@@ -1,16 +1,18 @@
 diff --git a/ios/DeviceModule.swift b/ios/DeviceModule.swift
-index 899b214..e84a403 100644
+index 899b214..c5a3d45 100644
 --- a/ios/DeviceModule.swift
 +++ b/ios/DeviceModule.swift
-@@ -1,5 +1,7 @@
+@@ -1,5 +1,9 @@
  import ExpoModulesCore
 +#if canImport(UIKit)
  import UIKit
++#else
++import SystemConfiguration
 +#endif
  import MachO
  
  public class DeviceModule: Module {
-@@ -19,15 +21,27 @@ public class DeviceModule: Module {
+@@ -19,15 +23,27 @@ public class DeviceModule: Module {
      }
  
      Constant("modelId") {
@@ -38,7 +40,7 @@ index 899b214..e84a403 100644
      }
  
      Constant("totalMemory") {
-@@ -35,11 +49,19 @@ public class DeviceModule: Module {
+@@ -35,11 +51,19 @@ public class DeviceModule: Module {
      }
  
      Constant("osName") {
@@ -58,19 +60,19 @@ index 899b214..e84a403 100644
      }
  
      Constant("osBuildId") {
-@@ -51,7 +73,11 @@ public class DeviceModule: Module {
+@@ -51,7 +75,11 @@ public class DeviceModule: Module {
      }
  
      Constant("deviceName") {
 +#if os(macOS)
-+      Host.current().localizedName
++      SCDynamicStoreCopyComputerName(nil, nil) as String?
 +#else
        UIDevice.current.name
 +#endif
      }
  
      Constant("deviceType") {
-@@ -72,12 +98,19 @@ public class DeviceModule: Module {
+@@ -72,12 +100,19 @@ public class DeviceModule: Module {
      }
  
      AsyncFunction("isRootedExperimentalAsync") { () -> Bool in
@@ -90,7 +92,7 @@ index 899b214..e84a403 100644
    // if it's a macOS Catalyst app
    if ProcessInfo.processInfo.isMacCatalystApp {
      return DeviceType.desktop.rawValue
-@@ -100,6 +133,7 @@ func getDeviceType() -> Int {
+@@ -100,6 +135,7 @@ func getDeviceType() -> Int {
    default:
      return DeviceType.unknown.rawValue
    }
@@ -98,7 +100,7 @@ index 899b214..e84a403 100644
  }
  
  func isDevice() -> Bool {
-@@ -141,6 +175,20 @@ func cpuArchitectures() -> [String]? {
+@@ -141,6 +177,20 @@ func cpuArchitectures() -> [String]? {
    return [String(cString: archRaw)]
  }
  
