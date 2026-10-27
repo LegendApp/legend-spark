@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createRequire } = require('node:module');
-const { createMigrationContext } = require('./migration-helpers.cjs');
+const { createMigrationContext, resolveDependency } = require('./migration-helpers.cjs');
 
 const skillPath = 'node_modules/@legendapp/spark/skills/spark/SKILL.md';
 const start = '<!-- spark:skill:start -->';
@@ -105,7 +105,7 @@ function installedSparkVersion(root) {
 
 /** @type {typeof import('./migrations.cjs').planMigrations} */
 function planMigrations(root, version, { automatic = false, fromVersion } = {}) {
-  const { compare, valid } = createRequire(require.resolve('npm/package.json'))('semver');
+  const { compare, valid } = createRequire(resolveDependency(root, 'npm/package.json'))('semver');
   const file = path.join(root, '.spark/version');
   const previous = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : fromVersion;
   if (!valid(version) || (previous !== undefined && (!valid(previous) || compare(previous, version) > 0))) {

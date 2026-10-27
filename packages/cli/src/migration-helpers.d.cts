@@ -13,3 +13,4 @@ export interface MigrationContext {
 }
 export const upgradeNotesPath: string;
 export function createMigrationContext(root: string, version: string, changes: Map<string, FileChange>, manualSteps: ManualStep[]): MigrationContext;
+export function resolveDependency(root: string, request: string): string;

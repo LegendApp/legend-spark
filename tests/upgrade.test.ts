@@ -113,6 +113,23 @@ test("dry-run previews target pins and leaves app files, install and migrations 
   expect(existsSync(path.join(root, ".spark/upgrade-notes.md"))).toBe(false);
 });
 
+test("a downloaded release without its own node_modules plans migrations with dependencies from the app's installed Spark", async () => {
+  const extract = vi.mocked(pacote.extract).getMockImplementation()!;
+  vi.mocked(pacote.extract).mockImplementation(async (spec, destination, options) => {
+    await extract(spec, destination, options);
+    const cli = path.join(destination, "vendor/node_modules/@legendapp/spark-cli");
+    rmSync(path.join(cli, "node_modules"));
+    appendFileSync(path.join(cli, "dist/migrations.cjs"), `\nmodule.exports.migrations.push({ version: ${JSON.stringify(next)}, automatic: false, apply(context) {
+      context.replaceImport('old-module', 'new-module');
+    } });\n`);
+  });
+  for (const dependency of ["typescript", "npm"]) symlinkSync(path.join(framework, "node_modules", dependency), path.join(root, "node_modules", dependency));
+  writeFileSync(path.join(root, "App.tsx"), "import { api } from 'old-module';\n");
+  await upgrade(root, true);
+  expect(console.log).toHaveBeenCalledWith("  Edit App.tsx");
+  expect(console.log).toHaveBeenCalledWith("No app files changed.");
+});
+
 test("stable installs stay on latest", async () => {
   current = "1.0.0";
   next = "1.1.0";
