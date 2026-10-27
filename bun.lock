@@ -109,6 +109,7 @@
         "expo-desktop-stubs": "55.0.2",
         "expo-desktop-template-bare-minimum": "55.83.10",
         "expo-device": "55.0.21",
+        "expo-haptics": "55.0.18",
         "expo-keep-awake": "55.0.8",
         "expo-linear-gradient": "55.0.18",
         "expo-linking": "55.0.17",
@@ -1745,6 +1746,8 @@
     "expo-file-system": ["expo-file-system@55.0.26", "", { "peerDependencies": { "expo": "*", "react-native": "*" } }, "sha512-KBOQWqxumCxJBN29Lu13QpccwAhcjsgDYCJSVVjfGydaK/UbEkH/1rT/WZmdfoZ4G8mUJlfRbWfnJtfHUXxsdw=="],
 
     "expo-font": ["expo-font@55.0.8", "", { "dependencies": { "fontfaceobserver": "^2.1.0" }, "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-WyP75pnKqhLNktYwDn3xKAUNt5rLihRDv8XWGhhz6VEhVqypixpT86NA3uGtiDTlM3gGjhrYCY7o7ypXgCUOZg=="],
+
+    "expo-haptics": ["expo-haptics@55.0.18", "", { "peerDependencies": { "expo": "*" } }, "sha512-bEH0bf5bBGn7U2eTZVdiXBUk4vTfNGbfv9/9PCYLg3gL7L/WE2g8WKs2vYg1B4/BDSucyO8prZofH3IgvLJojQ=="],
 
     "expo-keep-awake": ["expo-keep-awake@55.0.8", "", { "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-PfIpMfM+STOBwkR5XOE+yVtER86c44MD+W8QD8JxuO0sT9pF7Y1SJYakWlpvX8xsGA+bjKLxftm9403s9kQhKA=="],
 

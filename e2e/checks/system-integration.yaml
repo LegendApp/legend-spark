@@ -70,3 +70,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-device.md"
+  SYS-EXPOHAPTICS-01:
+    title: expo-haptics notification, impact and selection calls resolve on macOS through NSHapticFeedbackManager instead of rejecting as unavailable
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-haptics.md"

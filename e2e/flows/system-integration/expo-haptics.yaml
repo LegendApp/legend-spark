@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-haptics on macOS
+intent: >
+  The Expo Haptics screen calls notification, impact and selection feedback; each resolves through
+  NSHapticFeedbackManager (felt only on a Force Touch trackpad with a finger on it), so it shows passed.
+checks: [SYS-EXPOHAPTICS-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/expo-haptics" }
+- extendedWaitUntil: { visible: { id: system-integration-expo-haptics-passed }, timeout: 10s }
