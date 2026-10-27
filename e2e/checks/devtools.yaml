@@ -1,0 +1,8 @@
+area: devtools
+prefix: DEVT
+checks:
+  DEVT-PROFILER-01:
+    title: react-native-release-profiler starts and stops the Hermes sampling profiler on macOS and writes a trace with events to the app's namespaced Caches folder
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-release-profiler.md"
