@@ -1,0 +1,140 @@
+diff --git a/RNCMaskedView.podspec b/RNCMaskedView.podspec
+index b29590c..6eefd94 100644
+--- a/RNCMaskedView.podspec
++++ b/RNCMaskedView.podspec
+@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
+ 
+   s.authors      = package['author']
+   s.homepage     = package['homepage']
+-  s.platforms    = { :ios => "9.0", :tvos => "9.0" }
++  s.platforms    = { :ios => "9.0", :tvos => "9.0", :osx => "11.0" }
+ 
+   s.source       = { :git => "https://github.com/react-native-masked-view/masked-view.git", :tag => "v#{s.version}" }
+   s.source_files  = "ios/**/*.{h,m}"
+diff --git a/ios/RNCMaskedView.h b/ios/RNCMaskedView.h
+index afaa6c3..9f80599 100644
+--- a/ios/RNCMaskedView.h
++++ b/ios/RNCMaskedView.h
+@@ -5,7 +5,10 @@
+  * LICENSE file in the root directory of this source tree.
+  */
+ 
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import <UIKit/UIKit.h>
++#endif
+ 
+ #import <React/RCTView.h>
+ 
+diff --git a/ios/RNCMaskedView.m b/ios/RNCMaskedView.m
+index e8e51ac..dda4fa1 100644
+--- a/ios/RNCMaskedView.m
++++ b/ios/RNCMaskedView.m
+@@ -9,6 +9,86 @@
+ 
+ #import <React/UIView+React.h>
+ 
++#if TARGET_OS_OSX
++#import <QuartzCore/QuartzCore.h>
++
++// AppKit has no maskView. The mask stays a live view inside an invisible host so it keeps drawing;
++// each frame it is rendered into the layer mask of a container holding the other children.
++@implementation RNCMaskedView {
++  RCTUIView *_maskHost;
++  RCTUIView *_contentView;
++  CALayer *_maskLayer;
++  CADisplayLink *_displayLink;
++}
++
++- (instancetype)initWithFrame:(NSRect)frame
++{
++  if (self = [super initWithFrame:frame]) {
++    _maskHost = [[RCTUIView alloc] initWithFrame:self.bounds];
++    _maskHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
++    _maskHost.alphaValue = 0;
++    _contentView = [[RCTUIView alloc] initWithFrame:self.bounds];
++    _contentView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
++    _contentView.wantsLayer = YES;
++    _maskLayer = [CALayer layer];
++    _contentView.layer.mask = _maskLayer;
++    [self addSubview:_maskHost];
++    [self addSubview:_contentView];
++  }
++  return self;
++}
++
++- (void)viewDidMoveToWindow
++{
++  [super viewDidMoveToWindow];
++  [_displayLink invalidate];
++  _displayLink = nil;
++  if (self.window) {
++    _displayLink = [self displayLinkWithTarget:self selector:@selector(updateMask)];
++    [_displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
++  }
++}
++
++- (void)updateMask
++{
++  NSView *maskView = _maskHost.subviews.firstObject;
++  CGSize size = _contentView.bounds.size;
++  CGFloat scale = self.window.backingScaleFactor ?: 1;
++  CGImageRef image = NULL;
++  if (maskView.layer && size.width > 0 && size.height > 0) {
++    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
++    CGContextRef context = CGBitmapContextCreate(NULL, ceil(size.width * scale), ceil(size.height * scale), 8, 0, colorSpace, kCGImageAlphaPremultipliedLast);
++    CGColorSpaceRelease(colorSpace);
++    // The mask image is drawn unflipped; React's views are flipped.
++    CGContextTranslateCTM(context, 0, ceil(size.height * scale));
++    CGContextScaleCTM(context, scale, -scale);
++    [maskView.layer renderInContext:context];
++    image = CGBitmapContextCreateImage(context);
++    CGContextRelease(context);
++  }
++  [CATransaction begin];
++  [CATransaction setDisableActions:YES];
++  _maskLayer.frame = _contentView.layer.bounds;
++  _maskLayer.contents = (__bridge_transfer id)image;
++  [CATransaction commit];
++}
++
++- (void)didUpdateReactSubviews
++{
++  // RNCMaskedView expects that the first subview rendered is the mask.
++  NSArray<NSView *> *subviews = self.reactSubviews;
++  if (subviews.firstObject) {
++    [_maskHost addSubview:subviews.firstObject];
++  }
++  for (NSUInteger i = 1; i < subviews.count; i++) {
++    [_contentView addSubview:subviews[i]];
++  }
++  [self updateMask];
++}
++
++@end
++
++#else
+ @implementation RNCMaskedView
+ 
+ - (void)didUpdateReactSubviews
+@@ -32,3 +112,4 @@ - (void)displayLayer:(CALayer *)layer
+ }
+ 
+ @end
++#endif
+diff --git a/ios/RNCMaskedViewManager.m b/ios/RNCMaskedViewManager.m
+index 339ca26..977cbbd 100644
+--- a/ios/RNCMaskedViewManager.m
++++ b/ios/RNCMaskedViewManager.m
+@@ -13,7 +13,11 @@ @implementation RNCMaskedViewManager
+ 
+ RCT_EXPORT_MODULE()
+ 
++#if TARGET_OS_OSX
++- (RCTPlatformView *)view
++#else
+ - (UIView *)view
++#endif
+ {
+   return [RNCMaskedView new];
+ }

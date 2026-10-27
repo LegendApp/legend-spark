@@ -94,6 +94,7 @@
         "@react-native-community/cli": "20.1.3",
         "@react-native-community/cli-platform-apple": "20.1.3",
         "@react-native-community/netinfo": "11.5.2",
+        "@react-native-masked-view/masked-view": "0.3.2",
         "@react-native-runtimes/core": "0.1.0-alpha.2",
         "@react-native/metro-config": "0.83.10",
         "@react-navigation/bottom-tabs": "7.21.0",
@@ -1208,6 +1209,8 @@
     "@react-native-community/netinfo": ["@react-native-community/netinfo@11.5.2", "", { "peerDependencies": { "react": "*", "react-native": ">=0.59" } }, "sha512-/g0m65BtX9HU+bPiCH2517bOHpEIUsGrWFXDzi1a5nNKn5KujQgm04WhL7/OSXWKHyrT8VVtUoJA0XKRxueBpQ=="],
 
     "@react-native-macos/virtualized-lists": ["@react-native-macos/virtualized-lists@0.83.0", "", { "dependencies": { "invariant": "^2.2.4", "nullthrows": "^1.1.1" }, "peerDependencies": { "@types/react": "^19.2.0", "react": "*", "react-native": "*" }, "optionalPeers": ["@types/react"] }, "sha512-BCqsS5WmJ1rZ62gR+kixlxpx2V62q/sFc/sqPkVwblqN/ianB3YdJ7noG+mGyxEscddUp7qu22+pfWJEEOKXZw=="],
+
+    "@react-native-masked-view/masked-view": ["@react-native-masked-view/masked-view@0.3.2", "", { "peerDependencies": { "react": ">=16", "react-native": ">=0.57" } }, "sha512-XwuQoW7/GEgWRMovOQtX3A4PrXhyaZm0lVUiY8qJDvdngjLms9Cpdck6SmGAUNqQwcj2EadHC1HwL0bEyoa/SQ=="],
 
     "@react-native-runtimes/core": ["@react-native-runtimes/core@0.1.0-alpha.2", "", { "peerDependencies": { "@expo/config-plugins": ">=9.0.0", "react": "*", "react-native": "*", "react-native-nitro-modules": "*" } }, "sha512-of6A8BXTnIziF/+CaDQmIY0saC+5TpegJhs4CCkRXIhspWluSt3AcI/hYBwgHimJxH8BIsXpQ6JJT0EFZfq25g=="],
 
