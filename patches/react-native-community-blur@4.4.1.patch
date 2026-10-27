@@ -1,0 +1,357 @@
+diff --git a/ios/BlurEffectWithAmount.h b/ios/BlurEffectWithAmount.h
+index bf3992a..b15d6f0 100644
+--- a/ios/BlurEffectWithAmount.h
++++ b/ios/BlurEffectWithAmount.h
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import <UIKit/UIKit.h>
+ 
+ @interface BlurEffectWithAmount : UIBlurEffect
+@@ -5,3 +7,4 @@
+ 
+ + (instancetype)effectWithStyle:(UIBlurEffectStyle)style andBlurAmount:(NSNumber*)blurAmount;
+ @end
++#endif
+diff --git a/ios/BlurEffectWithAmount.m b/ios/BlurEffectWithAmount.m
+index e279400..70d41b6 100644
+--- a/ios/BlurEffectWithAmount.m
++++ b/ios/BlurEffectWithAmount.m
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ //
+ // We subclass UIBlurEffect so that we can set the BlurAmount.
+ // See: http://stackoverflow.com/a/30744777/304706
+@@ -63,3 +65,4 @@ - (id)copyWithZone:(NSZone*)zone
+ }
+ 
+ @end
++#endif
+diff --git a/ios/BlurView.h b/ios/BlurView.h
+index e960937..5a7415b 100644
+--- a/ios/BlurView.h
++++ b/ios/BlurView.h
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import <UIKit/UIKit.h>
+ #import "BlurEffectWithAmount.h"
+ 
+@@ -24,3 +26,4 @@
+ - (void)updateFallbackView;
+ - (BOOL)useReduceTransparencyFallback;
+ @end
++#endif
+diff --git a/ios/BlurView.mm b/ios/BlurView.mm
+index 3d35d8f..71410a5 100644
+--- a/ios/BlurView.mm
++++ b/ios/BlurView.mm
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import "BlurView.h"
+ #import "BlurEffectWithAmount.h"
+ 
+@@ -221,3 +223,4 @@ - (void)reduceTransparencyStatusDidChange:(__unused NSNotification *)notificatio
+   return BlurView.class;
+ }
+ #endif // RCT_NEW_ARCH_ENABLED
++#endif
+diff --git a/ios/BlurViewManager.h b/ios/BlurViewManager.h
+index 7aad0df..e33ca8d 100644
+--- a/ios/BlurViewManager.h
++++ b/ios/BlurViewManager.h
+@@ -1,5 +1,8 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import <React/RCTViewManager.h>
+ 
+ @interface BlurViewManager : RCTViewManager
+ 
+ @end
++#endif
+diff --git a/ios/BlurViewManager.mm b/ios/BlurViewManager.mm
+index de58e0c..0bc1e39 100644
+--- a/ios/BlurViewManager.mm
++++ b/ios/BlurViewManager.mm
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import "BlurViewManager.h"
+ #import "BlurView.h"
+ 
+@@ -15,3 +17,4 @@ - (UIView *)view
+ RCT_EXPORT_VIEW_PROPERTY(reducedTransparencyFallbackColor, UIColor);
+ 
+ @end
++#endif
+diff --git a/ios/VibrancyView.h b/ios/VibrancyView.h
+index a5c0608..139c55c 100644
+--- a/ios/VibrancyView.h
++++ b/ios/VibrancyView.h
+@@ -1,4 +1,7 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import "BlurView.h"
+ 
+ @interface VibrancyView : BlurView
+ @end
++#endif
+diff --git a/ios/VibrancyView.mm b/ios/VibrancyView.mm
+index 63660cd..0137596 100644
+--- a/ios/VibrancyView.mm
++++ b/ios/VibrancyView.mm
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import <React/RCTComponent.h>
+ #import "BlurView.h"
+ #import "VibrancyView.h"
+@@ -118,3 +120,4 @@ - (void)updateFallbackView
+   return VibrancyView.class;
+ }
+ #endif // RCT_NEW_ARCH_ENABLED
++#endif
+diff --git a/ios/VibrancyViewManager.h b/ios/VibrancyViewManager.h
+index 2593794..0db60b2 100644
+--- a/ios/VibrancyViewManager.h
++++ b/ios/VibrancyViewManager.h
+@@ -1,5 +1,8 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import <React/RCTViewManager.h>
+ 
+ @interface VibrancyViewManager : RCTViewManager
+ 
+-@end
+\ No newline at end of file
++@end
++#endif
+diff --git a/ios/VibrancyViewManager.mm b/ios/VibrancyViewManager.mm
+index 17bb10e..a0ca18f 100644
+--- a/ios/VibrancyViewManager.mm
++++ b/ios/VibrancyViewManager.mm
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import "VibrancyViewManager.h"
+ #import "VibrancyView.h"
+ 
+@@ -15,3 +17,4 @@ - (UIView *)view
+ RCT_EXPORT_VIEW_PROPERTY(reducedTransparencyFallbackColor, UIColor);
+ 
+ @end
++#endif
+diff --git a/ios/macos/RNBlurMacOS.mm b/ios/macos/RNBlurMacOS.mm
+new file mode 100644
+index 0000000..30b8d6c
+--- /dev/null
++++ b/ios/macos/RNBlurMacOS.mm
+@@ -0,0 +1,160 @@
++#include <TargetConditionals.h>
++#if TARGET_OS_OSX
++
++// AppKit BlurView and VibrancyView: NSVisualEffectView takes a material instead of a
++// UIBlurEffectStyle and has no blur radius, so blurAmount has no effect on macOS.
++#import <AppKit/AppKit.h>
++#import <React/RCTConversions.h>
++#import <React/RCTFabricComponentsPlugins.h>
++#import <React/RCTViewComponentView.h>
++#import <react/renderer/components/rnblurview/ComponentDescriptors.h>
++#import <react/renderer/components/rnblurview/Props.h>
++#import <react/renderer/components/rnblurview/RCTComponentViewHelpers.h>
++
++using namespace facebook::react;
++
++static NSVisualEffectMaterial RNBlurMaterial(NSString *type)
++{
++  if ([type hasPrefix:@"ultraThinMaterial"]) return NSVisualEffectMaterialHUDWindow;
++  if ([type hasPrefix:@"thinMaterial"]) return NSVisualEffectMaterialPopover;
++  if ([type hasPrefix:@"thickMaterial"]) return NSVisualEffectMaterialWindowBackground;
++  if ([type hasPrefix:@"chromeMaterial"]) return NSVisualEffectMaterialTitlebar;
++  if ([type hasPrefix:@"material"] || [type isEqual:@"regular"] || [type isEqual:@"prominent"]) return NSVisualEffectMaterialContentBackground;
++  return NSVisualEffectMaterialFullScreenUI;
++}
++
++static NSAppearance *RNBlurAppearance(NSString *type)
++{
++  if ([type isEqual:@"dark"] || [type isEqual:@"extraDark"] || [type hasSuffix:@"Dark"]) return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
++  if ([type isEqual:@"light"] || [type isEqual:@"xlight"] || [type hasSuffix:@"Light"]) return [NSAppearance appearanceNamed:NSAppearanceNameAqua];
++  return nil; // Adaptive materials follow the window.
++}
++
++@interface BlurView : RCTViewComponentView
++@property (nonatomic, readonly) NSVisualEffectView *effectView;
++@property (nonatomic, readonly) NSView *fallbackView;
++@property (nonatomic, copy) NSString *blurType;
++@property (nonatomic, strong) NSColor *fallbackColor;
++@end
++
++@interface BlurView () <RCTBlurViewViewProtocol>
++@end
++
++@implementation BlurView
++
+++ (ComponentDescriptorProvider)componentDescriptorProvider
++{
++  return concreteComponentDescriptorProvider<BlurViewComponentDescriptor>();
++}
++
++- (instancetype)initWithFrame:(CGRect)frame
++{
++  if (self = [super initWithFrame:frame]) {
++    static const auto defaultProps = std::make_shared<const BlurViewProps>();
++    _props = defaultProps;
++    _effectView = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
++    _effectView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
++    _effectView.blendingMode = NSVisualEffectBlendingModeWithinWindow;
++    _effectView.state = NSVisualEffectStateActive;
++    _fallbackView = [[NSView alloc] initWithFrame:self.bounds];
++    _fallbackView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
++    _fallbackView.wantsLayer = YES;
++    self.blurType = @"dark";
++    self.clipsToBounds = YES;
++    [self updateFallbackView];
++    [NSWorkspace.sharedWorkspace.notificationCenter addObserver:self selector:@selector(updateFallbackView) name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification object:nil];
++  }
++  return self;
++}
++
++- (void)dealloc
++{
++  [NSWorkspace.sharedWorkspace.notificationCenter removeObserver:self];
++}
++
++- (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
++{
++  const auto &newViewProps = *std::static_pointer_cast<const BlurViewProps>(props);
++  self.blurType = [NSString stringWithUTF8String:toString(newViewProps.blurType).c_str()];
++  self.fallbackColor = RCTUIColorFromSharedColor(newViewProps.reducedTransparencyFallbackColor);
++  [self updateFallbackView];
++  [super updateProps:props oldProps:oldProps];
++}
++
++- (void)setBlurType:(NSString *)blurType
++{
++  _blurType = [blurType copy];
++  _effectView.material = RNBlurMaterial(blurType);
++  _effectView.appearance = RNBlurAppearance(blurType);
++}
++
++- (void)updateFallbackView
++{
++  BOOL fallback = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency && self.fallbackColor;
++  NSView *shown = fallback ? _fallbackView : _effectView, *hidden = fallback ? _effectView : _fallbackView;
++  _fallbackView.layer.backgroundColor = self.fallbackColor.CGColor;
++  [hidden removeFromSuperview];
++  if (shown.superview != self) {
++    shown.frame = self.bounds;
++    [self addSubview:shown positioned:NSWindowBelow relativeTo:nil];
++  }
++}
++
++@end
++
++@interface VibrancyView : BlurView
++@end
++
++@interface VibrancyView () <RCTVibrancyViewViewProtocol>
++@end
++
++@implementation VibrancyView
++
+++ (ComponentDescriptorProvider)componentDescriptorProvider
++{
++  return concreteComponentDescriptorProvider<VibrancyViewComponentDescriptor>();
++}
++
++- (instancetype)initWithFrame:(CGRect)frame
++{
++  if (self = [super initWithFrame:frame]) {
++    static const auto defaultProps = std::make_shared<const VibrancyViewProps>();
++    _props = defaultProps;
++  }
++  return self;
++}
++
++// iOS mounts children inside the vibrancy effect view; here they go above the material,
++// which (or the reduced-transparency fallback) always sits at index 0.
++- (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
++{
++  [self insertSubview:childComponentView atIndex:index + 1];
++}
++
++- (void)unmountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
++{
++  [childComponentView removeFromSuperview];
++}
++
++- (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
++{
++  const auto &newViewProps = *std::static_pointer_cast<const VibrancyViewProps>(props);
++  self.blurType = [NSString stringWithUTF8String:toString(newViewProps.blurType).c_str()];
++  self.fallbackColor = RCTUIColorFromSharedColor(newViewProps.reducedTransparencyFallbackColor);
++  [self updateFallbackView];
++  [super updateProps:props oldProps:oldProps];
++}
++
++@end
++
++Class<RCTComponentViewProtocol> BlurViewCls(void)
++{
++  return BlurView.class;
++}
++
++Class<RCTComponentViewProtocol> VibrancyViewCls(void)
++{
++  return VibrancyView.class;
++}
++
++#endif
+diff --git a/package.json b/package.json
+index 4e5c8a6..c8932f9 100644
+--- a/package.json
++++ b/package.json
+@@ -150,6 +150,12 @@
+     "name": "rnblurview",
+     "type": "components",
+     "jsSrcsDir": "./src/fabric",
++    "ios": {
++      "componentProvider": {
++        "BlurView": "BlurView",
++        "VibrancyView": "VibrancyView"
++      }
++    },
+     "android": {
+       "javaPackageName": "com.reactnativecommunityblur"
+     }
+diff --git a/react-native-blur.podspec b/react-native-blur.podspec
+index 2913ba7..2d032c5 100644
+--- a/react-native-blur.podspec
++++ b/react-native-blur.podspec
+@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => "10.0", :tvos => "11.0", :visionos => "1.0" }
++  s.platforms    = { :ios => "10.0", :tvos => "11.0", :visionos => "1.0", :osx => "11.0" }
+   s.source       = { :git => "https://github.com/react-native-community/react-native-blur.git" }
+ 
+   s.source_files = "ios/**/*.{h,m,mm}"
+diff --git a/src/components/BlurView.macos.tsx b/src/components/BlurView.macos.tsx
+new file mode 100644
+index 0000000..a5a3f06
+--- /dev/null
++++ b/src/components/BlurView.macos.tsx
+@@ -0,0 +1,2 @@
++export * from './BlurView.ios';
++export { default } from './BlurView.ios';
+diff --git a/src/components/VibrancyView.macos.tsx b/src/components/VibrancyView.macos.tsx
+new file mode 100644
+index 0000000..99d118b
+--- /dev/null
++++ b/src/components/VibrancyView.macos.tsx
+@@ -0,0 +1,2 @@
++export * from './VibrancyView.ios';
++export { default } from './VibrancyView.ios';
