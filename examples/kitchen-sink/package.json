@@ -82,7 +82,8 @@
     "expo-web-browser": "55.0.20",
     "expo-application": "55.0.19",
     "expo-device": "55.0.21",
-    "expo-localization": "55.0.19"
+    "expo-localization": "55.0.19",
+    "expo-haptics": "55.0.18"
   },
   "expo": {
     "install": {
