@@ -6,3 +6,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-screens.md"
+  COMP-REANIMATED-01:
+    title: react-native-reanimated runs a timing animation and frame callbacks on the UI thread on macOS and reports back to JavaScript
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-reanimated.md"

@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-reanimated on macOS
+intent: >
+  The Reanimated screen animates a box with withTiming and counts frame callbacks on the UI thread. The
+  timing callback reports it finished at 1, and frame callbacks report at least ten frames.
+checks: [COMP-REANIMATED-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/reanimated" }
+- extendedWaitUntil: { visible: { id: component-library-reanimated-finished }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: component-library-reanimated-frames }, timeout: 10s }
+- takeScreenshot: reanimated
