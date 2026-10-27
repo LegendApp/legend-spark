@@ -51,5 +51,6 @@ export async function createMacOSWindow(options: WindowOpenOptions): Promise<voi
   await macosCommand(() => macosNative().openWindow(JSON.stringify({ ...macosOptions(options), identifier: options.id, moduleName: options.component, initialProperties: options.props ?? {}, title: options.title, deferOrderFront: true, sparkOverlay: options.kind === "overlay" })));
 }
 export async function updateMacOSWindow(id: string, options: WindowUpdateOptions): Promise<void> {
-  await macosCommand(() => macosNative().setWindowOptions(id, JSON.stringify(macosOptions(options))));
+  const native = macosNative(), json = JSON.stringify(macosOptions(options));
+  await macosCommand(() => id === "main" ? native.setMainWindowOptions(json) : native.setWindowOptions(id, json));
 }
