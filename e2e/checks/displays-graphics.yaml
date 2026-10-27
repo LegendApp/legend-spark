@@ -26,3 +26,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-screen-corner-radius.md"
+  DISP-GRADIENT-01:
+    title: expo-linear-gradient's native module is linked on macOS and its gradient view lays out
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-linear-gradient.md"
