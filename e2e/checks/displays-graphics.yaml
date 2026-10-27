@@ -51,3 +51,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-image.md"
+  DISP-SYMBOLS-01:
+    title: expo-symbols draws SF Symbols natively on macOS in monochrome, hierarchical, palette and multicolor styles
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-symbols.md"

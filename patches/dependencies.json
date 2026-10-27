@@ -185,5 +185,12 @@
     "integrity": "sha512-PVIBYQJW/h1f6Zb9xnoWlgfqyOPVm2yb6eo6ZogaKbvMrhb/Q/fiERbagi4oqmR6IPljWPEpkXXQyFBUh7TjpQ==",
     "patch": "expo-image@55.0.11.patch",
     "optional": true
+  },
+  "expo-symbols": {
+    "version": "55.0.9",
+    "url": "https://registry.npmjs.org/expo-symbols/-/expo-symbols-55.0.9.tgz",
+    "integrity": "sha512-F85C/8ExQjd2gYjasLVKMT8wPj+1+19TVTqg4jAeVjVZklqiQtLO72io9Ji1xAjYNgmDeUI0diVHlFMMTC4Ekg==",
+    "patch": "expo-symbols@55.0.9.patch",
+    "optional": true
   }
 }

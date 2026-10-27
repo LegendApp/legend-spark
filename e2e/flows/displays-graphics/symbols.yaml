@@ -1,0 +1,15 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-symbols on macOS
+intent: >
+  The SF Symbols screen finds the native module linked and lays out six symbols (monochrome, hierarchical,
+  palette, multicolor, bold and a pulsing one), each drawn by AppKit rather than the fallback text, matching the approved golden (the pulsing symbol is
+  masked).
+checks: [DISP-SYMBOLS-01]
+tags: [displays-graphics]
+platforms: [macos]
+matrix: { appearance: [dark], locale: [en] }
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/symbols" }
+- extendedWaitUntil: { visible: { id: displays-graphics-symbols-native }, timeout: 10s }
+- assertVisible: { id: displays-graphics-symbols-laid-out }
+- assertScreenshot: { golden: displays-graphics-symbols, mask: [{ id: infra-shell-sidebar }, { id: displays-graphics-symbols-pulse }] }
