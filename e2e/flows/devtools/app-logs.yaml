@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-app-logs on macOS
+intent: >
+  The App logs screen registers a filtered handler, writes a marker to the console every half second, and
+  shows the first matching entry that react-native-app-logs reads back from the app's unified log.
+checks: [DEVT-APPLOGS-01]
+tags: [devtools]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://devtools/app-logs" }
+- extendedWaitUntil: { visible: { id: devtools-app-logs-received }, timeout: 20s }

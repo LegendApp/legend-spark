@@ -94,5 +94,12 @@
     "integrity": "sha512-8JgiHI/S2Xf6swquEjopHW//wI4a/nV/dEImJMR8YXQVWVdnjbhcMi0NGk1s1cW8xuunwlFT173PozsS3Gvgxg==",
     "patch": "react-native-screen-corner-radius@0.2.3.patch",
     "optional": true
+  },
+  "react-native-app-logs": {
+    "version": "0.3.1",
+    "url": "https://registry.npmjs.org/react-native-app-logs/-/react-native-app-logs-0.3.1.tgz",
+    "integrity": "sha512-Nyxwx92vJRTIBdIRiHlFrz0IFJq+rKIsq6XFRiYT7ZBA1jQIPBYX/kx9kCRwqLDGnSBzec2oYwPScGEllRpNCw==",
+    "patch": "react-native-app-logs@0.3.1.patch",
+    "optional": true
   }
 }
