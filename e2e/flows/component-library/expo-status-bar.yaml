@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-status-bar on macOS
+intent: >
+  The Expo Status Bar screen renders the StatusBar component and calls its setters, which return without a status bar to change.
+checks: [COMP-STATUSBAR-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/expo-status-bar" }
+- extendedWaitUntil: { visible: { id: component-library-expo-status-bar-ran }, timeout: 10s }
