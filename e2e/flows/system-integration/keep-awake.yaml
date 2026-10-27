@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-keep-awake on macOS
+intent: >
+  The Keep awake screen activates expo-keep-awake and finds the app's "expo-keep-awake" display-sleep
+  assertion in pmset, then deactivates and finds it gone, so the screen shows passed.
+checks: [SYS-KEEPAWAKE-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/keep-awake" }
+- extendedWaitUntil: { visible: { id: system-integration-keep-awake-passed }, timeout: 15s }
