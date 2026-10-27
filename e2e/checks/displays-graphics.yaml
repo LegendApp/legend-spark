@@ -41,3 +41,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-vector-icons.md"
+  DISP-EXPOBLUR-01:
+    title: expo-blur's native module is linked on macOS and its BlurViews lay out as visual-effect materials
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-blur.md"
