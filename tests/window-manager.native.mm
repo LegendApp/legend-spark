@@ -96,6 +96,13 @@ static TestDefaults *testDefaults;
 @end
 @implementation MainWindowOwner @end
 // ACTUAL_IMPLEMENTATION
+@interface TestWindowManager : RNWindowManager @end
+@implementation TestWindowManager
+- (void)collapseToolbarSearchItem:(NSToolbarItem *)item animated:(BOOL)animated {
+  // Make collapse synchronous so the move guard is tested independently of AppKit animation timing.
+  [super collapseToolbarSearchItem:item animated:NO];
+}
+@end
 extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *, NSDictionary *) {}
 extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *, NSView *, void (^)(void)) { return NO; }
 extern "C" void LegendFinishSidebarSplitViewStartup(NSWindow *) {}
@@ -109,7 +116,7 @@ static void CallWindow(RNDesktopWindows *module, NSString *method, NSDictionary 
 int main() { @autoreleasepool {
   testDefaults = [TestDefaults new];
   events = [NSMutableArray new];
-  RNWindowManager *manager = [RNWindowManager new];
+  RNWindowManager *manager = [TestWindowManager new];
   NSSlider *slider = [NSSlider sliderWithValue:0.375 minValue:0 maxValue:1 target:nil action:nil];
   objc_setAssociatedObject(slider, &LegendToolbarControlMetadataKey, @{ @"windowIdentifier": @"editor", @"instanceId": @"instance", @"itemId": @"menu", @"value": @"volume" }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   [manager toolbarMenuSliderChanged:slider];
@@ -305,9 +312,11 @@ int main() { @autoreleasepool {
     [window layoutIfNeeded];
     search = toolbarItem(@"search");
     searchField = collapses ? objc_getAssociatedObject(search, &LegendToolbarSearchFieldKey) : ((NSSearchToolbarItem *)search).searchField;
-    if (collapses) [manager expandToolbarSearchItem:search value:nil focus:YES sendChange:NO animated:NO];
+    // Focus once below: refocusing an editing search field can end editing and start a collapse before the move.
+    if (collapses) [manager expandToolbarSearchItem:search value:nil focus:NO sendChange:NO animated:NO];
     else searchField.stringValue = @"moved";
     assert([window makeFirstResponder:searchField]);
+    assert(searchField.currentEditor && window.firstResponder == searchField.currentEditor);
     NSRange selection = collapses ? NSMakeRange(0, 0) : NSMakeRange(2, 1);
     searchField.currentEditor.selectedRange = selection;
     NSUInteger eventCount = events.count;
