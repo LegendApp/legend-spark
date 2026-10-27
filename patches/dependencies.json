@@ -45,5 +45,12 @@
     "integrity": "sha512-4rxaPcXKudZW1Ma1Y63rHF8/7hbanOyqr01Gac6ROUYApcCH8/YtS0d02cm0ZEbSzwPvmcvFRzPoT4cHWxhJGA==",
     "patch": "react-native-nitro-fetch@1.9.0.patch",
     "optional": true
+  },
+  "@react-native-community/blur": {
+    "version": "4.4.1",
+    "url": "https://registry.npmjs.org/@react-native-community/blur/-/blur-4.4.1.tgz",
+    "integrity": "sha512-XBSsRiYxE/MOEln2ayunShfJtWztHwUxLFcSL20o+HNNRnuUDv+GXkF6FmM2zE8ZUfrnhQ/zeTqvnuDPGw6O8A==",
+    "patch": "react-native-community-blur@4.4.1.patch",
+    "optional": true
   }
 }
