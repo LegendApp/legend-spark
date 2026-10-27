@@ -58,7 +58,8 @@
     "react-native-worklets-core": "1.6.3",
     "@babel/plugin-proposal-optional-chaining": "7.21.0",
     "@babel/plugin-proposal-nullish-coalescing-operator": "7.18.6",
-    "@babel/plugin-transform-template-literals": "7.29.7"
+    "@babel/plugin-transform-template-literals": "7.29.7",
+    "react-native-fast-image": "10.9.9"
   },
   "expo": {
     "install": {
