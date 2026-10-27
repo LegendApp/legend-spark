@@ -95,7 +95,8 @@
     "expo-blur": "55.0.18",
     "@babel/plugin-transform-shorthand-properties": "7.27.1",
     "@babel/plugin-transform-arrow-functions": "7.27.1",
-    "react-native-nitro-image": "0.15.2"
+    "react-native-nitro-image": "0.15.2",
+    "expo-image": "55.0.11"
   },
   "expo": {
     "install": {
