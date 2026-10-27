@@ -1,0 +1,37 @@
+diff --git a/ios/ReleaseProfiler.mm b/ios/ReleaseProfiler.mm
+index b38beb6..50e668d 100644
+--- a/ios/ReleaseProfiler.mm
++++ b/ios/ReleaseProfiler.mm
+@@ -1,5 +1,6 @@
+ #import <React/RCTBridgeModule.h>
+ #import <hermes/hermes.h>
++#include <dlfcn.h>
+ 
+ #ifdef __has_include
+ #if __has_include(<cxxreact/ReactNativeVersion.h>)
+@@ -51,6 +52,12 @@ + (BOOL)requiresMainQueueSetup
+                  withRejecter:(RCTPromiseRejectBlock)reject) {
+     NSFileManager* sharedFM = [NSFileManager defaultManager];
+     NSURL *appDir=[[sharedFM URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask] objectAtIndex:0];
++#if TARGET_OS_OSX
++    // ~/Library/Caches is shared by every Mac app; use the app's own folder, scoped like Spark's other app data.
++    NSString *(*sparkNamespace)(void) = (NSString *(*)(void))dlsym(RTLD_DEFAULT, "SparkNamespace");
++    appDir = [appDir URLByAppendingPathComponent:sparkNamespace ? sparkNamespace() : NSBundle.mainBundle.bundleIdentifier isDirectory:YES];
++    [sharedFM createDirectoryAtURL:appDir withIntermediateDirectories:YES attributes:nil error:nil];
++#endif
+     NSString * tempFilename = [NSString stringWithFormat:@"profile-%@%@", [[NSProcessInfo processInfo] globallyUniqueString], @".cpuprofile"];
+     NSURL *fileURL=[appDir URLByAppendingPathComponent:tempFilename];
+     std::string finalPath = std::string([fileURL.path UTF8String]);
+diff --git a/react-native-release-profiler.podspec b/react-native-release-profiler.podspec
+index 135d951..b5efe5e 100644
+--- a/react-native-release-profiler.podspec
++++ b/react-native-release-profiler.podspec
+@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => "11.0" }
++  s.platforms    = { :ios => "11.0", :osx => "11.0" }
+   s.source       = { :git => "https://github.com/Szymon20000/react-native-release-profiler.git", :tag => "#{s.version}" }
+ 
+   s.source_files = "ios/**/*.{h,m,mm,swift}"
