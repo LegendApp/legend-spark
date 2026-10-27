@@ -6,3 +6,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-nitro-zxing.md"
+  MEDIA-IMAGEPICKER-01:
+    title: expo-image-picker links on macOS, grants file picking without a library permission and reports the camera picker unavailable
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-image-picker.md"
