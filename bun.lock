@@ -103,6 +103,7 @@
         "expo-desktop-prebuild-config": "1.1.3",
         "expo-desktop-stubs": "55.0.2",
         "expo-desktop-template-bare-minimum": "55.83.10",
+        "expo-keep-awake": "55.0.8",
         "expo-linking": "55.0.17",
         "expo-secure-store": "55.0.18",
         "react": "19.2.0",

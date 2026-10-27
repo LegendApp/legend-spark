@@ -55,3 +55,8 @@ checks:
     spec: "#123 SYS.api-dock"
     covers:
       - ./system#getSystemAvailability().available
+  SYS-KEEPAWAKE-01:
+    title: expo-keep-awake holds a display-sleep power assertion on macOS while activated and releases it on deactivate
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-keep-awake.md"
