@@ -1,7 +1,7 @@
 // The Kitchen Sink under test, launched in driver mode (docs/test-driver.md). Shared by `ks:capture` and the
 // runner's driver backend: which app to launch, the JavaScript a dev build needs, and the launch itself.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -37,6 +37,8 @@ type Resolved = { app: string; executable: string; embedded: boolean } & AppIden
 export class KitchenSinkApp {
   private resolved?: Resolved;
   private bundle?: Buffer;
+  /** Asset files by URL path (`/assets/…`), as a dev server serves fonts and images. */
+  private assets = new Map<string, Buffer>();
   private server?: Server;
 
   /** `app` is a `.app` bundle; without it, the last dev build (`cd examples/kitchen-sink && bun run rebuild:macos`). It is resolved by `open()`. */
@@ -70,16 +72,25 @@ export class KitchenSinkApp {
         const file = path.join(work, "index.bundle");
         prepareConfig(KITCHEN_SINK);
         await run(KITCHEN_SINK, [binary(KITCHEN_SINK, "expo"), "export:embed", "--platform", "macos", "--entry-file", path.resolve(KITCHEN_SINK, entryFile(KITCHEN_SINK)),
-          "--bundle-output", file, "--dev", "false", "--minify", "false", "--max-workers", "2"], { env: { CI: "1" }, capture: !label, label });
+          "--bundle-output", file, "--assets-dest", work, "--dev", "false", "--minify", "false", "--max-workers", "2"], { env: { CI: "1" }, capture: !label, label });
         this.bundle = readFileSync(file);
+        const assets = path.join(work, "assets");
+        if (existsSync(assets)) for (const name of readdirSync(assets, { recursive: true, withFileTypes: true }))
+          if (name.isFile()) this.assets.set("/" + path.relative(work, path.join(name.parentPath, name.name)).split(path.sep).join("/"), readFileSync(path.join(name.parentPath, name.name)));
       } finally {
         rmSync(work, { recursive: true, force: true });
       }
     }
     const bundle = this.bundle;
     const server = createServer((request, response) => {
-      if (new URL(request.url ?? "/", "http://127.0.0.1").pathname === "/index.bundle") {
+      const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+      if (pathname === "/index.bundle") {
         response.writeHead(200, { "Content-Type": "application/javascript" }).end(bundle);
+        return;
+      }
+      const asset = this.assets.get(decodeURIComponent(pathname));
+      if (asset) {
+        response.writeHead(200).end(asset);
         return;
       }
       console.error(`Kitchen Sink: the app requested ${request.url}, which is not served`);
