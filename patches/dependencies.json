@@ -59,5 +59,12 @@
     "integrity": "sha512-r3Q40XQBccx/iAI5tlyiua+micvO1UGzzUOskNweZUXyfrrE+rb5aqxqruBPqXf90rO+bBiplylLMEAXCLTyGA==",
     "patch": "react-native-worklets-core@1.6.3.patch",
     "optional": true
+  },
+  "react-native-fast-image": {
+    "version": "10.9.9",
+    "url": "https://registry.npmjs.org/react-native-fast-image/-/react-native-fast-image-10.9.9.tgz",
+    "integrity": "sha512-Dev69p1kcTxx7qLLFwax5hB/3X5wMNpviUIXS6K6KnITyhu+O2AEUhenZoq2OmGnT9UzHBIYHkEKoFebZNK/lA==",
+    "patch": "react-native-fast-image@10.9.9.patch",
+    "optional": true
   }
 }

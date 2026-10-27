@@ -108,6 +108,7 @@
         "react-native": "0.83.10",
         "react-native-enriched-html": "1.1.1",
         "react-native-enriched-markdown": "1.1.1",
+        "react-native-fast-image": "10.9.9",
         "react-native-macos": "0.83.0",
         "react-native-mmkv": "4.3.2",
         "react-native-nitro-fetch": "1.9.0",
@@ -2209,6 +2210,8 @@
     "react-native-enriched-html": ["react-native-enriched-html@1.1.1", "", { "dependencies": { "@tiptap/core": "3.27.1", "@tiptap/extension-blockquote": "3.27.1", "@tiptap/extension-bold": "3.27.1", "@tiptap/extension-code": "3.27.1", "@tiptap/extension-document": "3.27.1", "@tiptap/extension-heading": "3.27.1", "@tiptap/extension-history": "3.27.1", "@tiptap/extension-image": "3.27.1", "@tiptap/extension-italic": "3.27.1", "@tiptap/extension-link": "3.27.1", "@tiptap/extension-list": "3.27.1", "@tiptap/extension-paragraph": "3.27.1", "@tiptap/extension-strike": "3.27.1", "@tiptap/extension-text": "3.27.1", "@tiptap/extension-text-align": "3.27.1", "@tiptap/extension-underline": "3.27.1", "@tiptap/extensions": "3.27.1", "@tiptap/pm": "3.27.1", "@tiptap/react": "3.27.1", "dompurify": "3.4.11" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-OlJLESOgA4eqgWQe3BXOK9kFk7iypOnQo22sIce5k/x2eGsOtnAwDPqHnaVfnOZlzzNWh+wXRzxuSL1tSBOkgA=="],
 
     "react-native-enriched-markdown": ["react-native-enriched-markdown@1.1.1", "", { "peerDependencies": { "katex": ">=0.16.0", "react": "*", "react-native": "*" }, "optionalPeers": ["katex"] }, "sha512-JvbRIVy75MAoGCv8V6sSscu11/Ian588wfIgH+j64XFpf6gy5sNNkMyG087MH88jNCf3p7fTjgEAGxZMhEqL4A=="],
+
+    "react-native-fast-image": ["react-native-fast-image@10.9.9", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-Dev69p1kcTxx7qLLFwax5hB/3X5wMNpviUIXS6K6KnITyhu+O2AEUhenZoq2OmGnT9UzHBIYHkEKoFebZNK/lA=="],
 
     "react-native-is-edge-to-edge": ["react-native-is-edge-to-edge@1.3.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-NIXU/iT5+ORyCc7p0z2nnlkouYKX425vuU1OEm6bMMtWWR9yvb+Xg5AZmImTKoF9abxCPqrKC3rOZsKzUYgYZA=="],
 

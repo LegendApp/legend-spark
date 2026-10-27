@@ -1,0 +1,123 @@
+diff --git a/src/index.macos.tsx b/src/index.macos.tsx
+new file mode 100644
+index 0000000..74fa5b1
+--- /dev/null
++++ b/src/index.macos.tsx
+@@ -0,0 +1,117 @@
++// FastImage on macOS: React Native's Image stands in for the native view, which is
++// UIKit only. Sources (uri, headers, require()), objectFit, tintColor, placeholder and
++// defaultSource while loading, and the load events work; Image's own caches replace
++// SDWebImage's, so cache options, thumbhash/blurhash placeholders, transitions and
++// several sizes of one image are not supported (the largest size loads).
++import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react'
++import { Image, StyleSheet, View, type ImageResizeMode } from 'react-native'
++import { cacheControl, priority, resizeMode } from './constants'
++import type {
++    ClearCacheResult,
++    FastImageBackgroundProps,
++    FastImageProps,
++    FastImageRef,
++    FastImageStaticProperties,
++    ObjectFit,
++    PreloadResult,
++    Source,
++} from './index'
++
++export type * from './index'
++
++const fits: Record<ObjectFit, ImageResizeMode> = {
++    fill: 'stretch',
++    contain: 'contain',
++    cover: 'cover',
++    none: 'center',
++    'scale-down': 'center',
++}
++const unsupported = (name: string) =>
++    Promise.resolve({ ok: false as const, error: `FastImage.${name} is not supported on macOS` })
++
++type OneSource = Exclude<NonNullable<FastImageProps['source']>, readonly unknown[]>
++
++function imageSource(source: FastImageProps['source']) {
++    const sources = (Array.isArray(source) ? source : [source]) as (OneSource | undefined)[]
++    const area = (one: OneSource | undefined) => typeof one === 'object' ? (one.width ?? 0) * (one.height ?? 0) : 0
++    const largest = sources.reduce((best, next) => area(next) < area(best) ? best : next, sources[0])
++    return typeof largest === 'object' ? { uri: largest.uri, headers: largest.headers } : largest
++}
++
++const FastImageComponent = forwardRef<FastImageRef, FastImageProps>(({
++    source, objectFit = 'cover', tintColor, placeholder, defaultSource,
++    onLoadStart, onProgress, onLoad, onError, onLoadEnd, style, ...props
++}, ref) => {
++    const view = useRef<View>(null)
++    const [attempt, setAttempt] = useState(0)
++    const [loaded, setLoaded] = useState(false)
++    useImperativeHandle(ref, () => Object.assign(view.current ?? {}, { reload: () => { setLoaded(false); setAttempt(value => value + 1) } }) as FastImageRef, [])
++    const fallback = typeof placeholder === 'number' ? placeholder : typeof placeholder === 'string' ? { uri: placeholder } : defaultSource
++    return <View ref={view} {...props} style={[styles.container, style]}>
++        {!loaded && fallback !== undefined && <Image source={fallback} resizeMode={fits[objectFit]} style={StyleSheet.absoluteFill} />}
++        <Image
++            key={attempt}
++            source={imageSource(source) as never}
++            resizeMode={fits[objectFit]}
++            tintColor={tintColor}
++            style={[StyleSheet.absoluteFill, tintColor === undefined ? null : { tintColor }]}
++            onLoadStart={() => { setLoaded(false); onLoadStart?.() }}
++            onProgress={event => onProgress?.({ nativeEvent: { loaded: event.nativeEvent.loaded, total: event.nativeEvent.total } } as never)}
++            onLoad={event => {
++                const loaded = (width: number, height: number) => {
++                    setLoaded(true)
++                    onLoad?.({ nativeEvent: { width, height } })
++                    onLoadEnd?.({ ok: true, width, height })
++                }
++                // React Native macOS scales a 1x image's size by the screen's; getSize reads its pixels.
++                const { uri, width, height } = event.nativeEvent.source
++                if (uri) Image.getSize(uri).then(size => loaded(size.width, size.height), () => loaded(width, height))
++                else loaded(width, height)
++            }}
++            onError={event => {
++                const error = String(event.nativeEvent.error)
++                onError?.({ nativeEvent: { error } })
++                onLoadEnd?.({ ok: false, error })
++            }}
++        />
++    </View>
++})
++FastImageComponent.displayName = 'FastImage'
++
++const statics: FastImageStaticProperties = {
++    resizeMode,
++    priority,
++    cacheControl,
++    preload: sources => Promise.all(sources.map(async (source): Promise<PreloadResult> => {
++        if (!source?.uri) return { ok: false, uri: source?.uri, error: 'FastImage.preload needs a uri on macOS' }
++        try {
++            await Image.prefetch(source.uri)
++            const { width, height } = await Image.getSize(source.uri)
++            return { ok: true, uri: source.uri, width, height }
++        } catch (error) {
++            return { ok: false, uri: source.uri, error: String(error) }
++        }
++    })),
++    clearMemoryCache: () => unsupported('clearMemoryCache') as Promise<ClearCacheResult>,
++    clearDiskCache: () => unsupported('clearDiskCache') as Promise<ClearCacheResult>,
++    getCachePath: () => unsupported('getCachePath') as never,
++    writeToCache: () => unsupported('writeToCache') as never,
++    configureCache: () => Promise.reject(new Error('FastImage.configureCache is not supported on macOS')),
++    setDefaults: () => {},
++}
++
++const FastImage = Object.assign(FastImageComponent, statics)
++
++export const FastImageBackground = forwardRef<View, FastImageBackgroundProps>(
++    ({ style, imageStyle, imageRef, imageProps, children, ...props }, ref) => (
++        <View ref={ref} style={style}>
++            <FastImageComponent {...(props as FastImageProps)} {...imageProps} style={[StyleSheet.absoluteFill, imageStyle]} ref={imageRef} />
++            {children}
++        </View>
++    ),
++)
++FastImageBackground.displayName = 'FastImageBackground'
++
++const styles = StyleSheet.create({ container: { overflow: 'hidden' } })
++
++export default FastImage
