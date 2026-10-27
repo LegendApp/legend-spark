@@ -234,5 +234,12 @@
     "integrity": "sha512-4wTDpVZg2/ZH4FnLkobY+PeIrfPz0uFTQqx7LIkxgviucNcRUPGstODBd+XRBOd8mIU1tN1vf6TSs8qEzOOJAw==",
     "patch": "expo-location@55.1.15.patch",
     "optional": true
+  },
+  "@react-native-community/datetimepicker": {
+    "version": "9.2.2",
+    "url": "https://registry.npmjs.org/@react-native-community/datetimepicker/-/datetimepicker-9.2.2.tgz",
+    "integrity": "sha512-0cZGrK61UZ8VxpKKV/lun/L/b5wKus55IhvqqdewUayHwIc73lrLI0l5CIlHw8tA0/yQEzHEMEdtHQglAD+hKA==",
+    "patch": "react-native-community-datetimepicker@9.2.2.patch",
+    "optional": true
   }
 }

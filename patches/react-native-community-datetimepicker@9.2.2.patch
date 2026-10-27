@@ -1,0 +1,316 @@
+diff --git a/RNDateTimePicker.podspec b/RNDateTimePicker.podspec
+index 5f53282..ebb61c9 100644
+--- a/RNDateTimePicker.podspec
++++ b/RNDateTimePicker.podspec
+@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
+   s.license      = package['license']
+   s.author       = package['author']
+   s.homepage     = package['homepage']
+-  s.platforms    = { :ios => "11.0", :visionos => "1.0" }
++  s.platforms    = { :ios => "11.0", :visionos => "1.0", :osx => "14.0" }
+   s.source       = { :git => "https://github.com/react-native-community/datetimepicker", :tag => "v#{s.version}" }
+   s.source_files = "ios/**/*.{h,m,mm,cpp}"
+   s.requires_arc = true
+diff --git a/ios/RNDateTimePicker.h b/ios/RNDateTimePicker.h
+index 00dd45d..1308e42 100644
+--- a/ios/RNDateTimePicker.h
++++ b/ios/RNDateTimePicker.h
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ /**
+  * Copyright (c) Facebook, Inc. and its affiliates.
+  *
+@@ -10,3 +12,4 @@
+ @interface RNDateTimePicker : UIDatePicker
+ 
+ @end
++#endif
+diff --git a/ios/RNDateTimePicker.m b/ios/RNDateTimePicker.m
+index 9c73c8e..7a913f2 100644
+--- a/ios/RNDateTimePicker.m
++++ b/ios/RNDateTimePicker.m
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ /**
+  * Copyright (c) Facebook, Inc. and its affiliates.
+  *
+@@ -73,3 +75,4 @@ - (void)setDate:(NSDate *)date {
+ }
+ 
+ @end
++#endif
+diff --git a/ios/RNDateTimePickerManager.h b/ios/RNDateTimePickerManager.h
+index a619db6..2925f0e 100644
+--- a/ios/RNDateTimePickerManager.h
++++ b/ios/RNDateTimePickerManager.h
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ /**
+  * Copyright (c) Facebook, Inc. and its affiliates.
+  *
+@@ -17,3 +19,4 @@
+ @interface RNDateTimePickerManager : RCTViewManager
+ 
+ @end
++#endif
+diff --git a/ios/RNDateTimePickerManager.m b/ios/RNDateTimePickerManager.m
+index 0a69f5c..85943c5 100644
+--- a/ios/RNDateTimePickerManager.m
++++ b/ios/RNDateTimePickerManager.m
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ /**
+  * Copyright (c) Facebook, Inc. and its affiliates.
+  *
+@@ -196,3 +198,4 @@ + (NSString*) datepickerStyleToString: (UIDatePickerStyle) style  API_AVAILABLE(
+ }
+ 
+ @end
++#endif
+diff --git a/ios/RNDateTimePickerShadowView.h b/ios/RNDateTimePickerShadowView.h
+index 0e25849..a8054d1 100644
+--- a/ios/RNDateTimePickerShadowView.h
++++ b/ios/RNDateTimePickerShadowView.h
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import <React/RCTShadowView.h>
+ #import <React/RCTLog.h>
+ #import "RNDateTimePicker.h"
+@@ -13,3 +15,4 @@
+ @property (nonatomic, assign) UIDatePickerStyle displayIOS API_AVAILABLE(ios(13.4));
+ 
+ @end
++#endif
+diff --git a/ios/RNDateTimePickerShadowView.m b/ios/RNDateTimePickerShadowView.m
+index 4ff3362..352c0af 100644
+--- a/ios/RNDateTimePickerShadowView.m
++++ b/ios/RNDateTimePickerShadowView.m
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import "RNDateTimePickerShadowView.h"
+ 
+ @implementation RNDateTimePickerShadowView
+@@ -79,3 +81,4 @@ static YGSize RNDateTimePickerShadowViewMeasure(YGNodeConstRef node, float width
+ }
+ 
+ @end
++#endif
+diff --git a/ios/fabric/RNDateTimePickerComponentView.mm b/ios/fabric/RNDateTimePickerComponentView.mm
+index ec9d7cd..2ca07f1 100644
+--- a/ios/fabric/RNDateTimePickerComponentView.mm
++++ b/ios/fabric/RNDateTimePickerComponentView.mm
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ /**
+  * RNDateTimePickerComponentView is only be available when fabric is enabled.
+  */
+@@ -326,4 +328,4 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+ {
+     return RNDateTimePickerComponentView.class;
+ }
+-
++#endif
+diff --git a/ios/fabric/RNDateTimePickerComponentViewMacOS.mm b/ios/fabric/RNDateTimePickerComponentViewMacOS.mm
+new file mode 100644
+index 0000000..e3b4536
+--- /dev/null
++++ b/ios/fabric/RNDateTimePickerComponentViewMacOS.mm
+@@ -0,0 +1,175 @@
++/**
++ * macOS: the Fabric picker on AppKit's NSDatePicker. NSDatePicker has no countdown mode, wheels,
++ * minute interval or accent color; countdown shows a time picker and spinner a stepper field.
++ */
++#include <TargetConditionals.h>
++#if TARGET_OS_OSX
++
++#import "RNDateTimePickerComponentView.h"
++#import <React/RCTConversions.h>
++#import <React/RCTFabricComponentsPlugins.h>
++
++#import "cpp/react/renderer/components/RNDateTimePicker/ComponentDescriptors.h"
++#import <react/renderer/components/RNDateTimePickerCGen/EventEmitters.h>
++#import <react/renderer/components/RNDateTimePickerCGen/Props.h>
++#import <react/renderer/components/RNDateTimePickerCGen/RCTComponentViewHelpers.h>
++
++using namespace facebook::react;
++
++@interface RNDateTimePickerComponentView () <RCTRNDateTimePickerViewProtocol>
++@end
++
++@implementation RNDateTimePickerComponentView {
++  NSDatePicker *_picker;
++  RNDateTimePickerShadowNode::ConcreteState::Shared _state;
++  CGSize _measuredSize;
++}
++
++- (instancetype)initWithFrame:(CGRect)frame
++{
++  if (self = [super initWithFrame:frame]) {
++    static const auto defaultProps = std::make_shared<const RNDateTimePickerProps>();
++    _props = defaultProps;
++
++    _picker = [NSDatePicker new];
++    _picker.datePickerStyle = NSDatePickerStyleTextFieldAndStepper;
++    _picker.datePickerElements = NSDatePickerElementFlagYearMonthDay;
++    _picker.target = self;
++    _picker.action = @selector(onChange:);
++
++    self.contentView = _picker;
++  }
++  return self;
++}
++
++- (void)onChange:(NSDatePicker *)sender
++{
++  if (!_eventEmitter) {
++    return;
++  }
++  RNDateTimePickerEventEmitter::OnChange event = {
++    // Sending time in milliseconds
++    .timestamp = [sender.dateValue timeIntervalSince1970] * 1000
++  };
++  std::dynamic_pointer_cast<const RNDateTimePickerEventEmitter>(_eventEmitter)->onChange(event);
++}
++
++// Sizes the shadow node to the picker (see adopt in ComponentDescriptors.h).
++- (void)updateMeasurements
++{
++  CGSize size = _picker.fittingSize;
++  if (_state == nullptr || CGSizeEqualToSize(size, _measuredSize)) {
++    return;
++  }
++  _measuredSize = size;
++  _state->updateState(RNDateTimePickerState{RCTSizeFromCGSize(size)});
++}
++
+++ (ComponentDescriptorProvider)componentDescriptorProvider
++{
++  return concreteComponentDescriptorProvider<RNDateTimePickerComponentDescriptor>();
++}
++
+++ (BOOL)shouldBeRecycled
++{
++  return NO;
++}
++
++- (void)updateState:(const State::Shared &)state oldState:(const State::Shared &)oldState
++{
++  _state = std::static_pointer_cast<const RNDateTimePickerShadowNode::ConcreteState>(state);
++  if (oldState == nullptr) {
++    _measuredSize = CGSizeZero;
++    [self updateMeasurements];
++  }
++}
++
++- (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
++{
++  const auto &oldPickerProps = *std::static_pointer_cast<const RNDateTimePickerProps>(_props);
++  const auto &newPickerProps = *std::static_pointer_cast<const RNDateTimePickerProps>(props);
++
++  if (oldPickerProps.date != newPickerProps.date) {
++    _picker.dateValue = [NSDate dateWithTimeIntervalSince1970:newPickerProps.date / 1000.0];
++  }
++
++  if (oldPickerProps.minimumDate != newPickerProps.minimumDate || oldPickerProps.maximumDate != newPickerProps.maximumDate) {
++    NSDate *minDate = newPickerProps.minimumDate ? [NSDate dateWithTimeIntervalSince1970:newPickerProps.minimumDate / 1000.0] : nil;
++    NSDate *maxDate = newPickerProps.maximumDate ? [NSDate dateWithTimeIntervalSince1970:newPickerProps.maximumDate / 1000.0] : nil;
++    // As on iOS, min > max leaves both unset and relies on the JavaScript warning.
++    BOOL valid = !minDate || !maxDate || [minDate compare:maxDate] != NSOrderedDescending;
++    _picker.minDate = valid ? minDate : nil;
++    _picker.maxDate = valid ? maxDate : nil;
++  }
++
++  if (oldPickerProps.locale != newPickerProps.locale) {
++    _picker.locale = [[NSLocale alloc] initWithLocaleIdentifier:RCTNSStringFromString(newPickerProps.locale)];
++  }
++
++  if (oldPickerProps.mode != newPickerProps.mode) {
++    switch (newPickerProps.mode) {
++      case RNDateTimePickerMode::Time:
++      case RNDateTimePickerMode::Countdown:
++        _picker.datePickerElements = NSDatePickerElementFlagHourMinute;
++        break;
++      case RNDateTimePickerMode::Datetime:
++        _picker.datePickerElements = NSDatePickerElementFlagYearMonthDay | NSDatePickerElementFlagHourMinute;
++        break;
++      default:
++        _picker.datePickerElements = NSDatePickerElementFlagYearMonthDay;
++    }
++  }
++
++  if (oldPickerProps.displayIOS != newPickerProps.displayIOS) {
++    _picker.datePickerStyle = newPickerProps.displayIOS == RNDateTimePickerDisplayIOS::Inline
++      ? NSDatePickerStyleClockAndCalendar
++      : NSDatePickerStyleTextFieldAndStepper;
++  }
++
++  if (oldPickerProps.timeZoneOffsetInMinutes != newPickerProps.timeZoneOffsetInMinutes) {
++    // JS standard for time zones is minutes.
++    _picker.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:newPickerProps.timeZoneOffsetInMinutes * 60.0];
++  }
++
++  if (oldPickerProps.timeZoneName != newPickerProps.timeZoneName) {
++    NSString *timeZoneName = RCTNSStringFromString(newPickerProps.timeZoneName);
++    NSTimeZone *timeZone = timeZoneName.length ? [NSTimeZone timeZoneWithName:timeZoneName] : nil;
++    if (timeZoneName.length && !timeZone) {
++      RCTLogWarn(@"'%@' does not exist in NSTimeZone.knownTimeZoneNames. Falling back to localTimeZone=%@", timeZoneName, NSTimeZone.localTimeZone.name);
++    }
++    _picker.timeZone = timeZone ?: NSTimeZone.localTimeZone;
++  }
++
++  if (oldPickerProps.textColor != newPickerProps.textColor) {
++    _picker.textColor = RCTUIColorFromSharedColor(newPickerProps.textColor) ?: NSColor.controlTextColor;
++  }
++
++  if (oldPickerProps.themeVariant != newPickerProps.themeVariant) {
++    switch (newPickerProps.themeVariant) {
++      case RNDateTimePickerThemeVariant::Light:
++        _picker.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
++        break;
++      case RNDateTimePickerThemeVariant::Dark:
++        _picker.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
++        break;
++      default:
++        _picker.appearance = nil;
++    }
++  }
++
++  if (oldPickerProps.enabled != newPickerProps.enabled) {
++    _picker.enabled = newPickerProps.enabled;
++  }
++
++  [super updateProps:props oldProps:oldProps];
++  [self updateMeasurements];
++}
++
++@end
++
++Class<RCTComponentViewProtocol> RNDateTimePickerCls(void)
++{
++  return RNDateTimePickerComponentView.class;
++}
++
++#endif
+diff --git a/src/datetimepicker.macos.js b/src/datetimepicker.macos.js
+new file mode 100644
+index 0000000..4290def
+--- /dev/null
++++ b/src/datetimepicker.macos.js
+@@ -0,0 +1,2 @@
++// macOS uses the native picker, like iOS.
++export { default } from './datetimepicker.ios';
+diff --git a/src/picker.macos.js b/src/picker.macos.js
+new file mode 100644
+index 0000000..157ac5c
+--- /dev/null
++++ b/src/picker.macos.js
+@@ -0,0 +1,2 @@
++// macOS uses the native picker, like iOS.
++export { default } from './picker.ios';
