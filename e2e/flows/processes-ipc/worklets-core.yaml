@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-worklets-core on macOS
+intent: >
+  The Worklets Core screen runs a summing worklet in its own context, which writes a shared value and calls
+  back to the main runtime with createRunOnJS, then shows passed.
+checks: [PROC-WORKLETS-01]
+tags: [processes-ipc]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://processes-ipc/worklets-core" }
+- extendedWaitUntil: { visible: { id: processes-ipc-worklets-core-passed }, timeout: 10s }
