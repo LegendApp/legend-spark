@@ -1,4 +1,4 @@
-import { defineScreens } from "../../shell/registry";
+import { defineScreens, lazyScreen } from "../../shell/registry";
 import { Glass } from "./Glass";
 import { Search } from "./Search";
 import { SFSymbols } from "./SFSymbols";
@@ -14,4 +14,5 @@ export default defineScreens("native-controls", [
   { id: "glass", title: "Glass", titles: { ar: "الزجاج" }, summary: "A native glass effect view.", summaries: { ar: "عرض أصلي بتأثير الزجاج." }, component: Glass },
   { id: "symbol", title: "SF Symbols", titles: { ar: "رموز SF" }, summary: "SF Symbols at several sizes, scales and colors.", summaries: { ar: "رموز SF بعدة أحجام ومقاييس وألوان." }, component: SFSymbols },
   { id: "search", title: "Search field", titles: { ar: "حقل البحث" }, summary: "Native search fields with change events and programmatic focus.", summaries: { ar: "حقول بحث أصلية مع أحداث التغيير والتركيز البرمجي." }, component: Search },
+  { id: "datetimepicker", title: "Date & time picker", titles: { ar: "منتقي التاريخ والوقت" }, summary: "@react-native-community/datetimepicker on desktop: date, time and inline calendar pickers hosted in AppKit's NSDatePicker.", summaries: { ar: "‏@react-native-community/datetimepicker على سطح المكتب: منتقيات التاريخ والوقت والتقويم المضمّن داخل NSDatePicker في AppKit." }, component: lazyScreen(() => require("./DateTimePickerDemo").DateTimePickerDemo) },
 ]);
