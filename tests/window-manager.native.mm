@@ -96,6 +96,13 @@ static TestDefaults *testDefaults;
 @end
 @implementation MainWindowOwner @end
 // ACTUAL_IMPLEMENTATION
+@interface TestWindowManager : RNWindowManager @end
+@implementation TestWindowManager
+- (void)collapseToolbarSearchItem:(NSToolbarItem *)item animated:(BOOL)animated {
+  // Make collapse synchronous so the move guard is tested independently of AppKit animation timing.
+  [super collapseToolbarSearchItem:item animated:NO];
+}
+@end
 extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *, NSDictionary *) {}
 extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *, NSView *, void (^)(void)) { return NO; }
 extern "C" void LegendFinishSidebarSplitViewStartup(NSWindow *) {}
@@ -109,7 +116,7 @@ static void CallWindow(RNDesktopWindows *module, NSString *method, NSDictionary 
 int main() { @autoreleasepool {
   testDefaults = [TestDefaults new];
   events = [NSMutableArray new];
-  RNWindowManager *manager = [RNWindowManager new];
+  RNWindowManager *manager = [TestWindowManager new];
   NSSlider *slider = [NSSlider sliderWithValue:0.375 minValue:0 maxValue:1 target:nil action:nil];
   objc_setAssociatedObject(slider, &LegendToolbarControlMetadataKey, @{ @"windowIdentifier": @"editor", @"instanceId": @"instance", @"itemId": @"menu", @"value": @"volume" }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   [manager toolbarMenuSliderChanged:slider];
@@ -302,6 +309,64 @@ int main() { @autoreleasepool {
   style[@"toolbarItems"] = changedItems; changed[@"windowStyle"] = style;
   [manager applyToolbarItemsFromOptions:changed toWindow:window identifier:@"brightness-probe"];
   assert(![window.toolbar.items isEqualToArray:originalItems]);
+  NSDictionary *(^searchOptions)(NSArray *) = ^NSDictionary *(NSArray *trailing) {
+    return @{ @"windowStyle": @{ @"toolbarItems": [@[@{ @"id": @"search", @"type": @"search", @"placement": @"leading" }] arrayByAddingObjectsFromArray:trailing] } };
+  };
+  NSToolbarItem *(^toolbarItem)(NSString *) = ^NSToolbarItem *(NSString *itemId) {
+    for (NSToolbarItem *item in window.toolbar.items) if ([item.itemIdentifier isEqual:[@"legend.toolbar." stringByAppendingString:itemId]]) return item;
+    return nil;
+  };
+  [manager applyToolbarItemsFromOptions:searchOptions(@[@{ @"id": @"go", @"type": @"button", @"label": @"Go", @"enabled": @YES }]) toWindow:window identifier:@"brightness-probe"];
+  NSToolbarItem *search = toolbarItem(@"search");
+  NSSearchField *searchField = [search isKindOfClass:NSSearchToolbarItem.class] ? ((NSSearchToolbarItem *)search).searchField : (NSSearchField *)search.view;
+  searchField.stringValue = @"typed";
+  // Unchanged items keep their control, so a search field keeps what the user typed when another item changes.
+  for (NSArray *trailing in @[
+    @[@{ @"id": @"go", @"type": @"button", @"label": @"Go", @"enabled": @NO }],
+    @[@{ @"id": @"go", @"type": @"button", @"label": @"Go", @"enabled": @NO }, @{ @"id": @"more", @"type": @"button", @"label": @"More" }],
+    @[@{ @"id": @"more", @"type": @"button", @"label": @"More" }, @{ @"id": @"go", @"type": @"button", @"label": @"Go", @"enabled": @NO }],
+    @[@{ @"id": @"more", @"type": @"button", @"label": @"More" }],
+  ]) {
+    [manager applyToolbarItemsFromOptions:searchOptions(trailing) toWindow:window identifier:@"brightness-probe"];
+    assert(toolbarItem(@"search") == search);
+    assert([searchField.stringValue isEqual:@"typed"]);
+    NSMutableArray *expected = [NSMutableArray arrayWithObjects:@"legend.toolbar.search", NSToolbarFlexibleSpaceItemIdentifier, nil];
+    for (NSDictionary *item in trailing) [expected addObject:[@"legend.toolbar." stringByAppendingString:item[@"id"]]];
+    assert([[window.toolbar.items valueForKey:@"itemIdentifier"] isEqualToArray:expected]);
+  }
+  assert(!toolbarItem(@"go"));
+  [manager applyToolbarItemsFromOptions:searchOptions(@[@{ @"id": @"more", @"type": @"button", @"label": @"More", @"enabled": @NO }]) toWindow:window identifier:@"brightness-probe"];
+  assert(!toolbarItem(@"more").enabled);
+  // A moved item is the same item, so a focused search field keeps its text, focus and selection, and an empty
+  // collapsing one stays expanded.
+  NSDictionary *goItem = @{ @"id": @"go", @"type": @"button", @"label": @"Go" };
+  [window orderFrontRegardless];
+  for (NSDictionary *searchItem in @[@{ @"id": @"search", @"type": @"search" }, @{ @"id": @"search", @"type": @"search", @"collapses": @YES }]) {
+    BOOL collapses = [searchItem[@"collapses"] boolValue];
+    [manager applyToolbarItemsFromOptions:@{ @"windowStyle": @{ @"toolbarItems": @[goItem, searchItem] } } toWindow:window identifier:@"brightness-probe"];
+    [window layoutIfNeeded];
+    search = toolbarItem(@"search");
+    searchField = collapses ? objc_getAssociatedObject(search, &LegendToolbarSearchFieldKey) : ((NSSearchToolbarItem *)search).searchField;
+    // Focus once below: refocusing an editing search field can end editing and start a collapse before the move.
+    if (collapses) [manager expandToolbarSearchItem:search value:nil focus:NO sendChange:NO animated:NO];
+    else searchField.stringValue = @"moved";
+    assert([window makeFirstResponder:searchField]);
+    assert(searchField.currentEditor && window.firstResponder == searchField.currentEditor);
+    NSRange selection = collapses ? NSMakeRange(0, 0) : NSMakeRange(2, 1);
+    searchField.currentEditor.selectedRange = selection;
+    NSUInteger eventCount = events.count;
+    [manager applyToolbarItemsFromOptions:@{ @"windowStyle": @{ @"toolbarItems": @[searchItem, goItem] } } toWindow:window identifier:@"brightness-probe"];
+    assert(toolbarItem(@"search") == search);
+    assert([searchField.stringValue isEqual:collapses ? @"" : @"moved"]);
+    assert(searchField.currentEditor && window.firstResponder == searchField.currentEditor);
+    assert(NSEqualRanges(searchField.currentEditor.selectedRange, selection));
+    assert(events.count == eventCount);
+    if (collapses) {
+      [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
+      assert(!searchField.hidden && ((NSLayoutConstraint *)objc_getAssociatedObject(search, &LegendToolbarSearchWidthConstraintKey)).constant > LegendToolbarSearchCollapsedSize);
+    }
+    assert([[window.toolbar.items valueForKey:@"itemIdentifier"] isEqualToArray:(@[NSToolbarFlexibleSpaceItemIdentifier, @"legend.toolbar.search", @"legend.toolbar.go"])]);
+  }
   [window close];
   puts("Window manager controls passed");
 } }
