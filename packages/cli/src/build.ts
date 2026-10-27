@@ -8,7 +8,7 @@ import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { buildWindows } from "./windows.ts";
 import { copyHelpers } from "./helpers.ts";
-import { readAppConfig } from "./project.ts";
+import { lacksMacOSPod, readAppConfig } from "./project.ts";
 import {
   cpSync,
   existsSync,
@@ -247,8 +247,11 @@ async function buildUnlocked(
     ...(readAppConfig(root).expo.autolinking?.exclude ?? []),
     ...chosen.excluded.map((p) => p.name),
   ])];
+  // Only the macOS Podfile drops these; iOS and Android builds reading the shared config keep them.
+  const withoutMacOSPod = chosen.included.filter(lacksMacOSPod).map((p) => p.name).filter((name) => !excludedNames.includes(name));
   writeJson(stateFile(root, "native-selection.json"), {
-    excluded: excludedNames,
+    excluded: [...excludedNames, ...withoutMacOSPod],
+    withoutMacOSPod,
     included: chosen.included.map((p) => ({ name: p.name, root: p.root })),
   });
   const rnConfig = path.join(root, "react-native.config.js");
@@ -263,7 +266,7 @@ async function buildUnlocked(
     );
   if (!isUniversal(root)) writeFileSync(
     rnConfig,
-    `${marker}\nconst selection = require('./.spark/native-selection.json');\nmodule.exports = { dependencies: Object.fromEntries([\n...selection.included.map(p => [p.name, { root: p.root }]),\n...selection.excluded.map(name => [name, { platforms: { ios: null, macos: null, android: null } }])\n]) };\n`,
+    `${marker}\nconst selection = require('./.spark/native-selection.json');\nmodule.exports = { dependencies: Object.fromEntries([\n...selection.included.map(p => [p.name, { root: p.root }]),\n...selection.excluded.map(name => [name, { platforms: selection.withoutMacOSPod.includes(name) ? { macos: null } : { ios: null, macos: null, android: null } }])\n]) };\n`,
   );
   const pkg = readJson(path.join(root, "package.json"));
   if (!isUniversal(root)) {
