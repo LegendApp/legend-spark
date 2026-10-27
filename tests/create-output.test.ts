@@ -10,6 +10,7 @@ import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { pointer, claudePointer } from "../packages/cli/src/migrations.cjs";
 import { run } from "../packages/cli/src/commands.ts";
 import { pnpWriteFile } from "../packages/cli/src/create.ts";
+import { packageSources } from "../packages/cli/src/release.ts";
 import { spawnSync } from "node:child_process";
 
 vi.mock("../packages/cli/src/expo-node.ts", () => ({ checkExpoDesktopNode: vi.fn() }));
@@ -17,7 +18,7 @@ vi.mock("../packages/cli/src/executable.ts", () => ({ which: vi.fn((command: str
 vi.mock("../packages/cli/src/process.ts", () => ({ nodeCommand: (_root: string, _name: string, _bin: string, args: string[] = []) => ["node", "expo-desktop", ...args], spawnProcess: vi.fn() }));
 vi.mock("../packages/cli/src/commands.ts", async importOriginal => ({ ...await importOriginal<object>(), run: vi.fn() }));
 vi.mock("../packages/cli/src/pack-archive.ts", () => ({ packArchive: vi.fn() }));
-vi.mock("../packages/cli/src/release.ts", () => ({ installedRelease: () => undefined, packageSources: (manifest: string) => ({ "@react-native-runtimes/core": "file:" + manifest.replace(/packages\.json$/, "core.tgz"), "@legendapp/spark": "file:" + manifest.replace(/packages\.json$/, "spark.tgz") }) }));
+vi.mock("../packages/cli/src/release.ts", () => ({ installedRelease: () => undefined, packageSources: vi.fn((manifest: string) => ({ "@react-native-runtimes/core": "file:" + manifest.replace(/packages\.json$/, "core.tgz"), "@legendapp/spark": "file:" + manifest.replace(/packages\.json$/, "spark.tgz") })) }));
 const version = JSON.parse(readFileSync("packages/cli/package.json", "utf8")).version;
 const roots: string[] = [];
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -69,6 +70,34 @@ test.each([["macos", "npm"], ["windows", "npm"], ["universal", "npm"], ["macos",
     expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(version + "\n");
     expect(JSON.parse(readFileSync(path.join(root, "desktop.config.json"), "utf8")).projectId).toBe("generated-guid");
   } finally { log.mockRestore(); output.mockRestore(); }
+});
+
+test("create from a published release does not allow the Spark version as a package name", async () => {
+  const temporary = mkdtempSync(path.join(os.tmpdir(), "spark-create-release-"));
+  roots.push(temporary);
+  const root = path.join(temporary, "MyApp");
+  const manifest = path.join(temporary, "packages.json");
+  writeJson(manifest, {});
+  // A published release supplies archives as file: sources, but Spark itself as its registry version.
+  vi.mocked(packageSources).mockReturnValueOnce({ "@react-native-runtimes/core": "file:./spark-packages/core.tgz", "@legendapp/spark": version });
+  let template: string;
+  let allowScripts: Record<string, boolean> = {};
+  vi.mocked(packArchive).mockImplementation(async source => {
+    template = source;
+    allowScripts = JSON.parse(readFileSync(path.join(source, "package.json"), "utf8")).allowScripts;
+  });
+  vi.mocked(spawnProcess).mockImplementation(() => {
+    cpSync(template, root, { recursive: true });
+    writeJson(path.join(root, "app.json"), { expo: { name: "MyApp", macos: { bundleIdentifier: "org.example.myapp" }, windows: { projectGuid: "generated-guid" } } });
+    writeJson(path.join(root, "node_modules/@legendapp/spark/package.json"), { version });
+    return { exited: Promise.resolve(0), stdout: new ReadableStream({ start(controller) { controller.close(); } }) } as ReturnType<typeof spawnProcess>;
+  });
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await createSpark([root, "--packages", manifest, "--package-manager", "npm", "--platform", "macos"]);
+  } finally { log.mockRestore(); }
+  const templateAllowScripts = JSON.parse(readFileSync("packages/cli/templates/blank-typescript/package.json", "utf8")).allowScripts;
+  expect(Object.keys(allowScripts).sort()).toEqual(Object.keys(templateAllowScripts).sort());
 });
 
 test.each(["--require /tmp/dlx/.pnp.cjs --experimental-loader file:///tmp/dlx/.pnp.loader.mjs --max-old-space-size=4096", undefined])("create under Yarn PnP keeps the PnP runtime out of the app install: %s", async nodeOptions => {
