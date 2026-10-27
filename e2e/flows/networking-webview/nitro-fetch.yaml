@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-nitro-fetch on macOS
+intent: >
+  The Nitro Fetch screen requests the npm registry through the native client (needs network access), checks
+  the status, a JSON content type and body, a 404, a prefetched response, and that its URL cache sits in
+  the app's Caches folder rather than the working directory, then shows passed.
+checks: [WEB-NITROFETCH-01]
+tags: [networking-webview]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://networking-webview/nitro-fetch" }
+- extendedWaitUntil: { visible: { id: networking-webview-nitro-fetch-passed }, timeout: 20s }
