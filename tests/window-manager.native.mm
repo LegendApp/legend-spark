@@ -295,6 +295,34 @@ int main() { @autoreleasepool {
   assert(!toolbarItem(@"go"));
   [manager applyToolbarItemsFromOptions:searchOptions(@[@{ @"id": @"more", @"type": @"button", @"label": @"More", @"enabled": @NO }]) toWindow:window identifier:@"brightness-probe"];
   assert(!toolbarItem(@"more").enabled);
+  // A moved item is the same item, so a focused search field keeps its text, focus and selection, and an empty
+  // collapsing one stays expanded.
+  NSDictionary *goItem = @{ @"id": @"go", @"type": @"button", @"label": @"Go" };
+  [window orderFrontRegardless];
+  for (NSDictionary *searchItem in @[@{ @"id": @"search", @"type": @"search" }, @{ @"id": @"search", @"type": @"search", @"collapses": @YES }]) {
+    BOOL collapses = [searchItem[@"collapses"] boolValue];
+    [manager applyToolbarItemsFromOptions:@{ @"windowStyle": @{ @"toolbarItems": @[goItem, searchItem] } } toWindow:window identifier:@"brightness-probe"];
+    [window layoutIfNeeded];
+    search = toolbarItem(@"search");
+    searchField = collapses ? objc_getAssociatedObject(search, &LegendToolbarSearchFieldKey) : ((NSSearchToolbarItem *)search).searchField;
+    if (collapses) [manager expandToolbarSearchItem:search value:nil focus:YES sendChange:NO animated:NO];
+    else searchField.stringValue = @"moved";
+    assert([window makeFirstResponder:searchField]);
+    NSRange selection = collapses ? NSMakeRange(0, 0) : NSMakeRange(2, 1);
+    searchField.currentEditor.selectedRange = selection;
+    NSUInteger eventCount = events.count;
+    [manager applyToolbarItemsFromOptions:@{ @"windowStyle": @{ @"toolbarItems": @[searchItem, goItem] } } toWindow:window identifier:@"brightness-probe"];
+    assert(toolbarItem(@"search") == search);
+    assert([searchField.stringValue isEqual:collapses ? @"" : @"moved"]);
+    assert(searchField.currentEditor && window.firstResponder == searchField.currentEditor);
+    assert(NSEqualRanges(searchField.currentEditor.selectedRange, selection));
+    assert(events.count == eventCount);
+    if (collapses) {
+      [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
+      assert(!searchField.hidden && ((NSLayoutConstraint *)objc_getAssociatedObject(search, &LegendToolbarSearchWidthConstraintKey)).constant > LegendToolbarSearchCollapsedSize);
+    }
+    assert([[window.toolbar.items valueForKey:@"itemIdentifier"] isEqualToArray:(@[NSToolbarFlexibleSpaceItemIdentifier, @"legend.toolbar.search", @"legend.toolbar.go"])]);
+  }
   [window close];
   puts("Window manager controls passed");
 } }

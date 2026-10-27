@@ -821,6 +821,7 @@ extern "C" void LegendPrecreateRestorableWindows(void)
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSTitlebarAccessoryViewController *> *> *titlebarAccessoryControllers;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSView *> *titlebarMaterialViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSDictionary *> *> *toolbarItemConfigs;
+@property (nonatomic, strong, nullable) NSToolbarItem *movingToolbarItem;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *windowOptions;
 @property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
@@ -1267,10 +1268,20 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
     if (menuUpdate) return;
   }
+  // Moving an item takes its control out of the window, which ends editing in a focused text field (ignored while
+  // movingToolbarItem is set), so focus and selection are restored afterwards.
+  NSText *editor = [window.firstResponder isKindOfClass:NSText.class] ? (NSText *)window.firstResponder : nil;
+  NSControl *focused = [editor.delegate isKindOfClass:NSControl.class] ? (NSControl *)editor.delegate : nil;
+  NSRange selection = editor.selectedRange;
   [self updateToolbar:toolbar previousConfigs:previousConfigs ?: @[]];
+  if (focused && !focused.currentEditor) {
+    [window layoutIfNeeded];
+    if (focused.window == window && [window makeFirstResponder:focused]) focused.currentEditor.selectedRange = selection;
+  }
 }
 
-// Recreating an item resets its control (a search field loses its text and focus), so only changed items are replaced.
+// Recreating an item resets its control (a search field loses its text and focus), so only changed items are replaced
+// and kept items that change position are moved: removed and inserted again as the same item.
 - (void)updateToolbar:(NSToolbar *)toolbar previousConfigs:(NSArray<NSDictionary *> *)previousConfigs
 {
   NSMutableDictionary<NSString *, NSDictionary *> *previousByIdentifier = [NSMutableDictionary new];
@@ -1291,20 +1302,18 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     BOOL unchanged = previous || next ? [previous isEqualToDictionary:next] : YES;
     if (![identifiers containsObject:itemIdentifier] || !unchanged) [toolbar removeItemAtIndex:index];
   }
-  NSUInteger position = 0;
-  for (NSUInteger index = 0; index < toolbar.items.count;) {
-    NSUInteger found = [identifiers indexOfObject:toolbar.items[index].itemIdentifier inRange:NSMakeRange(position, identifiers.count - position)];
-    if (found == NSNotFound) {
-      [toolbar removeItemAtIndex:index];
-    } else {
-      position = found + 1;
-      index++;
-    }
-  }
   for (NSUInteger index = 0; index < identifiers.count; index++) {
     if (index < toolbar.items.count && [toolbar.items[index].itemIdentifier isEqual:identifiers[index]]) continue;
+    for (NSUInteger later = index + 1; later < toolbar.items.count; later++) {
+      if (![toolbar.items[later].itemIdentifier isEqual:identifiers[index]]) continue;
+      self.movingToolbarItem = toolbar.items[later];
+      [toolbar removeItemAtIndex:later];
+      break;
+    }
     [toolbar insertItemWithItemIdentifier:identifiers[index] atIndex:index];
+    self.movingToolbarItem = nil;
   }
+  while (toolbar.items.count > identifiers.count) [toolbar removeItemAtIndex:toolbar.items.count - 1];
 }
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
@@ -1445,6 +1454,9 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     itemForItemIdentifier:(NSToolbarItemIdentifier)itemIdentifier
 willBeInsertedIntoToolbar:(BOOL)flag
 {
+  if ([self.movingToolbarItem.itemIdentifier isEqual:itemIdentifier]) {
+    return self.movingToolbarItem;
+  }
   NSDictionary *config = [self toolbarItemConfigForIdentifier:itemIdentifier toolbar:toolbar];
   if (!config) {
     return nil;
@@ -1936,7 +1948,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
 - (void)controlTextDidEndEditing:(NSNotification *)notification
 {
-  if ([notification.object isKindOfClass:NSSearchField.class]) {
+  if (!self.movingToolbarItem && [notification.object isKindOfClass:NSSearchField.class]) {
     NSSearchField *searchField = (NSSearchField *)notification.object;
     if (searchField.stringValue.length == 0) {
       id associatedItem = objc_getAssociatedObject(searchField, &LegendToolbarSearchItemKey);
@@ -1949,6 +1961,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
 - (void)toolbarSearchSubmitted:(NSSearchField *)sender
 {
+  if (self.movingToolbarItem) return;
   NSEvent *currentEvent = NSApp.currentEvent;
   BOOL shiftKey = currentEvent && ((currentEvent.modifierFlags & NSEventModifierFlagShift) != 0);
   [self sendToolbarSearchEventForField:sender submitted:YES shiftKey:shiftKey];
