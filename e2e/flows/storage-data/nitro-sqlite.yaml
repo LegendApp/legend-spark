@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-nitro-sqlite on macOS
+intent: >
+  The Nitro SQLite screen creates a table, inserts a Unicode row with parameters and two more in a batch,
+  reads them back asynchronously and sums a column, then deletes the database and shows passed.
+checks: [DATA-NITROSQLITE-01]
+tags: [storage-data]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://storage-data/nitro-sqlite" }
+- extendedWaitUntil: { visible: { id: storage-data-nitro-sqlite-passed }, timeout: 10s }
