@@ -6,3 +6,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-quick-crypto.md"
+  SEC-ATT-01:
+    title: react-native-tracking-transparency reads App Tracking Transparency status from ATTrackingManager on macOS instead of reporting unavailable
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-tracking-transparency.md"
