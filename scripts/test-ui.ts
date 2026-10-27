@@ -33,7 +33,7 @@ try {
   writeJson(path.join(root, ".spark/session.json"), { compatible: true, target: "test", port });
   const log = processLog(path.join(root, ".spark/ui-metro.log"));
   metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], {
-    cwd: root, env: { ...process.env, CI: "1" }, stdout: log, stderr: log,
+    cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1" }, stdout: log, stderr: log,
   });
   await waitFor(async () => fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok, () => false), "Metro");
   const executable = (await run(root, ["/usr/libexec/PlistBuddy", "-c", "Print :CFBundleExecutable", path.join(product.app, "Contents/Info.plist")], { capture: true })).trim();

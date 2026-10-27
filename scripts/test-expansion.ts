@@ -24,7 +24,7 @@ try {
     macos: previous.macos, window: { title: "Configured main", size: { width: 930, height: 620 }, minSize: { width: 400, height: 100 }, maxSize: { width: 1400, height: 20000 }, resizable: false, titleBarStyle: "overlay", restoreBounds: false } });
   prepareConfig(root);
   const log = processLog(path.join(directory, "metro.log"));
-  metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, CI: "1" }, stdout: log, stderr: log });
+  metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1" }, stdout: log, stderr: log });
   let ready = false;
   for (let attempt = 0; attempt < 120; attempt++) {
     if (await fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok, () => false)) { ready = true; break; }

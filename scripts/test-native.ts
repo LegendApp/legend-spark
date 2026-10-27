@@ -37,7 +37,7 @@ const port = await availablePort();
 const reportDir = path.join(root, ".spark/test-results"); mkdirSync(reportDir, { recursive: true });
 writeJson(path.join(root, ".spark/session.json"), { compatible: true, target: "test", port });
 const metroLog = processLog(path.join(reportDir, "metro.log"));
-const startMetro = () => { writeFileSync(path.join(reportDir, "metro.log"), ""); return spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, CI: "1" }, stdout: metroLog, stderr: metroLog }); };
+const startMetro = () => { writeFileSync(path.join(reportDir, "metro.log"), ""); return spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1" }, stdout: metroLog, stderr: metroLog }); };
 let metro = startMetro();
 let appProcess: ReturnType<typeof spawnProcess> | undefined;
 async function waitFor<T>(read: () => Promise<T | undefined>, timeout: number, description: string): Promise<T> {

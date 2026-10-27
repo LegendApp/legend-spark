@@ -32,7 +32,7 @@ export default function App() {
   return <Text>Native desktop integration checks</Text>;
 }`);
   const log = processLog(path.join(root, ".spark/integration-metro.log"));
-  metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...globalThis.process.env, CI: "1" }, stdout: log, stderr: log });
+  metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...globalThis.process.env, NODE_OPTIONS: `${globalThis.process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`, CI: "1" }, stdout: log, stderr: log });
   let ready = false;
   const readyBy = Date.now() + 60000;
   while (Date.now() < readyBy) {
