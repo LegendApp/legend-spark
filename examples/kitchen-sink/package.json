@@ -79,7 +79,8 @@
     "@react-navigation/bottom-tabs": "7.21.0",
     "expo-crypto": "55.0.19",
     "expo-linear-gradient": "55.0.18",
-    "expo-web-browser": "55.0.20"
+    "expo-web-browser": "55.0.20",
+    "expo-application": "55.0.19"
   },
   "expo": {
     "install": {

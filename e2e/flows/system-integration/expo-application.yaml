@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-application on macOS
+intent: >
+  The Expo Application screen reads the bundle identifier and versions, the installation time from the app
+  bundle, and gets null for the vendor ID and unknown for the release type, then shows passed.
+checks: [SYS-EXPOAPP-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/expo-application" }
+- extendedWaitUntil: { visible: { id: system-integration-expo-application-passed }, timeout: 10s }
