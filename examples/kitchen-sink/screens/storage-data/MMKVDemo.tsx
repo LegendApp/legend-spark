@@ -33,7 +33,7 @@ async function check() {
       scratch.getAllKeys().sort().join() !== "bytes,number,text" && "keys",
       !removed && "remove",
       changed.join() !== "text,number,flag,bytes,flag" && `listener (${changed.join()})`,
-      !await exists(`${await getDirectory("data")}/mmkv/kitchen-sink-mmkv`) && "data folder",
+      !await exists(`${await getDirectory("data")}/mmkv/kitchen-sink-mmkv`) && "data file",
     ].filter(Boolean);
     return { launches, result: failures.length ? `failed: ${failures.join(", ")}` : "passed" };
   } finally {
