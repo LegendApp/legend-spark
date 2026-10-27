@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-pressable-opacity on macOS
+intent: >
+  The Pressable opacity screen renders both button kinds; pressing them needs a pointer.
+checks: [COMP-PRESSABLE-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/pressable-opacity" }
+- extendedWaitUntil: { visible: { id: component-library-pressable-opacity-js }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: component-library-pressable-opacity-native }, timeout: 10s }

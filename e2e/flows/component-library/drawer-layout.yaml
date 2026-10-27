@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-drawer-layout on macOS
+intent: >
+  The Drawer layout screen opens its drawer after 0.3 s and closes it after 1.5 s; onOpen and onClose both
+  report.
+checks: [COMP-DRAWER-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/drawer-layout" }
+- extendedWaitUntil: { visible: { id: component-library-drawer-layout-opened }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: component-library-drawer-layout-closed }, timeout: 10s }
