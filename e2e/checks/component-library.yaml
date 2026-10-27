@@ -1,0 +1,8 @@
+area: component-library
+prefix: COMP
+checks:
+  COMP-SCREENS-01:
+    title: react-native-screens' Screen, ScreenContainer and ScreenStack render on macOS as plain views; an inactive screen stays hidden until it becomes active
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-screens.md"

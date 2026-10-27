@@ -115,5 +115,12 @@
     "integrity": "sha512-PfIpMfM+STOBwkR5XOE+yVtER86c44MD+W8QD8JxuO0sT9pF7Y1SJYakWlpvX8xsGA+bjKLxftm9403s9kQhKA==",
     "patch": "expo-keep-awake@55.0.8.patch",
     "optional": true
+  },
+  "react-native-screens": {
+    "version": "4.23.0",
+    "url": "https://registry.npmjs.org/react-native-screens/-/react-native-screens-4.23.0.tgz",
+    "integrity": "sha512-XhO3aK0UeLpBn4kLecd+J+EDeRRJlI/Ro9Fze06vo1q163VeYtzfU9QS09/VyDFMWR1qxDC1iazCArTPSFFiPw==",
+    "patch": "react-native-screens@4.23.0.patch",
+    "optional": true
   }
 }
