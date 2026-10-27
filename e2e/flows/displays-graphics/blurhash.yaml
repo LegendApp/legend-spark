@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-blurhash on macOS
+intent: >
+  The Blurhash screen decodes a Blurhash in the native view, which reports onLoadEnd, and encodes a 4×2 red
+  PNG from the app's data folder; the encoded Blurhash is valid and its average color is red.
+checks: [DISP-BLURHASH-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/blurhash" }
+- extendedWaitUntil: { visible: { id: displays-graphics-blurhash-decoded }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: displays-graphics-blurhash-encoded }, timeout: 10s }
+- takeScreenshot: blurhash
