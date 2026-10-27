@@ -65,3 +65,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-application.md"
+  SYS-EXPODEVICE-01:
+    title: expo-device reports the Mac's model identifier, macOS version and build, memory, CPU architecture, desktop device type, name and uptime
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-device.md"

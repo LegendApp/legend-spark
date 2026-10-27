@@ -80,7 +80,9 @@
     "expo-crypto": "55.0.19",
     "expo-linear-gradient": "55.0.18",
     "expo-web-browser": "55.0.20",
-    "expo-application": "55.0.19"
+    "expo-application": "55.0.19",
+    "expo-device": "55.0.21",
+    "expo-localization": "55.0.19"
   },
   "expo": {
     "install": {
