@@ -590,6 +590,7 @@
     "SidebarSplitView",
     "SidebarSplitViewAppearance",
     "SidebarSplitViewPaneMetrics",
+    "SidebarSplitViewPaneOrigins",
     "SidebarSplitViewProps",
     "SidebarSplitViewResizeEvent",
     "SidebarSplitViewTitlebarMaterial",

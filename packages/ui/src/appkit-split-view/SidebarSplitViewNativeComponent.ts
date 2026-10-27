@@ -6,14 +6,18 @@ export type SidebarSplitViewResizeEvent = Readonly<{
   contentHeight: Double;
   contentWidth: Double;
   contentX: Double;
+  contentY: Double;
   height: Double;
   isLayoutReady: boolean;
   isVertical: boolean;
   listHeight: Double;
   listWidth: Double;
   listX: Double;
+  listY: Double;
   sidebarHeight: Double;
   sidebarWidth: Double;
+  sidebarX: Double;
+  sidebarY: Double;
 }>;
 
 export type SidebarSplitViewCollapsedChangeEvent = Readonly<{

@@ -36,9 +36,9 @@ struct DesktopDragViewProps : Props { std::string sourceJson, optionsJson; bool 
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
   struct OnSplitViewDidResize {
-    double contentHeight, contentWidth, contentX, height;
+    double contentHeight, contentWidth, contentX, contentY, height;
     bool isLayoutReady, isVertical;
-    double listHeight, listWidth, listX, sidebarHeight, sidebarWidth;
+    double listHeight, listWidth, listX, listY, sidebarHeight, sidebarWidth, sidebarX, sidebarY;
   };
   mutable std::vector<OnSplitViewDidResize> events;
   void onSplitViewDidResize(OnSplitViewDidResize event) const { events.push_back(event); }
