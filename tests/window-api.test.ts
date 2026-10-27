@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
-const { call, platform, listeners, managed } = vi.hoisted(() => ({ call: vi.fn(), platform: { OS: "windows" }, listeners: new Set<(event: any) => void>(), managed: { getConstantsJson: () => JSON.stringify({ WINDOW_LEVEL_STATUS: 25, WINDOW_LEVEL_FLOATING: 3 }), openWindow: vi.fn(async (_options: string) => '{"success":true}'), setWindowOptions: vi.fn(async (_id: string, _options: string) => '{"success":true}') } }));
+const { call, platform, listeners, managed } = vi.hoisted(() => ({ call: vi.fn(), platform: { OS: "windows" }, listeners: new Set<(event: any) => void>(), managed: { getConstantsJson: () => JSON.stringify({ WINDOW_LEVEL_STATUS: 25, WINDOW_LEVEL_FLOATING: 3 }), openWindow: vi.fn(async (_options: string) => '{"success":true}'), setMainWindowOptions: vi.fn(async (_options: string) => '{"success":true}'), setWindowOptions: vi.fn(async (_id: string, _options: string) => '{"success":true}') } }));
 vi.mock("react-native", () => ({ Platform: platform }));
 vi.mock("../packages/desktop-windows/src/NativeDesktopWindowManager", () => ({ default: { call } }));
 vi.mock("../packages/desktop-windows/src/window-manager/NativeWindowManager", () => ({ default: managed }));
@@ -8,7 +8,7 @@ import * as windows from "../packages/desktop-windows/src/api";
 const info = { id: "editor", instanceId: "instance-1", kind: "window", title: "Editor", parentId: null, modal: false, visible: true, focused: true, minimized: false, maximized: false, fullscreen: false, bounds: { displayId: "display", x: 10, y: 20, width: 640, height: 480 } };
 const emit = (event: object) => listeners.forEach(listener => listener({ windowId: "editor", instanceId: "instance-1", ...event }));
 const tick = async () => { for (let n=0;n<10;n++) await Promise.resolve(); };
-beforeEach(() => { platform.OS = "windows"; call.mockReset().mockImplementation(async (method: string) => JSON.stringify(["open", "info", "observe", "completeOpen"].includes(method) ? info : method === "close" ? { closed: true } : null)); managed.openWindow.mockClear(); managed.setWindowOptions.mockClear(); listeners.clear(); });
+beforeEach(() => { platform.OS = "windows"; call.mockReset().mockImplementation(async (method: string) => JSON.stringify(["open", "info", "observe", "completeOpen"].includes(method) ? info : method === "close" ? { closed: true } : null)); managed.openWindow.mockClear(); managed.setWindowOptions.mockClear(); managed.setMainWindowOptions.mockReset().mockResolvedValue('{"success":true}'); listeners.clear(); });
 afterEach(() => { emit({ type: "closed" }); vi.restoreAllMocks(); });
 test("availability is answered synchronously without a native call", async () => {
   expect(windows.getWindowAvailability()).toEqual({ available: true });
@@ -250,4 +250,19 @@ test("macOS toolbar-only updates bypass portable window geometry", async () => {
   expect(call).toHaveBeenCalledWith("options", expect.any(String));
   await windows.setWindowOptions("editor", {});
   expect(call).toHaveBeenCalledTimes(2);
+});
+
+test("macOS main-window chrome uses the host window setter rather than the secondary registry", async () => {
+  platform.OS = "macos";
+  for (const trafficLights of [false, true]) {
+    await windows.setWindowOptions("main", { macos: { titleBar: { trafficLights } } });
+    expect(JSON.parse(managed.setMainWindowOptions.mock.calls.at(-1)![0])).toEqual({ windowStyle: { trafficLights } });
+  }
+  expect(call).not.toHaveBeenCalled();
+  await windows.setWindowOptions("main", { title: "Photos", appearance: "dark", backgroundColor: "#191A1B" });
+  expect(call).toHaveBeenCalledWith("options", JSON.stringify({ id: "main", options: { title: "Photos", appearance: "dark", backgroundColor: "#191A1B" } }));
+  expect(JSON.parse(managed.setMainWindowOptions.mock.calls.at(-1)![0])).toEqual({ windowStyle: { appearance: "dark", backgroundColor: "#191A1B" } });
+  expect(managed.setWindowOptions).not.toHaveBeenCalled();
+  managed.setMainWindowOptions.mockRejectedValueOnce(Object.assign(new Error("Main window not found"), { code: "E_NOT_FOUND" }));
+  await expect(windows.setWindowOptions("main", { macos: { titleBar: { trafficLights: true } } })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
 });
