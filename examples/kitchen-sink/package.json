@@ -92,7 +92,10 @@
     "@gorhom/bottom-sheet": "5.2.14",
     "react-native-pressable-opacity": "1.0.10",
     "expo-status-bar": "55.0.6",
-    "expo-blur": "55.0.18"
+    "expo-blur": "55.0.18",
+    "@babel/plugin-transform-shorthand-properties": "7.27.1",
+    "@babel/plugin-transform-arrow-functions": "7.27.1",
+    "react-native-nitro-image": "0.15.2"
   },
   "expo": {
     "install": {
