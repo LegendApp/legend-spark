@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-image-manipulator on macOS
+intent: >
+  The Image manipulator screen rotates, flips, resizes and crops a 2×1 red and blue PNG, saves each result as
+  PNG and decodes it with Skia; sizes and pixel colors match (rotate 90° clockwise puts red on top), so the
+  screen shows passed.
+checks: [MEDIA-IMAGEMANIP-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://media/image-manipulator" }
+- extendedWaitUntil: { visible: { id: media-image-manipulator-passed }, timeout: 15s }
+- takeScreenshot: image-manipulator

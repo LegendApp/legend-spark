@@ -1,0 +1,312 @@
+diff --git a/ios/ExpoImageManipulator.podspec b/ios/ExpoImageManipulator.podspec
+index ea6d6dc..5e9de70 100644
+--- a/ios/ExpoImageManipulator.podspec
++++ b/ios/ExpoImageManipulator.podspec
+@@ -12,7 +12,8 @@ Pod::Spec.new do |s|
+   s.homepage       = package['homepage']
+   s.platforms      = {
+     :ios => '15.1',
+-    :tvos => '15.1'
++    :tvos => '15.1',
++    :osx => '14.0'
+   }
+   s.swift_version  = '5.9'
+   s.source         = { git: 'https://github.com/expo/expo.git' }
+diff --git a/ios/ImageManipulatorMacOS.swift b/ios/ImageManipulatorMacOS.swift
+new file mode 100644
+index 0000000..329b05c
+--- /dev/null
++++ b/ios/ImageManipulatorMacOS.swift
+@@ -0,0 +1,154 @@
++// Copyright 2024-present 650 Industries. All rights reserved.
++
++// macOS: NSImage stands in for UIImage (ExpoModulesCore aliases it), sized in pixels at scale 1.
++#if os(macOS)
++import AppKit
++import ImageIO
++
++// Files that don't import ExpoModulesCore don't see its UIImage alias.
++typealias UIImage = NSImage
++
++extension NSImage {
++  // Decoded images are already oriented up, so only `.up` occurs.
++  enum Orientation {
++    case up, down, left, right, upMirrored, downMirrored, leftMirrored, rightMirrored
++  }
++
++  var imageOrientation: Orientation { .up }
++  var scale: CGFloat { 1 }
++  var cgImage: CGImage? { cgImage(forProposedRect: nil, context: nil, hints: nil) }
++
++  convenience init(cgImage: CGImage) {
++    self.init(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
++  }
++
++  convenience init(cgImage: CGImage, scale: CGFloat, orientation: Orientation) {
++    self.init(cgImage: cgImage)
++  }
++
++  func jpegData(compressionQuality: CGFloat) -> Data? {
++    cgImage.flatMap { NSBitmapImageRep(cgImage: $0).representation(using: .jpeg, properties: [.compressionFactor: compressionQuality]) }
++  }
++
++  func pngData() -> Data? {
++    cgImage.flatMap { NSBitmapImageRep(cgImage: $0).representation(using: .png, properties: [:]) }
++  }
++}
++
++// Applies EXIF orientation while decoding, as UIImage(data:) does on iOS.
++internal func decodeImage(_ data: Data) -> NSImage? {
++  guard let source = CGImageSourceCreateWithData(data as CFData, nil),
++    let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
++    let width = properties[kCGImagePropertyPixelWidth] as? Int,
++    let height = properties[kCGImagePropertyPixelHeight] as? Int else {
++    return nil
++  }
++  let options: [CFString: Any] = [
++    kCGImageSourceCreateThumbnailFromImageAlways: true,
++    kCGImageSourceCreateThumbnailWithTransform: true,
++    kCGImageSourceThumbnailMaxPixelSize: max(width, height)
++  ]
++  return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary).map { NSImage(cgImage: $0) }
++}
++
++internal func loadImageFromPhotoLibrary(url: URL) async throws -> NSImage {
++  throw ImageNotFoundException()
++}
++
++// Spark's host exports SparkNamespace(); look it up at runtime so this keeps no link dependency on Spark.
++internal let appNamespace: String = {
++  typealias Namespace = @convention(c) () -> Unmanaged<NSString>
++  if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "SparkNamespace") {
++    return unsafeBitCast(symbol, to: Namespace.self)().takeUnretainedValue() as String
++  }
++  return Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
++}()
++
++// A bitmap context in CoreGraphics' own orientation: origin bottom-left, so CGImages draw upright.
++private func render(size: CGSize, drawing: (CGContext) -> Void) -> NSImage? {
++  guard let context = CGContext(
++    data: nil,
++    width: Int(size.width),
++    height: Int(size.height),
++    bitsPerComponent: 8,
++    bytesPerRow: 0,
++    space: CGColorSpaceCreateDeviceRGB(),
++    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
++  ) else {
++    return nil
++  }
++  drawing(context)
++  return context.makeImage().map { NSImage(cgImage: $0) }
++}
++
++extension ImageFlipTransformer {
++  func transform(image: NSImage) async throws -> NSImage {
++    guard let cgImage = image.cgImage else {
++      throw ImageNotFoundException()
++    }
++    let size = CGSize(width: cgImage.width, height: cgImage.height)
++    let flipped = render(size: size) { context in
++      switch flip {
++      case .vertical:
++        context.concatenate(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: size.height))
++      case .horizontal:
++        context.concatenate(CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: size.width, ty: 0))
++      }
++      context.draw(cgImage, in: CGRect(origin: .zero, size: size))
++    }
++    guard let flipped else {
++      throw ImageDrawingFailedException()
++    }
++    return flipped
++  }
++}
++
++extension ImageRotateTransformer {
++  func transform(image: NSImage) async throws -> NSImage {
++    guard let cgImage = image.cgImage else {
++      throw ImageNotFoundException()
++    }
++    let rads = rotate * .pi / 180
++    let size = CGSize(width: cgImage.width, height: cgImage.height)
++    let bounds = CGRect(origin: .zero, size: size).applying(CGAffineTransform(rotationAngle: rads))
++    let rotatedSize = CGSize(width: bounds.width.rounded(.down), height: bounds.height.rounded(.down))
++    let rotated = render(size: rotatedSize) { context in
++      context.translateBy(x: rotatedSize.width / 2, y: rotatedSize.height / 2)
++      // Positive angles turn clockwise, as on iOS; CoreGraphics turns counterclockwise.
++      context.rotate(by: -rads)
++      context.draw(cgImage, in: CGRect(origin: CGPoint(x: -size.width / 2, y: -size.height / 2), size: size))
++    }
++    guard let rotated else {
++      throw ImageDrawingFailedException()
++    }
++    return rotated
++  }
++}
++
++extension ImageResizeTransformer {
++  func transform(image: NSImage) async throws -> NSImage {
++    guard let cgImage = image.cgImage else {
++      throw ImageNotFoundException()
++    }
++    let imageRatio = CGFloat(cgImage.width) / CGFloat(cgImage.height)
++    var targetSize = CGSize.zero
++
++    if let width = options.width {
++      targetSize.width = width
++      targetSize.height = width / imageRatio
++    }
++    if let height = options.height {
++      targetSize.height = height
++      targetSize.width = targetSize.width == 0 ? imageRatio * targetSize.height : targetSize.width
++    }
++    let resized = render(size: targetSize) { context in
++      context.interpolationQuality = .high
++      context.draw(cgImage, in: CGRect(origin: .zero, size: targetSize))
++    }
++    guard let resized else {
++      throw ImageDrawingFailedException()
++    }
++    return resized
++  }
++}
++#endif
+diff --git a/ios/ImageManipulatorModule.swift b/ios/ImageManipulatorModule.swift
+index 1f8c73a..ca0588c 100644
+--- a/ios/ImageManipulatorModule.swift
++++ b/ios/ImageManipulatorModule.swift
+@@ -2,7 +2,9 @@
+ 
+ import CoreGraphics
+ import Photos
++#if !os(macOS)
+ import UIKit
++#endif
+ import ExpoModulesCore
+ internal import SDWebImageWebPCoder
+ 
+diff --git a/ios/ImageManipulatorUtils.swift b/ios/ImageManipulatorUtils.swift
+index 13739d5..b5d1d92 100644
+--- a/ios/ImageManipulatorUtils.swift
++++ b/ios/ImageManipulatorUtils.swift
+@@ -9,7 +9,7 @@ internal typealias SaveImageResult = (url: URL, data: Data)
+  */
+ internal func loadImage(atUrl url: URL, appContext: AppContext) async throws -> UIImage {
+   if url.scheme == "data" {
+-    guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else {
++    guard let data = try? Data(contentsOf: url), let image = decodeImage(data) else {
+       throw CorruptedImageDataException()
+     }
+     return image
+@@ -35,12 +35,17 @@ internal func loadImage(atUrl url: URL, appContext: AppContext) async throws ->
+   }
+ 
+   // Read local files directly so UIKit preserves HEIC/EXIF orientation metadata.
+-  guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else {
++  guard let data = try? Data(contentsOf: url), let image = decodeImage(data) else {
+     throw FileSystemReadPermissionException(url.absoluteString)
+   }
+   return image
+ }
+ 
++#if !os(macOS)
++internal func decodeImage(_ data: Data) -> UIImage? {
++  return UIImage(data: data)
++}
++
+ /**
+  Loads the image from user's photo library.
+  */
+@@ -67,6 +72,8 @@ internal func loadImageFromPhotoLibrary(url: URL) async throws -> UIImage {
+   }
+ }
+ 
++#endif
++
+ /**
+  Returns pixel data representation of the image.
+  */
+@@ -81,6 +88,7 @@ func imageData(from image: UIImage, format: ImageFormat, compression: Double) ->
+   }
+ }
+ 
++#if !os(macOS)
+ /**
+  Checks if we are dealing with a ph asset URL and uses the correct method to fetch it.
+  */
+@@ -106,6 +114,7 @@ internal func drawInNewContext(size: CGSize, drawing: (UIGraphicsImageRendererCo
+     drawing(context)
+   }
+ }
++#endif
+ 
+ /**
+  Saves the image as a file.
+@@ -115,7 +124,12 @@ internal func saveImage(_ image: UIImage, options: ManipulateOptions, appContext
+     throw FileSystemNotFoundException()
+   }
+ 
++  #if os(macOS)
++  // macOS shares the user's Caches folder between apps, so each app gets its own subfolder.
++  let directory = URL(fileURLWithPath: cachesDirectory.path).appendingPathComponent(appNamespace).appendingPathComponent("ImageManipulator")
++  #else
+   let directory = URL(fileURLWithPath: cachesDirectory.path).appendingPathComponent("ImageManipulator")
++  #endif
+   let filename = UUID().uuidString.appending(options.format.fileExtension)
+   let fileUrl = directory.appendingPathComponent(filename)
+ 
+diff --git a/ios/Transformers/ImageFlipTransformer.swift b/ios/Transformers/ImageFlipTransformer.swift
+index 2272c13..a64a3a8 100644
+--- a/ios/Transformers/ImageFlipTransformer.swift
++++ b/ios/Transformers/ImageFlipTransformer.swift
+@@ -6,6 +6,7 @@
+ internal struct ImageFlipTransformer: ImageTransformer {
+   let flip: FlipType
+ 
++#if !os(macOS)
+   @MainActor
+   func transform(image: UIImage) async -> UIImage {
+     let imageView = UIImageView(image: image)
+@@ -22,4 +23,5 @@ internal struct ImageFlipTransformer: ImageTransformer {
+       imageView.layer.render(in: context.cgContext)
+     }
+   }
++#endif
+ }
+diff --git a/ios/Transformers/ImageResizeTransformer.swift b/ios/Transformers/ImageResizeTransformer.swift
+index e3ef679..1b578a4 100644
+--- a/ios/Transformers/ImageResizeTransformer.swift
++++ b/ios/Transformers/ImageResizeTransformer.swift
+@@ -6,6 +6,7 @@
+ internal struct ImageResizeTransformer: ImageTransformer {
+   let options: ResizeOptions
+ 
++#if !os(macOS)
+   func transform(image: UIImage) async -> UIImage {
+     let imageWidth = image.size.width
+     let imageHeight = image.size.height
+@@ -31,4 +32,5 @@ internal struct ImageResizeTransformer: ImageTransformer {
+       image.draw(in: CGRect(origin: .zero, size: targetSize))
+     }
+   }
++#endif
+ }
+diff --git a/ios/Transformers/ImageRotateTransformer.swift b/ios/Transformers/ImageRotateTransformer.swift
+index 66aa5cb..158eaf0 100644
+--- a/ios/Transformers/ImageRotateTransformer.swift
++++ b/ios/Transformers/ImageRotateTransformer.swift
+@@ -6,6 +6,7 @@
+ internal struct ImageRotateTransformer: ImageTransformer {
+   let rotate: Double
+ 
++#if !os(macOS)
+   @MainActor
+   func transform(image: UIImage) async throws -> UIImage {
+     guard let cgImage = image.cgImage else {
+@@ -27,4 +28,5 @@ internal struct ImageRotateTransformer: ImageTransformer {
+       cgContext.draw(cgImage, in: CGRect(origin: origin, size: image.size))
+     }
+   }
++#endif
+ }
