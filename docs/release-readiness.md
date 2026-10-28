@@ -11,7 +11,7 @@ exports as supported on every platform. Record new evidence in a completed
 [release dossier](release-test-dossier.md) tied to an immutable source revision
 and exact archive digest.
 
-The package currently declares **56 export paths**. Fifty-four are functional
+The package currently declares **55 export paths**. Fifty-three are functional
 or tooling entry paths and two expose package/schema metadata. An export is a
 public import boundary; it is not evidence that every platform implements or
 passes that feature. Platform-specific support is determined by native package
@@ -21,7 +21,7 @@ availability and the evidence for that platform.
 
 | Group | Export paths |
 | --- | --- |
-| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./menus`, `./notifications`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos`, `./camera` |
+| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./menus`, `./notifications`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos` |
 | UI | `./ui`, `./ui/classnames`, `./ui/glass`, `./ui/search`, `./ui/sidebar`, `./ui/split-view`, `./ui/symbol`, `./ui/swipe`, `./ui/uniwind`, `./markdown`, `./html` |
 | AI and diagnostics | `./ai`, `./ai/codex`, `./diagnostics`, `./contracts`, `./customize` |
 | Configuration and build integration | `./config`, `./config-plugin`, `./expo-config`, `./metro`, `./runtime-entry`, `./metro-gate`, `./init-template`, `./native`, `./cli` |
