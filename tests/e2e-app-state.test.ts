@@ -1,8 +1,12 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { clearAppState, sparkNamespace, statePaths, type AppIdentity, type StateHost } from "../scripts/e2e/app-state.ts";
+
+vi.mock("node:child_process", () => ({ spawnSync: vi.fn() }));
 
 const BUNDLE_ID = "so.legend.spark.examples.kitchensink";
 const KITCHEN_SINK: AppIdentity = { bundleId: BUNDLE_ID, projectId: "c0bdf12f-0f35-4b71-8363-b83097388d7b", sandboxed: false };
@@ -93,5 +97,28 @@ test("clearState refuses relative, empty or root home/temp directories", () => {
   for (const roots of [{ home: "", temp: "/tmp/x" }, { home: "/Users/x", temp: "" }, { home: "relative", temp: "/tmp/x" }, { home: "/", temp: "/tmp/x" }]) {
     const host = { ...roots, running: () => [], deleteDefaults: () => { throw new Error("must not run"); } };
     expect(() => clearAppState(identity, identity.bundleId, host)).toThrow(/not an absolute, non-root path/);
+  }
+});
+
+test.each([
+  [`Domain '${BUNDLE_ID}' not found`, false],
+  [`2026-10-28 defaults[123:456]\nDomain (${BUNDLE_ID}) not found.\nDefaults have not been changed.\n`, false],
+  ["Domain (com.example.other) not found.", true],
+  [`Could not write domain (${BUNDLE_ID}): Permission denied`, true],
+])("defaults failure %s only clears an absent app domain", (stderr, fails) => {
+  const { host: fake } = host();
+  vi.spyOn(os, "homedir").mockReturnValue(fake.home);
+  const result = { pid: 123, output: [], signal: null, status: 0, stdout: "", stderr: "" };
+  vi.mocked(spawnSync)
+    .mockReturnValueOnce({ ...result, stdout: fake.temp })
+    .mockReturnValueOnce(result)
+    .mockReturnValueOnce({ ...result, status: 1, stderr });
+  try {
+    if (fails) expect(() => clearAppState(KITCHEN_SINK, BUNDLE_ID)).toThrow(`defaults delete ${BUNDLE_ID} failed (1): ${stderr.trim()}`);
+    else expect(clearAppState(KITCHEN_SINK, BUNDLE_ID)).toEqual([]);
+    expect(spawnSync).toHaveBeenLastCalledWith("defaults", ["delete", BUNDLE_ID], { encoding: "utf8" });
+  } finally {
+    vi.restoreAllMocks();
+    vi.mocked(spawnSync).mockReset();
   }
 });

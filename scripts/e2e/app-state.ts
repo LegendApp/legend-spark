@@ -84,7 +84,7 @@ function macHost(): StateHost {
     deleteDefaults(domain) {
       const result = text("defaults", ["delete", domain]);
       if (result.status === 0) return true;
-      if (result.stderr.includes(`Domain '${domain}' not found`)) return false;
+      if (result.stderr.includes(`Domain '${domain}' not found`) || result.stderr.includes(`Domain (${domain}) not found.`)) return false;
       throw new Error(`defaults delete ${domain} failed (${result.status}): ${result.stderr.trim()}`);
     },
   };
