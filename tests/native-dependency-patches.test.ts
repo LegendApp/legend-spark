@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createRequire } from "node:module";
-import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { prepareNativePatches } from "../packages/config-plugin/native-patches.cjs";
@@ -57,6 +57,46 @@ test("normal preparation patches nested transitive dependencies, preserves cache
     rmSync(path.join(packages, names[0], "macos"), { recursive: true });
     prepareNativePatches(root);
     expect(readFileSync(path.join(packages, names[0], "macos/View.swift"), "utf8")).toBe("AppKit\n");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test.each(["dependencies", "devDependencies"])("app-owned cameras in %s are patched with nested peers and no Spark camera dependency", (field) => {
+  const { root, spark, packages } = fixture();
+  try {
+    const manifest = JSON.parse(readFileSync(path.join(spark, "package.json"), "utf8"));
+    manifest.dependencies = { "react-native-nitro-modules": "1.0.0" };
+    writeFileSync(path.join(spark, "package.json"), JSON.stringify(manifest));
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "app", dependencies: { "@legendapp/spark": "1.0.0" },
+      [field]: { "@legendapp/spark": "1.0.0", [names[1]]: "1.0.0" } }));
+    const camera = path.join(packages, names[1], "package.json");
+    writeFileSync(camera, JSON.stringify({ ...JSON.parse(readFileSync(camera, "utf8")),
+      peerDependencies: { [names[0]]: "1.0.0", "react-native-nitro-modules": "1.0.0" },
+      peerDependenciesMeta: { "react-native-nitro-modules": { optional: true } } }));
+    const nested = path.join(packages, names[1], "node_modules");
+    mkdirSync(nested);
+    renameSync(path.join(packages, names[0]), path.join(nested, names[0]));
+    const patched = prepareNativePatches(root);
+    expect(Object.keys(patched).sort()).toEqual([...names, "react-native-nitro-modules"].sort());
+    expect(nativePackages(root).map(pkg => pkg.name).sort()).toEqual([...names, "react-native-nitro-modules"].sort());
+    expect(readFileSync(path.join(nested, names[0], "Native.podspec"), "utf8")).toBe("patched\n");
+    const before = readFileSync(path.join(nested, names[0], "package.json"), "utf8");
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(nested, names[0], "package.json"), "utf8")).toBe(before);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("camera patches are opt-in and Nitro Image does not activate VisionCamera", () => {
+  const { root, spark, packages } = fixture();
+  try {
+    const manifest = JSON.parse(readFileSync(path.join(spark, "package.json"), "utf8"));
+    manifest.dependencies = { "react-native-nitro-modules": "1.0.0" };
+    writeFileSync(path.join(spark, "package.json"), JSON.stringify(manifest));
+    expect(prepareNativePatches(root)).toEqual({});
+    expect(readFileSync(path.join(packages, names[0], "Native.podspec"), "utf8")).toBe("upstream\n");
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "app", dependencies: { "@legendapp/spark": "1.0.0", [names[0]]: "1.0.0" } }));
+    expect(Object.keys(prepareNativePatches(root)).sort()).toEqual([names[0], "react-native-nitro-modules"]);
+    expect(readFileSync(path.join(packages, names[0], "Native.podspec"), "utf8")).toBe("patched\n");
+    expect(readFileSync(path.join(packages, names[1], "Native.podspec"), "utf8")).toBe("upstream\n");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

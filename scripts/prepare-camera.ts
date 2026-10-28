@@ -19,7 +19,7 @@ export async function installCameraPackages(root: string) {
   const pkg = readJson(path.join(root, "package.json"));
   const manager = packageManager(root);
   const dependencies = Object.fromEntries(Object.entries(packages).map(([name, archive]) => [name, localArchive(archive)]));
-  pkg.dependencies = { ...pkg.dependencies, ...dependencies };
+  pkg.dependencies = { ...pkg.dependencies, "react-native-vision-camera": "5.2.3", "react-native-nitro-image": "0.15.2", ...dependencies };
   applyOverrides(pkg, dependencies, manager);
   writePackageConfig(root, pkg, manager);
   await run(root, managerCommand(manager, ["install"]), { capture: true });

@@ -7,15 +7,6 @@ import { expect, test } from "vitest";
 // inherently tied to React context/rendering. Adding a hook requires this review.
 const policy: Record<string, Record<string, { imperative: string } | { reactOnly: string }>> = {
   "./customize": { useCustomizeState: { imperative: "getCustomizeState" } },
-  "./camera": {
-    useCamera: { imperative: "VisionCamera.createCameraSession" },
-    useCameraDevice: { imperative: "getCameraDevice" },
-    useCameraDevices: { imperative: "getAllCameraDevices" },
-    useCameraPermission: { imperative: "VisionCamera.requestCameraPermission" },
-    useMicrophonePermission: { imperative: "VisionCamera.requestMicrophonePermission" },
-    usePhotoOutput: { imperative: "VisionCamera.createPhotoOutput" },
-    useVideoOutput: { imperative: "VisionCamera.createVideoOutput" },
-  },
   "./audio": { useAudioPlayer: { imperative: "createAudioPlayer" } },
   "./menus": { useMenu: { imperative: "createMenu" } },
   "./shortcuts/commands": {

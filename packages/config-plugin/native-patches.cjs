@@ -18,8 +18,10 @@ function prepareNativePatches(root) {
   const directory = path.dirname(sparkFile);
   const patchesRoot = spark.spark?.bundledModuleRoot
     ? path.join(directory, "patches") : path.resolve(__dirname, "../../patches");
+  const dependencies = { ...spark.dependencies, ...app.dependencies, ...app.devDependencies };
+  const hasCamera = cameraPackages.some(name => dependencies[name]);
   const pins = {};
-  if (cameraPackages.some(name => spark.dependencies?.[name])) {
+  if (hasCamera) {
     const cameraPins = JSON.parse(fs.readFileSync(path.join(patchesRoot, "camera/upstream.json"), "utf8"));
     for (const name of ["react-native-nitro-modules", ...cameraPackages]) {
       pins[name] = { ...cameraPins[name], patch: `camera/${name}.patch`,
@@ -28,7 +30,9 @@ function prepareNativePatches(root) {
   }
   const integrations = path.join(patchesRoot, "dependencies.json");
   if (fs.existsSync(integrations)) Object.assign(pins, JSON.parse(fs.readFileSync(integrations, "utf8")));
-  const active = Object.keys(pins).filter(name => spark.dependencies?.[name]);
+  const active = Object.keys(pins).filter(name => dependencies[name] ||
+    (hasCamera && name === "react-native-nitro-modules") ||
+    (dependencies["react-native-vision-camera"] && name === "react-native-nitro-image"));
   if (!active.length) return {};
   const { parsePatch, applyPatch, reversePatch } = require("diff");
   const queue = [appRequire, createRequire(sparkFile)];
@@ -40,8 +44,7 @@ function prepareNativePatches(root) {
       try { file = req.resolve(`${name}/package.json`); }
       catch (error) {
         if (error.code !== "MODULE_NOT_FOUND") throw error;
-        if (req === appRequire) continue;
-        throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
+        continue;
       }
       if (!fs.existsSync(file)) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
       const packageRoot = fs.realpathSync(path.dirname(file));
@@ -99,6 +102,9 @@ function prepareNativePatches(root) {
         fs.writeFileSync(temporary, serialized); fs.renameSync(temporary, file);
       }
     }
+  }
+  for (const name of active) {
+    if (!packages[name]) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
   }
   return packages;
 }

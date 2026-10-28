@@ -1,14 +1,17 @@
 # Camera
 
-Spark includes VisionCamera 5.2.3, Nitro Image 0.15.2, and shared Nitro Modules
-0.37.0 as pinned npm dependencies. Installing Spark installs these libraries;
-their implementations remain ordinary package-manager dependencies. Spark ships
-the compatibility patches, not extracted copies of those libraries.
+Apps install VisionCamera 5.2.3 and Nitro Image 0.15.2 directly, together with
+Nitro Modules 0.37.0. Spark ships version-pinned macOS compatibility patches
+and applies them automatically when the app depends on these libraries.
+
+```sh
+bun add react-native-vision-camera@5.2.3 react-native-nitro-image@0.15.2 react-native-nitro-modules@0.37.0
+```
 
 ```tsx
 import {
   Camera, useCameraDevices, useCameraPermission, usePhotoOutput,
-} from "@legendapp/spark/camera";
+} from "react-native-vision-camera";
 
 import { Button } from "react-native";
 
@@ -21,17 +24,14 @@ function PhotoCamera() {
 }
 ```
 
-`/camera` is an explicit VisionCamera integration: its component, hooks, and
-types retain upstream semantics. It exports the common device, permission,
-photo, video, and session APIs, plus `NitroImage` and its `Image` type for displaying
-captured photos. Advanced upstream APIs remain available from
-`react-native-vision-camera` directly. Spark does not promise backend-independent
-camera contracts.
+Import camera components, hooks, and types from `react-native-vision-camera`.
+Import `NitroImage` and its `Image` type from `react-native-nitro-image` to display
+captured photos. These libraries retain their upstream APIs and lifetimes.
 
 Imperative callers use the same `VisionCamera` factory without mounting React:
 
 ```ts
-import { VisionCamera } from "@legendapp/spark/camera";
+import { VisionCamera } from "react-native-vision-camera";
 
 const granted = await VisionCamera.requestCameraPermission();
 const factory = await VisionCamera.createDeviceFactory();

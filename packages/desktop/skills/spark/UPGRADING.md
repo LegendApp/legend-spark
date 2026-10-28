@@ -320,3 +320,12 @@ desktop app by itself, such as with `--no-open`.
 
 No changes are needed in existing apps. Update `@legendapp/spark` to `0.0.1`
 and reinstall.
+
+## Next version
+
+Breaking: yes. `@legendapp/spark/camera` was removed. Install
+`react-native-vision-camera@5.2.3` and `react-native-nitro-image@0.15.2` in your
+app, with `react-native-nitro-modules@0.37.0`. Import camera APIs directly from
+`react-native-vision-camera`, and `NitroImage` / `Image` from
+`react-native-nitro-image`. Spark still applies its version-pinned native patches
+automatically when your app depends on these libraries. Rebuild custom runtimes.
