@@ -58,6 +58,6 @@ if (mode === "schema") {
     ? await gateCommand(args, path.join(repo, "e2e"), { ...hostEnv(), signal: controller.signal })
     : await runCommand(args, { backends: BACKENDS, stdout: line => console.log(line), stderr: line => console.error(line), signal: controller.signal });
 } else {
-  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--dry-run] | bun run e2e:golden approve <path> [--to <golden id>]");
+  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--pointer] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--dry-run] | bun run e2e:golden approve <path> [--to <golden id>]");
   process.exitCode = 2;
 }
