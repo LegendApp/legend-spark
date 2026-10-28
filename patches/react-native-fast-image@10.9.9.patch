@@ -1,9 +1,9 @@
 diff --git a/src/index.macos.tsx b/src/index.macos.tsx
 new file mode 100644
-index 0000000..7808d99
+index 0000000..0d10daf
 --- /dev/null
 +++ b/src/index.macos.tsx
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,125 @@
 +// FastImage on macOS: React Native's Image stands in for the native view, which is
 +// UIKit only. Sources (uri, headers, require()), objectFit, tintColor, placeholder and
 +// defaultSource while loading, and the load events work; Image's own caches replace
@@ -12,6 +12,7 @@ index 0000000..7808d99
 +import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 +import { Image, StyleSheet, View, type ImageResizeMode } from 'react-native'
 +import { cacheControl, priority, resizeMode } from './constants'
++import { splitBackgroundProps } from './backgroundProps'
 +import type {
 +    ClearCacheResult,
 +    FastImageBackgroundProps,
@@ -20,7 +21,6 @@ index 0000000..7808d99
 +    FastImageStaticProperties,
 +    ObjectFit,
 +    PreloadResult,
-+    Source,
 +} from './index'
 +
 +export type * from './index'
@@ -40,10 +40,11 @@ index 0000000..7808d99
 +function imageSource(source: FastImageProps['source']) {
 +    const sources = (Array.isArray(source) ? source : [source]) as (OneSource | undefined)[]
 +    const area = (one: OneSource | undefined) => typeof one === 'object' ? (one.width ?? 0) * (one.height ?? 0) : 0
-+    const largest = sources.reduce((best, next) => area(next) < area(best) ? best : next, sources[0])
-+    // Keep scale, so a @2x source draws at its point size.
++    const selected = sources.reduce((best, next) => area(next) < area(best) ? best : next, sources[0])
++    const largest = typeof selected === 'number' ? Image.resolveAssetSource(selected) : selected
++    // RN Image copies source dimensions into its layout; let the container set the size.
 +    return typeof largest === 'object'
-+        ? { uri: largest.uri, headers: largest.headers, width: largest.width, height: largest.height, scale: largest.scale }
++        ? { uri: largest.uri, headers: 'headers' in largest ? largest.headers : undefined, scale: largest.scale }
 +        : largest
 +}
 +
@@ -60,7 +61,7 @@ index 0000000..7808d99
 +        : placeholder && 'uri' in placeholder && placeholder.uri ? { uri: placeholder.uri, headers: placeholder.headers }
 +        : defaultSource
 +    return <View ref={view} {...props} style={[styles.container, style]}>
-+        {!loaded && fallback !== undefined && <Image source={fallback} resizeMode={fits[objectFit]} style={StyleSheet.absoluteFill} />}
++        {!loaded && fallback !== undefined && <Image source={imageSource(fallback) as never} resizeMode={fits[objectFit]} style={StyleSheet.absoluteFill} />}
 +        <Image
 +            key={attempt}
 +            source={imageSource(source) as never}
@@ -108,19 +109,20 @@ index 0000000..7808d99
 +    clearDiskCache: () => unsupported('clearDiskCache') as Promise<ClearCacheResult>,
 +    getCachePath: () => unsupported('getCachePath') as never,
 +    writeToCache: () => unsupported('writeToCache') as never,
-+    configureCache: () => Promise.reject(new Error('FastImage.configureCache is not supported on macOS')),
++    configureCache: () => unsupported('configureCache') as never,
 +    setDefaults: () => {},
 +}
 +
 +const FastImage = Object.assign(FastImageComponent, statics)
 +
 +export const FastImageBackground = forwardRef<View, FastImageBackgroundProps>(
-+    ({ style, imageStyle, imageRef, imageProps, children, ...props }, ref) => (
-+        <View ref={ref} style={style}>
-+            <FastImageComponent {...(props as FastImageProps)} {...imageProps} style={[StyleSheet.absoluteFill, imageStyle]} ref={imageRef} />
++    ({ style, imageStyle, imageRef, imageProps, children, ...props }, ref) => {
++        const [image, container] = splitBackgroundProps(props, imageProps)
++        return <View ref={ref} {...container} style={style}>
++            <FastImageComponent {...image} style={[StyleSheet.absoluteFill, imageStyle]} ref={imageRef} />
 +            {children}
 +        </View>
-+    ),
++    },
 +)
 +FastImageBackground.displayName = 'FastImageBackground'
 +

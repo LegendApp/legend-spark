@@ -3,11 +3,16 @@ name: react-native-fast-image on macOS
 intent: >
   The FastImage screen writes a 4×2 PNG to the app's data folder and shows it with FastImage. onLoad reports
   4×2, a reload through the ref loads it again, and FastImage.preload resolves ok with the size, so the
-  screen shows passed.
+  screen shows passed. configureCache resolves a specific not-ok result. A bundled image loads in a
+  FastImageBackground whose testID and layout callback belong to the 120×60 container, and a URI object
+  placeholder remains visible when the main source fails; the screenshot captures their sizing.
 checks: [DISP-FASTIMAGE-01]
 tags: [displays-graphics]
 platforms: [macos]
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/fast-image" }
 - extendedWaitUntil: { visible: { id: displays-graphics-fast-image-passed }, timeout: 10s }
+- assertVisible: { id: displays-graphics-fast-image-background }
+- extendedWaitUntil: { visible: { id: displays-graphics-fast-image-background-passed }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: displays-graphics-fast-image-placeholder-ready }, timeout: 10s }
 - takeScreenshot: fast-image
