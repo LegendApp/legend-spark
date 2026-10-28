@@ -1,9 +1,9 @@
 diff --git a/src/index.macos.tsx b/src/index.macos.tsx
 new file mode 100644
-index 0000000..74fa5b1
+index 0000000..7808d99
 --- /dev/null
 +++ b/src/index.macos.tsx
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,123 @@
 +// FastImage on macOS: React Native's Image stands in for the native view, which is
 +// UIKit only. Sources (uri, headers, require()), objectFit, tintColor, placeholder and
 +// defaultSource while loading, and the load events work; Image's own caches replace
@@ -41,7 +41,10 @@ index 0000000..74fa5b1
 +    const sources = (Array.isArray(source) ? source : [source]) as (OneSource | undefined)[]
 +    const area = (one: OneSource | undefined) => typeof one === 'object' ? (one.width ?? 0) * (one.height ?? 0) : 0
 +    const largest = sources.reduce((best, next) => area(next) < area(best) ? best : next, sources[0])
-+    return typeof largest === 'object' ? { uri: largest.uri, headers: largest.headers } : largest
++    // Keep scale, so a @2x source draws at its point size.
++    return typeof largest === 'object'
++        ? { uri: largest.uri, headers: largest.headers, width: largest.width, height: largest.height, scale: largest.scale }
++        : largest
 +}
 +
 +const FastImageComponent = forwardRef<FastImageRef, FastImageProps>(({
@@ -52,7 +55,10 @@ index 0000000..74fa5b1
 +    const [attempt, setAttempt] = useState(0)
 +    const [loaded, setLoaded] = useState(false)
 +    useImperativeHandle(ref, () => Object.assign(view.current ?? {}, { reload: () => { setLoaded(false); setAttempt(value => value + 1) } }) as FastImageRef, [])
-+    const fallback = typeof placeholder === 'number' ? placeholder : typeof placeholder === 'string' ? { uri: placeholder } : defaultSource
++    const fallback = typeof placeholder === 'number' ? placeholder
++        : typeof placeholder === 'string' ? { uri: placeholder }
++        : placeholder && 'uri' in placeholder && placeholder.uri ? { uri: placeholder.uri, headers: placeholder.headers }
++        : defaultSource
 +    return <View ref={view} {...props} style={[styles.container, style]}>
 +        {!loaded && fallback !== undefined && <Image source={fallback} resizeMode={fits[objectFit]} style={StyleSheet.absoluteFill} />}
 +        <Image
