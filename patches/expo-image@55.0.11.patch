@@ -1,16 +1,16 @@
 diff --git a/src/ExpoImage.macos.tsx b/src/ExpoImage.macos.tsx
 new file mode 100644
-index 0000000..9303bf4
+index 0000000..cd859ac
 --- /dev/null
 +++ b/src/ExpoImage.macos.tsx
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,128 @@
 +// expo-image on macOS: React Native's Image stands in for the native view, which is UIKit
 +// only. Sources (uri, headers, require(); the largest of several sizes), placeholders while
 +// loading, contentFit, tintColor, the load events and reloadAsync work. Its SDWebImage
 +// caches, blurhash/thumbhash and SF Symbol sources, contentPosition, transitions and
 +// ImageRef sources are not supported; such a source reports onError.
 +import React from 'react';
-+import { Image, StyleSheet, View, type ImageResizeMode } from 'react-native';
++import { Image, StyleSheet, View, type ImageProps, type ImageResizeMode } from 'react-native';
 +
 +import type { ImageContentFit, ImageNativeProps, ImageSource } from './Image.types';
 +
@@ -29,9 +29,29 @@ index 0000000..9303bf4
 +  return drawable.reduce<ImageSource | undefined>((best, next) => (best && area(best) >= area(next) ? best : next), undefined);
 +}
 +
-+// require() assets keep the scale React Native resolved, so a @2x image draws at its point size.
-+function drawable({ uri, headers, width, height, scale }: ImageSource & { scale?: number }) {
-+  return { uri, headers, width: width ?? undefined, height: height ?? undefined, scale };
++// RN Image copies source dimensions into its layout; let contentFit control the size.
++function ImageWithFit({ source, contentFit, style, ...props }: Omit<ImageProps, 'source'> & {
++  source: ImageSource & { scale?: number }; contentFit: ImageContentFit;
++}) {
++  const { uri, headers, scale = 1 } = source;
++  const [size, setSize] = React.useState<{ uri: string; width: number; height: number }>();
++  React.useEffect(() => {
++    if (contentFit !== 'none' || !uri) return;
++    let active = true;
++    Image.getSizeWithHeaders(uri, headers ?? {}).then(({ width, height }) => {
++      if (active) setSize({ uri, width, height });
++    }, () => {}); // The Image's onError reports load failures.
++    return () => { active = false; };
++  }, [uri, headers, contentFit]);
++  const width = size && size.uri === uri ? size.width / scale : (source.width ?? 0);
++  const height = size && size.uri === uri ? size.height / scale : (source.height ?? 0);
++  return <Image {...props} source={{ uri, headers, scale }} resizeMode={fits[contentFit]} style={[
++    StyleSheet.absoluteFill, style,
++    contentFit === 'none' && {
++      width, height, left: '50%', top: '50%', right: undefined, bottom: undefined,
++      transform: [{ translateX: -width / 2 }, { translateY: -height / 2 }],
++    },
++  ]} />;
 +}
 +
 +class ExpoImage extends React.PureComponent<ImageNativeProps, { attempt: number; loaded: boolean }> {
@@ -77,14 +97,14 @@ index 0000000..9303bf4
 +    return (
 +      <View ref={containerViewRef as never} {...(props as object)} accessibilityLabel={accessibilityLabel ?? alt} style={[styles.container, style]}>
 +        {!this.state.loaded && fallback && (
-+          <Image source={drawable(fallback)} resizeMode={fits[placeholderContentFit]} style={[StyleSheet.absoluteFill, tint]} />
++          <ImageWithFit source={fallback} contentFit={placeholderContentFit} style={tint} />
 +        )}
 +        {image && (
-+          <Image
++          <ImageWithFit
 +            key={this.state.attempt}
-+            source={drawable(image)}
-+            resizeMode={fits[contentFit]}
-+            style={[StyleSheet.absoluteFill, tint]}
++            source={image}
++            contentFit={contentFit}
++            style={tint}
 +            onLoadStart={() => onLoadStart?.()}
 +            onProgress={event => onProgress?.({ loaded: event.nativeEvent.loaded, total: event.nativeEvent.total })}
 +            onLoad={event => {
