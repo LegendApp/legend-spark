@@ -149,7 +149,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   Check(SparkTestDriverStart() && SparkTestDriverActive(), @"driver start");
   // Optional modules add commands; built-in and duplicate names are refused.
   SparkTestDriverRegisterCommand(@"echo", ^(NSDictionary *request, SparkTestDriverReply reply) { reply(@{ @"ok": @YES, @"echo": request[@"value"] ?: NSNull.null }); });
-  for (NSString *taken in @[@"ping", @"openFile", @"echo"]) {
+  for (NSString *taken in @[@"ping", @"openFile", @"pointerEvents", @"echo"]) {
     BOOL refused = NO;
     @try { SparkTestDriverRegisterCommand(taken, ^(NSDictionary *, SparkTestDriverReply reply) { reply(@{ @"ok": @NO }); }); } @catch (NSException *) { refused = YES; }
     Check(refused, [NSString stringWithFormat:@"%@ cannot be registered twice", taken]);
@@ -188,6 +188,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check([hello[@"ok"] boolValue] && [hello[@"protocol"] isEqual:@1], @"authenticated");
     Check([Request(fd, @{ @"command": @"ping" })[@"ok"] boolValue], @"ping");
     Check([Code(Request(fd, @{ @"command": @"fly" })) isEqual:@"E_UNKNOWN_COMMAND"], @"unknown command");
+    Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"id:missing", @"x": @10, @"y": @20 })) isEqual:@"E_NO_WINDOW"], @"pointer requires an existing window");
+    for (id x in @[@-1, @400, @"bad", NSNull.null])
+      Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": x, @"y": @20 })) isEqual:@"E_INVALID_ARGUMENT"], @"pointer coordinates must be inside the frame");
     Check([Request(fd, @{ @"command": @"navigate", @"url": @"spark-ks://windows/frame" })[@"ok"] boolValue], @"navigate");
     Check([Code(Request(fd, @{ @"command": @"navigate", @"url": @"file:///etc/hosts" })) isEqual:@"E_INVALID_ARGUMENT"], @"file URLs are not navigation");
     Check([Request(fd, @{ @"command": @"openFile", @"path": @"/etc/hosts" })[@"ok"] boolValue], @"openFile");
@@ -233,6 +236,24 @@ int main(int argc, char **argv) { @autoreleasepool {
     // Two requests in one write are answered in order.
     SendRaw(fd, @"{\"id\":\"a\",\"command\":\"ping\"}\n{\"id\":\"b\",\"command\":\"ping\"}\n");
     Check([Receive(fd)[@"id"] isEqual:@"a"] && [Receive(fd)[@"id"] isEqual:@"b"], @"pipelined requests");
+    dispatch_sync(dispatch_get_main_queue(), ^{
+      [window setFrameOrigin:NSMakePoint(100, 150)];
+    });
+    NSDictionary *pointer = Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60 });
+    Check([pointer[@"ok"] boolValue], [NSString stringWithFormat:@"pointer window geometry: %@", pointer]);
+    for (NSString *key in @[@"down", @"up"]) {
+      NSData *data = [[NSData alloc] initWithBase64EncodedString:pointer[key] options:0];
+      CGEventRef event = CGEventCreateFromData(NULL, (__bridge CFDataRef)data);
+      Check(event != NULL, @"pointer event data decodes");
+      NSEvent *mouse = [NSEvent eventWithCGEvent:event];
+      CGPoint screen = CGEventGetLocation(event);
+      Check(mouse.windowNumber == window.windowNumber && fabs(mouse.locationInWindow.x - 50) < 1 && fabs(mouse.locationInWindow.y - (NSHeight(window.frame) - 60)) < 1, [NSString stringWithFormat:@"encoded events preserve the window and AppKit-local hit point: %@ global=%@ frame=%@", NSStringFromPoint(mouse.locationInWindow), NSStringFromPoint(NSPointFromCGPoint(screen)), NSStringFromRect(window.frame)]);
+      Check(fabs(screen.x - (NSMinX(window.frame) + 50)) < 0.1 && fabs(screen.y - (NSMaxY(NSScreen.screens.firstObject.frame) - NSMaxY(window.frame) + 60)) < 0.1, @"encoded events preserve Quartz screen coordinates");
+      Check(CGEventGetType(event) == ([key isEqual:@"down"] ? kCGEventLeftMouseDown : kCGEventLeftMouseUp), @"pointer encodes mouse down then up");
+      CFRelease(event);
+    }
+    Check([pointer[@"pid"] intValue] == getpid(), @"pointer events target the owning process");
+    Check(window.isVisible, @"pointerEvents explicitly shows the hidden window");
     Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
     Check(Receive(fd) == nil, @"quit ends the session");
     finished = YES;

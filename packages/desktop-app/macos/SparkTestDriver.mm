@@ -1,4 +1,5 @@
 #import "SparkTestDriver.h"
+#import <CoreGraphics/CoreGraphics.h>
 #import <QuartzCore/QuartzCore.h>
 #include <atomic>
 #include <fcntl.h>
@@ -30,7 +31,7 @@ static void SparkDriverTerminate(void) { ending = YES; [NSApp terminate:nil]; }
 BOOL SparkTestDriverActive(void) { return active; }
 BOOL SparkTestDriverEnding(void) { return ending; }
 void SparkTestDriverDidMount(void) { lastMount = CACurrentMediaTime(); }
-static NSArray<NSString *> *const SparkBuiltInCommands = @[@"ping", @"navigate", @"openFile", @"waitFor", @"setAppAppearance", @"capture", @"quit"];
+static NSArray<NSString *> *const SparkBuiltInCommands = @[@"ping", @"navigate", @"openFile", @"waitFor", @"setAppAppearance", @"capture", @"pointerEvents", @"quit"];
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *SparkModuleCommands(void) {
   static NSMutableDictionary *commands;
   static dispatch_once_t once;
@@ -228,6 +229,35 @@ static void SparkOpenURL(NSURL *url, NSDictionary *request, SparkDriverReply rep
     reply(@{ @"ok": @YES });
   });
 }
+static void SparkPointerEvents(NSDictionary *request, SparkDriverReply reply) {
+  NSString *failure = nil;
+  NSWindow *window = SparkResolveWindow(request[@"window"], &failure);
+  if (!window) { reply(SparkFailure(@"E_NO_WINDOW", failure)); return; }
+  id x = request[@"x"], y = request[@"y"];
+  NSView *root = SparkFrameView(window);
+  if (![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class] ||
+      !isfinite([x doubleValue]) || !isfinite([y doubleValue]) ||
+      [x doubleValue] < 0 || [y doubleValue] < 0 || [x doubleValue] >= NSWidth(root.bounds) || [y doubleValue] >= NSHeight(root.bounds)) {
+    reply(SparkFailure(@"E_INVALID_ARGUMENT", @"pointerEvents expects x,y inside the captured window frame (top-left points)")); return;
+  }
+  // Normal driver windows are never ordered, so no on-screen CGWindow lookup can find them.
+  window.animationBehavior = NSWindowAnimationBehaviorNone;
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  [window makeKeyAndOrderFront:nil];
+  [window layoutIfNeeded];
+  root = SparkFrameView(window);
+  NSPoint local = NSMakePoint(NSMinX(root.bounds) + [x doubleValue], root.isFlipped ? NSMinY(root.bounds) + [y doubleValue] : NSMaxY(root.bounds) - [y doubleValue]);
+  NSPoint windowPoint = [root convertPoint:local toView:nil];
+  NSMutableArray<NSString *> *events = [NSMutableArray new];
+  NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+  for (NSUInteger i = 0; i < 2; i++) {
+    NSEvent *event = [NSEvent mouseEventWithType:i == 0 ? NSEventTypeLeftMouseDown : NSEventTypeLeftMouseUp location:windowPoint modifierFlags:0 timestamp:now + i * 0.05 windowNumber:window.windowNumber context:nil eventNumber:i + 1 clickCount:1 pressure:i == 0 ? 1 : 0];
+    NSData *data = event.CGEvent ? CFBridgingRelease(CGEventCreateData(NULL, event.CGEvent)) : nil;
+    if (!data) { reply(SparkFailure(@"E_EVENT", @"Could not encode mouse events for the target window")); return; }
+    [events addObject:[data base64EncodedStringWithOptions:0]];
+  }
+  reply(@{ @"ok": @YES, @"pid": @(getpid()), @"down": events[0], @"up": events[1] });
+}
 static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   NSString *command = request[@"command"];
   if ([command isEqual:@"ping"]) reply(@{ @"ok": @YES });
@@ -261,6 +291,7 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   }
   else if ([command isEqual:@"setAppAppearance"]) SparkSetAppearance(request, reply);
   else if ([command isEqual:@"capture"]) SparkCapture(request, reply);
+  else if ([command isEqual:@"pointerEvents"]) SparkPointerEvents(request, reply);
   else if ([command isKindOfClass:NSString.class] && SparkModuleCommands()[command]) SparkModuleCommands()[command](request, reply);
   else reply(SparkFailure(@"E_UNKNOWN_COMMAND", [NSString stringWithFormat:@"Unknown command %@", command]));
 }
