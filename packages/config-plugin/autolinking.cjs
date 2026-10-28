@@ -35,8 +35,9 @@ function installAutolinkingPatch(root) {
 // Packages such as Codex declare iOS for the desktop autolinker in their own
 // react-native.config.js, so pass the native selection's exclusions to its CLI.
 function excludeNativeModules(podfile, excluded) {
-  const call = /use_native_modules!\(config_command(?: \+ \[[^\]]*\])?\)/;
+  const call = /use_native_modules!\(config_command(?: \+ \[[^\]]*\])*\)/;
   if (!call.test(podfile)) throw new Error("The macOS Podfile no longer calls use_native_modules!(config_command); review spark's native selection.");
-  return podfile.replace(call, `use_native_modules!(config_command + ${JSON.stringify(excluded.flatMap(name => ["--exclude", name]))})`);
+  // RN writes the filtered codegen input beneath sourceDir; Expo's iOS default points at the wrong tree.
+  return podfile.replace(call, `use_native_modules!(config_command + ["--source-dir", __dir__] + ${JSON.stringify(excluded.flatMap(name => ["--exclude", name]))})`);
 }
 module.exports = { patchAutolinkingSource, installAutolinkingPatch, excludeNativeModules };
