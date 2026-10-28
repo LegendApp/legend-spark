@@ -145,6 +145,7 @@
         "react-native-enriched-markdown": "1.1.1",
         "react-native-fast-image": "10.9.9",
         "react-native-gesture-handler": "2.30.0",
+        "react-native-graph": "1.4.0",
         "react-native-keyboard-controller": "1.22.9",
         "react-native-macos": "0.83.0",
         "react-native-mmkv": "4.3.2",
@@ -2481,6 +2482,8 @@
     "react-native-fast-image": ["react-native-fast-image@10.9.9", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-Dev69p1kcTxx7qLLFwax5hB/3X5wMNpviUIXS6K6KnITyhu+O2AEUhenZoq2OmGnT9UzHBIYHkEKoFebZNK/lA=="],
 
     "react-native-gesture-handler": ["react-native-gesture-handler@2.30.0", "", { "dependencies": { "@egjs/hammerjs": "^2.0.17", "hoist-non-react-statics": "^3.3.0", "invariant": "^2.2.4" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-5YsnKHGa0X9C8lb5oCnKm0fLUPM6CRduvUUw2Bav4RIj/C3HcFh4RIUnF8wgG6JQWCL1//gRx4v+LVWgcIQdGA=="],
+
+    "react-native-graph": ["react-native-graph@1.4.0", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-reanimated": "*" } }, "sha512-Mh0P3kXWrbg9WxPAgce3a+XzKSE36sE9lSi+VwXw/5Ps1VChsa4eApI8LHqpcdvlWH7qjCNk5cSdFkGDuA8Kgw=="],
 
     "react-native-is-edge-to-edge": ["react-native-is-edge-to-edge@1.3.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-NIXU/iT5+ORyCc7p0z2nnlkouYKX425vuU1OEm6bMMtWWR9yvb+Xg5AZmImTKoF9abxCPqrKC3rOZsKzUYgYZA=="],
 
