@@ -10,7 +10,12 @@ const ID = "component-library-bottom-sheet";
 export function BottomSheetDemo() {
   const sheet = useRef<BottomSheet>(null);
   const [index, setIndex] = useState(0);
-  useEffect(() => { const timer = setTimeout(() => sheet.current?.snapToIndex(1), 500); return () => clearTimeout(timer); }, []);
+  // The sheet ignores snaps until it has measured its layout, so keep asking until it reports index 1.
+  useEffect(() => {
+    if (index === 1) return;
+    const timer = setInterval(() => sheet.current?.snapToIndex(1), 300);
+    return () => clearInterval(timer);
+  }, [index]);
   return <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={{ flex: 1, padding: 24 }}>
       <Text className="font-mono text-xs text-foreground" testID={`${ID}-index-${index}`}>{`sheet index ${index}`}</Text>
