@@ -41,3 +41,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-status-bar.md"
+  COMP-EXPOROUTER-01:
+    title: expo-router renders file-based routes on macOS and pushes a dynamic route with search params
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/expo-router.md"
