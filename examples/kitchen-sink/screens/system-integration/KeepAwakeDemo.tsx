@@ -13,21 +13,35 @@ async function asserted() {
   return new TextDecoder().decode(result.stdout).split("\n").some(line => line.includes("PreventUserIdleDisplaySleep") && line.includes('"expo-keep-awake"'));
 }
 
+/** Polls pmset until the assertion matches `expected`, for up to two seconds. */
+async function settles(expected: boolean) {
+  for (let waited = 0; waited < 2000; waited += 100) {
+    if (await asserted() === expected) return true;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
 async function check() {
-  const before = await asserted();
-  await activateKeepAwakeAsync(TAG);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const during = await asserted();
-  await deactivateKeepAwake(TAG);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const after = await asserted();
-  return [before && "asserted before activate", !during && "no assertion while active", after && "assertion kept after deactivate"].filter(Boolean);
+  // Development builds hold their own keep-awake tag (Expo's dev tools), so the assertion can already be
+  // present; then only the active state is checked.
+  const shared = await asserted();
+  try {
+    await activateKeepAwakeAsync(TAG);
+    if (!await settles(true)) return ["no assertion while active"];
+  } finally {
+    await deactivateKeepAwake(TAG);
+  }
+  return shared || await settles(false) ? [] : ["assertion kept after deactivate"];
 }
 
 /** expo-keep-awake through its own API; Spark's patch gives macOS a power assertion. */
 export function KeepAwakeDemo() {
   const [result, setResult] = useState<string>();
-  useEffect(() => { check().then(failures => setResult(failures.length ? `failed: ${failures.join(", ")}` : "passed"), error => setResult(`failed: ${String(error)}`)); }, []);
+  useEffect(() => {
+    check().then(failures => setResult(failures.length ? `failed: ${failures.join(", ")}` : "passed"), error => setResult(`failed: ${String(error)}`));
+    return () => void deactivateKeepAwake(TAG);
+  }, []);
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-3 p-6">
     <Text className="text-sm text-muted">Activates keep-awake, checks pmset lists the display-sleep assertion, then deactivates and checks it is gone.</Text>
     <Text selectable className="font-mono text-xs text-foreground" testID={result ? `${ID}-${result === "passed" ? "passed" : "failed"}` : undefined}>{result ?? "running"}</Text>

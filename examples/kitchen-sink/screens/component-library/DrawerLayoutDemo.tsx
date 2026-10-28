@@ -4,6 +4,7 @@ import { Drawer } from "react-native-drawer-layout";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 // Test IDs: component-library-drawer-layout-opened and -closed after the drawer opens, then closes again.
+// The drawer also reports onClose when it mounts closed, so events count only from the first open.
 const ID = "component-library-drawer-layout";
 
 /** react-native-drawer-layout through its own API, on Reanimated and Gesture Handler. */
@@ -16,7 +17,7 @@ export function DrawerLayoutDemo() {
     return () => { clearTimeout(opening); clearTimeout(closing); };
   }, []);
   return <GestureHandlerRootView style={{ flex: 1 }}>
-    <Drawer open={open} onOpen={() => { setOpen(true); setEvents(previous => [...previous, "opened"]); }} onClose={() => { setOpen(false); setEvents(previous => [...previous, "closed"]); }}
+    <Drawer open={open} onOpen={() => { setOpen(true); setEvents(previous => [...previous, "opened"]); }} onClose={() => { setOpen(false); setEvents(previous => previous.includes("opened") ? [...previous, "closed"] : previous); }}
       drawerStyle={{ backgroundColor: "#1e293b" }} renderDrawerContent={() => <View style={{ padding: 24 }}><Text style={{ color: "white" }}>Drawer content</Text></View>}>
       <View style={{ flex: 1, padding: 24, gap: 8 }}>
         <Text className="text-foreground">Opens after 0.3 s and closes after 1.5 s.</Text>
