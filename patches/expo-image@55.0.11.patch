@@ -1,14 +1,14 @@
 diff --git a/src/ExpoImage.macos.tsx b/src/ExpoImage.macos.tsx
 new file mode 100644
-index 0000000..bff00b2
+index 0000000..9303bf4
 --- /dev/null
 +++ b/src/ExpoImage.macos.tsx
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,108 @@
 +// expo-image on macOS: React Native's Image stands in for the native view, which is UIKit
 +// only. Sources (uri, headers, require(); the largest of several sizes), placeholders while
 +// loading, contentFit, tintColor, the load events and reloadAsync work. Its SDWebImage
 +// caches, blurhash/thumbhash and SF Symbol sources, contentPosition, transitions and
-+// ImageRef sources are not supported.
++// ImageRef sources are not supported; such a source reports onError.
 +import React from 'react';
 +import { Image, StyleSheet, View, type ImageResizeMode } from 'react-native';
 +
@@ -29,6 +29,11 @@ index 0000000..bff00b2
 +  return drawable.reduce<ImageSource | undefined>((best, next) => (best && area(best) >= area(next) ? best : next), undefined);
 +}
 +
++// require() assets keep the scale React Native resolved, so a @2x image draws at its point size.
++function drawable({ uri, headers, width, height, scale }: ImageSource & { scale?: number }) {
++  return { uri, headers, width: width ?? undefined, height: height ?? undefined, scale };
++}
++
 +class ExpoImage extends React.PureComponent<ImageNativeProps, { attempt: number; loaded: boolean }> {
 +  state = { attempt: 0, loaded: false };
 +
@@ -38,10 +43,29 @@ index 0000000..bff00b2
 +  unlockResourceAsync = async () => {};
 +  reloadAsync = async () => this.setState(({ attempt }) => ({ attempt: attempt + 1, loaded: false }));
 +
++  unsupported?: string;
++
 +  componentDidMount() {
 +    // Image calls startAnimating and reloadAsync through this ref, which holds the native view on iOS.
 +    const ref = this.props.nativeViewRef as React.MutableRefObject<unknown> | undefined;
 +    if (ref) ref.current = this;
++    this.reportUnsupported();
++  }
++
++  componentDidUpdate() {
++    this.reportUnsupported();
++  }
++
++  // A source with nothing to draw still settles, once per source, so load and error handlers run.
++  reportUnsupported() {
++    const { source } = this.props;
++    const key = largest(source) || source == null || (Array.isArray(source) && !source.length) ? undefined : JSON.stringify(source);
++    if (key === this.unsupported) return;
++    this.unsupported = key;
++    if (key === undefined) return;
++    this.props.onLoadStart?.();
++    this.props.onError?.({ error: 'expo-image cannot draw blurhash, thumbhash, SF Symbol or ImageRef sources on macOS' });
++    this.props.onLoadEnd?.();
 +  }
 +
 +  render() {
@@ -53,12 +77,12 @@ index 0000000..bff00b2
 +    return (
 +      <View ref={containerViewRef as never} {...(props as object)} accessibilityLabel={accessibilityLabel ?? alt} style={[styles.container, style]}>
 +        {!this.state.loaded && fallback && (
-+          <Image source={{ uri: fallback.uri, headers: fallback.headers }} resizeMode={fits[placeholderContentFit]} style={[StyleSheet.absoluteFill, tint]} />
++          <Image source={drawable(fallback)} resizeMode={fits[placeholderContentFit]} style={[StyleSheet.absoluteFill, tint]} />
 +        )}
 +        {image && (
 +          <Image
 +            key={this.state.attempt}
-+            source={{ uri: image.uri, headers: image.headers }}
++            source={drawable(image)}
 +            resizeMode={fits[contentFit]}
 +            style={[StyleSheet.absoluteFill, tint]}
 +            onLoadStart={() => onLoadStart?.()}
