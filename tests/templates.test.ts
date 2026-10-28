@@ -95,3 +95,11 @@ test("Runner profile trusts enriched-markdown postinstall before installing with
     expect(run).toHaveBeenCalledTimes(1);
   } finally { vi.clearAllMocks(); rmSync(root, { recursive: true, force: true }); }
 });
+for (const app of [path.join(templates, "universal"), path.resolve(import.meta.dirname, "../examples/kitchen-sink")]) {
+  test(`${path.basename(app)} imports global.css from App, so an edit is a Fast Refresh instead of a full reload`, () => {
+    const actualEntry = readFileSync(path.join(app, "index.ts"), "utf8");
+    const actualApp = readFileSync(path.join(app, "App.tsx"), "utf8");
+    expect(actualEntry).not.toContain("global.css");
+    expect(actualApp).toMatch(/^import "\.\/global\.css";$/m);
+  });
+}

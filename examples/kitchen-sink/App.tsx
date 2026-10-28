@@ -1,3 +1,4 @@
+import "./global.css";
 import { Button } from "./Controls";
 import React, { useEffect, useState, type ReactElement } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
