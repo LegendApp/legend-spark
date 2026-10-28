@@ -2,14 +2,14 @@ appId: so.legend.spark.examples.kitchensink
 name: react-native-gesture-handler on macOS
 intent: >
   The Gesture handler screen finds the native module and RNGestureHandlerButton registered, and its
-  GestureDetector mounts inside a GestureHandlerRootView. Tapping and dragging the blue area (a pointer
-  is needed, so by hand) logs tap and pan events.
+  GestureDetector handles a native tap inside a GestureHandlerRootView. Clicking the blue area must
+  fire the detector's successful tap callback.
 checks: [COMP-GESTURE-01]
 tags: [component-library]
 platforms: [macos]
-manual: partial
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://component-library/gesture-handler" }
 - extendedWaitUntil: { visible: { id: component-library-gesture-handler-native }, timeout: 10s }
-- assertVisible: { id: component-library-gesture-handler-root-laid-out }
+- tapOn: { id: component-library-gesture-handler-target }
+- extendedWaitUntil: { visible: { id: component-library-gesture-handler-tap-fired }, timeout: 10s }
 - takeScreenshot: gesture-handler

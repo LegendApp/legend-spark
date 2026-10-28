@@ -17,11 +17,11 @@ export function DateTimePickerDemo() {
   const [laidOut, setLaidOut] = useState<string[]>([]);
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-6">
     <Text selectable className="font-mono text-xs text-muted">{value.toISOString()}</Text>
-    {pickers.map(({ name, mode, display }) => <View key={name} className="flex-row items-center gap-3"
-      testID={laidOut.includes(name) ? `${ID}-${name}-laid-out` : undefined}
-      onLayout={event => event.nativeEvent.layout.height > 0 && setLaidOut(previous => previous.includes(name) ? previous : [...previous, name])}>
+    {pickers.map(({ name, mode, display }) => <View key={name} className="flex-row items-center gap-3">
       <Text className="w-16 text-sm text-muted">{name}</Text>
-      <DateTimePicker value={value} mode={mode} display={display} timeZoneName="UTC" locale="en_US" onValueChange={(_, date) => setValue(date)} />
+      <DateTimePicker value={value} mode={mode} display={display} timeZoneName="UTC" locale="en_US" onValueChange={(_, date) => setValue(date)}
+        testID={laidOut.includes(name) ? `${ID}-${name}-laid-out` : undefined}
+        onLayout={({ nativeEvent: { layout } }) => layout.width > 0 && layout.height > 0 && setLaidOut(previous => previous.includes(name) ? previous : [...previous, name])} />
     </View>)}
   </ScrollView>;
 }

@@ -2,8 +2,9 @@ appId: so.legend.spark.examples.kitchensink
 name: expo-location on macOS
 intent: >
   The Expo Location screen reads the foreground permission, whether Location Services are on and the provider
-  status, which agree with each other, and getHeadingAsync rejects because a Mac has no compass, so the screen
-  shows passed. Locating needs a person to answer the permission prompt.
+  status, which agree with each other. getHeadingAsync must reject with the exact foreground-permission error
+  when permission is absent, or the heading-unavailable reason when authorized (a Mac has no compass).
+  Locating needs a person to answer the permission prompt.
 checks: [SYS-EXPOLOCATION-01]
 tags: [system-integration]
 platforms: [macos]
