@@ -7,7 +7,7 @@ index b29590c..6eefd94 100644
    s.authors      = package['author']
    s.homepage     = package['homepage']
 -  s.platforms    = { :ios => "9.0", :tvos => "9.0" }
-+  s.platforms    = { :ios => "9.0", :tvos => "9.0", :osx => "11.0" }
++  s.platforms    = { :ios => "9.0", :tvos => "9.0", :osx => "14.0" }
  
    s.source       = { :git => "https://github.com/react-native-masked-view/masked-view.git", :tag => "v#{s.version}" }
    s.source_files  = "ios/**/*.{h,m}"

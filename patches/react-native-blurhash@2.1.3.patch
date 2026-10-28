@@ -312,7 +312,7 @@ index bb6ea68..ae7198c 100644
    s.authors      = { "Marc Rousavy" => "marcrousavy@hotmail.com" }
    s.ios.deployment_target = '9.0'
    s.tvos.deployment_target = '9.0'
-+  s.osx.deployment_target = '11.0'
++  s.osx.deployment_target = '14.0'
    s.source       = { :git => "https://github.com/mrousavy/react-native-blurhash.git", :tag => "#{s.version}" }
  
    s.source_files = "ios/**/*.{h,c,m,mm,swift}"
