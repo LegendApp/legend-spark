@@ -255,5 +255,12 @@
     "integrity": "sha512-Z7W2t0oDrm46JU+FgdB0AL+Ru5urBVmFhYl/RjuPi2AnAjddmbNyDZGzpOLSYtl6oWqqz2u4zGuj3ZFjrCMJOg==",
     "patch": "sentry-react-native@8.32.0.patch",
     "optional": true
+  },
+  "react-native-graph": {
+    "version": "1.4.0",
+    "url": "https://registry.npmjs.org/react-native-graph/-/react-native-graph-1.4.0.tgz",
+    "integrity": "sha512-Mh0P3kXWrbg9WxPAgce3a+XzKSE36sE9lSi+VwXw/5Ps1VChsa4eApI8LHqpcdvlWH7qjCNk5cSdFkGDuA8Kgw==",
+    "patch": "react-native-graph@1.4.0.patch",
+    "optional": true
   }
 }

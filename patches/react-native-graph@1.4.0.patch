@@ -1,0 +1,157 @@
+diff --git a/lib/module/AnimatedLineGraph.js b/lib/module/AnimatedLineGraph.js
+index f08d7f4..5621a8b 100644
+--- a/lib/module/AnimatedLineGraph.js
++++ b/lib/module/AnimatedLineGraph.js
+@@ -77,14 +77,14 @@ export function AnimatedLineGraph({
+     setHeight(Math.round(layout.height));
+   }, []);
+   const straightLine = useMemo(() => {
+-    const path = Skia.Path.Make();
++    const path = Skia.PathBuilder.Make();
+     path.moveTo(0, height / 2);
+     for (let i = 0; i < width - 1; i += 2) {
+       const x = i;
+       const y = height / 2;
+       path.cubicTo(x, y, x, y, x, y);
+     }
+-    return path;
++    return path.build();
+   }, [height, width]);
+   const paths = useSharedValue({});
+   const gradientPaths = useSharedValue({});
+diff --git a/lib/module/CreateGraphPath.js b/lib/module/CreateGraphPath.js
+index cad0ca6..28e70c7 100644
+--- a/lib/module/CreateGraphPath.js
++++ b/lib/module/CreateGraphPath.js
+@@ -49,13 +49,14 @@ function createGraphPathBase({
+   canvasWidth: width,
+   shouldFillGradient
+ }) {
+-  const path = Skia.Path.Make();
++  // Skia 2 builds paths with PathBuilder; SkPath itself is immutable.
++  const builder = Skia.PathBuilder.Make();
+ 
+   // Canvas width substracted by the horizontal padding => Actual drawing width
+   const drawingWidth = width - 2 * horizontalPadding;
+   // Canvas height substracted by the vertical padding => Actual drawing height
+   const drawingHeight = height - 2 * verticalPadding;
+-  if (graphData[0] == null) return path;
++  if (graphData[0] == null) return builder.build();
+   const points = [];
+   const startX = getXInRange(drawingWidth, graphData[0].date, range.x) + horizontalPadding;
+   const endX = getXInRange(drawingWidth, graphData[graphData.length - 1].date, range.x) + horizontalPadding;
+@@ -91,7 +92,7 @@ function createGraphPathBase({
+     const point = points[i];
+ 
+     // first point needs to start the path
+-    if (i === 0) path.moveTo(point.x, point.y);
++    if (i === 0) builder.moveTo(point.x, point.y);
+     const prev = points[i - 1];
+     const prevPrev = points[i - 2];
+     if (prev == null) continue;
+@@ -103,15 +104,19 @@ function createGraphPathBase({
+     const cp2y = (p0.y + 2 * p1.y) / 3;
+     const cp3x = (p0.x + 4 * p1.x + point.x) / 6;
+     const cp3y = (p0.y + 4 * p1.y + point.y) / 6;
+-    path.cubicTo(cp1x, cp1y, cp2x, cp2y, cp3x, cp3y);
++    builder.cubicTo(cp1x, cp1y, cp2x, cp2y, cp3x, cp3y);
+     if (i === points.length - 1) {
+-      path.cubicTo(point.x, point.y, point.x, point.y, point.x, point.y);
++      builder.cubicTo(point.x, point.y, point.x, point.y, point.x, point.y);
+     }
+   }
++  const path = builder.build();
+   if (!shouldFillGradient) return path;
+-  const gradientPath = path.copy();
+-  gradientPath.lineTo(endX, height + verticalPadding);
+-  gradientPath.lineTo(0 + horizontalPadding, height + verticalPadding);
++
++  // build() leaves the builder intact, so the gradient continues the line path.
++  const gradientPath = builder
++    .lineTo(endX, height + verticalPadding)
++    .lineTo(0 + horizontalPadding, height + verticalPadding)
++    .build();
+   return {
+     path: path,
+     gradientPath: gradientPath
+diff --git a/src/AnimatedLineGraph.tsx b/src/AnimatedLineGraph.tsx
+index 6b12417..f1b4b0a 100644
+--- a/src/AnimatedLineGraph.tsx
++++ b/src/AnimatedLineGraph.tsx
+@@ -133,7 +133,7 @@ export function AnimatedLineGraph({
+   );
+ 
+   const straightLine = useMemo(() => {
+-    const path = Skia.Path.Make();
++    const path = Skia.PathBuilder.Make();
+     path.moveTo(0, height / 2);
+     for (let i = 0; i < width - 1; i += 2) {
+       const x = i;
+@@ -141,7 +141,7 @@ export function AnimatedLineGraph({
+       path.cubicTo(x, y, x, y, x, y);
+     }
+ 
+-    return path;
++    return path.build();
+   }, [height, width]);
+ 
+   const paths = useSharedValue<{ from?: SkPath; to?: SkPath }>({});
+diff --git a/src/CreateGraphPath.ts b/src/CreateGraphPath.ts
+index 0c7f1c0..38c4065 100644
+--- a/src/CreateGraphPath.ts
++++ b/src/CreateGraphPath.ts
+@@ -144,14 +144,15 @@ function createGraphPathBase({
+ }: GraphPathConfigWithGradient | GraphPathConfigWithoutGradient):
+   | SkPath
+   | GraphPathWithGradient {
+-  const path = Skia.Path.Make();
++  // Skia 2 builds paths with PathBuilder; SkPath itself is immutable.
++  const builder = Skia.PathBuilder.Make();
+ 
+   // Canvas width substracted by the horizontal padding => Actual drawing width
+   const drawingWidth = width - 2 * horizontalPadding;
+   // Canvas height substracted by the vertical padding => Actual drawing height
+   const drawingHeight = height - 2 * verticalPadding;
+ 
+-  if (graphData[0] == null) return path;
++  if (graphData[0] == null) return builder.build();
+ 
+   const points: SkPoint[] = [];
+ 
+@@ -215,7 +216,7 @@ function createGraphPathBase({
+     const point = points[i]!;
+ 
+     // first point needs to start the path
+-    if (i === 0) path.moveTo(point.x, point.y);
++    if (i === 0) builder.moveTo(point.x, point.y);
+ 
+     const prev = points[i - 1];
+     const prevPrev = points[i - 2];
+@@ -231,19 +232,21 @@ function createGraphPathBase({
+     const cp3x = (p0.x + 4 * p1.x + point.x) / 6;
+     const cp3y = (p0.y + 4 * p1.y + point.y) / 6;
+ 
+-    path.cubicTo(cp1x, cp1y, cp2x, cp2y, cp3x, cp3y);
++    builder.cubicTo(cp1x, cp1y, cp2x, cp2y, cp3x, cp3y);
+ 
+     if (i === points.length - 1) {
+-      path.cubicTo(point.x, point.y, point.x, point.y, point.x, point.y);
++      builder.cubicTo(point.x, point.y, point.x, point.y, point.x, point.y);
+     }
+   }
+ 
++  const path = builder.build();
+   if (!shouldFillGradient) return path;
+ 
+-  const gradientPath = path.copy();
+-
+-  gradientPath.lineTo(endX, height + verticalPadding);
+-  gradientPath.lineTo(0 + horizontalPadding, height + verticalPadding);
++  // build() leaves the builder intact, so the gradient continues the line path.
++  const gradientPath = builder
++    .lineTo(endX, height + verticalPadding)
++    .lineTo(0 + horizontalPadding, height + verticalPadding)
++    .build();
+ 
+   return { path: path, gradientPath: gradientPath };
+ }
