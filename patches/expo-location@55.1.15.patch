@@ -116,6 +116,23 @@ index ae63560..d29a8be 100644
  @interface EXBaseLocationRequester : NSObject<EXPermissionsRequester, CLLocationManagerDelegate>
  
  @property (nonatomic, strong) CLLocationManager *locationManager;
+diff --git a/ios/Requesters/EXBaseLocationRequester.m b/ios/Requesters/EXBaseLocationRequester.m
+index 350eb5f..c8f6d82 100644
+--- a/ios/Requesters/EXBaseLocationRequester.m
++++ b/ios/Requesters/EXBaseLocationRequester.m
+@@ -37,7 +37,12 @@ - (NSDictionary *)getPermissions {
+ 
+   CLAuthorizationStatus systemStatus;
+   if (![EXBaseLocationRequester isConfiguredForAlwaysAuthorization] && ![EXBaseLocationRequester isConfiguredForWhenInUseAuthorization]) {
++#if TARGET_OS_OSX
++    // RCTFatal throws in Release; on macOS the missing key reports denied, as it does in Debug.
++    RCTLogError(@"This app is missing NSLocationWhenInUseUsageDescription in its macOS Info.plist, so location services will fail.");
++#else
+     RCTFatal(RCTErrorWithMessage(@"This app is missing usage descriptions, so location services will fail. Add one of the `NSLocation*UsageDescription` keys to your bundle's Info.plist. See https://bit.ly/3iLqy6S (https://docs.expo.dev/distribution/app-stores/#system-permissions-dialogs-on-ios) for more information."));
++#endif
+     systemStatus = kCLAuthorizationStatusDenied;
+   } else {
+     systemStatus = [CLLocationManager authorizationStatus];
 diff --git a/ios/TaskConsumers/EXGeofencingTaskConsumer.m b/ios/TaskConsumers/EXGeofencingTaskConsumer.m
 index 7e6482e..c94f09e 100644
 --- a/ios/TaskConsumers/EXGeofencingTaskConsumer.m
