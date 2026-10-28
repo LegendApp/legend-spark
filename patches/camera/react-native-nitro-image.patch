@@ -29,7 +29,7 @@ new file mode 100644
 index 0000000..3c5623e
 --- /dev/null
 +++ b/macos/MacImage.swift
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,185 @@
 +import AppKit
 +import CoreGraphics
 +import CoreImage
@@ -84,9 +84,11 @@ index 0000000..3c5623e
 +    guard degrees.isFinite else { throw RuntimeError.error(withMessage: "Invalid rotation") }
 +    let radians = degrees * .pi / 180
 +    let bounds = CGRect(x: 0, y: 0, width: width, height: height).applying(CGAffineTransform(rotationAngle: radians))
-+    return try render(abs(bounds.width), abs(bounds.height)) { context in
-+      context.translateBy(x: abs(bounds.width) / 2, y: abs(bounds.height) / 2); context.rotate(by: -radians)
-+      context.draw(cgImage, in: CGRect(x: -width / 2, y: -height / 2, width: width, height: height))
++    let rotatedWidth = Double(abs(bounds.width)), rotatedHeight = Double(abs(bounds.height))
++    let sourceWidth = width, sourceHeight = height
++    return try render(rotatedWidth, rotatedHeight) { (context: CGContext) in
++      context.translateBy(x: rotatedWidth / 2, y: rotatedHeight / 2); context.rotate(by: -radians)
++      context.draw(cgImage, in: CGRect(x: -sourceWidth / 2, y: -sourceHeight / 2, width: sourceWidth, height: sourceHeight))
 +    }
 +  }
 +  public func rotateAsync(degrees: Double, allowFastFlagRotation: Bool?) throws -> Promise<any HybridImageSpec> { Promise.async { try self.rotate(degrees: degrees, allowFastFlagRotation: allowFastFlagRotation) } }
