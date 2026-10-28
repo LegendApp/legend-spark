@@ -56,8 +56,9 @@ test("autolinking resolves symlinked podspec files without modifying the package
 test("the macOS Podfile passes the native selection's exclusions to Expo's React Native autolinker", async () => {
   const template = readFileSync(require.resolve("expo-desktop-template-bare-minimum/macos/Podfile"), "utf8");
   const podfile = excludeNativeModules(template, ["@legendapp/spark-codex", "react-native-nitro-modules"]);
-  expect(podfile).toContain('use_native_modules!(config_command + ["--exclude","@legendapp/spark-codex","--exclude","react-native-nitro-modules"])');
-  expect(excludeNativeModules(podfile, [])).toContain("use_native_modules!(config_command + [])");
+  expect(podfile).toContain('use_native_modules!(config_command + ["--source-dir", __dir__] + ["--exclude","@legendapp/spark-codex","--exclude","react-native-nitro-modules"])');
+  expect(excludeNativeModules(podfile, [])).toContain('use_native_modules!(config_command + ["--source-dir", __dir__] + [])');
+  expect(excludeNativeModules(podfile, ["@legendapp/spark-codex", "react-native-nitro-modules"])).toBe(podfile);
   expect(() => excludeNativeModules("target 'App' do\nend\n", [])).toThrow("use_native_modules!(config_command)");
   // Codex's own config declares iOS for the desktop autolinker; the exclusion list unlinks it.
   const { resolveReactNativeModule } = require("expo-modules-autolinking/build/reactNativeConfig/reactNativeConfig.js");
