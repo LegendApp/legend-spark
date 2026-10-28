@@ -79,6 +79,6 @@ export function installWorkspaceAdapters(root: string) {
       renameSync(temporary, manifestFile);
     }
   }
-  prepareNativePatches(root);
+  prepareNativePatches(root, [...installed.values()]);
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) installWorkspaceAdapters(path.resolve(import.meta.dirname, ".."));

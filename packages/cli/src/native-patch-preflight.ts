@@ -71,8 +71,8 @@ export function validateWorkspaceNativePatches(root: string, packages: Pick<Nati
 
 export function assertNativePatchPreflight(root: string) {
   assertEnrichedHtmlPins(root);
-  prepareNativePatches(root);
   const packages = installedPackages(root);
+  prepareNativePatches(root, packages);
   const framework = findFramework(root);
   let errors: string[];
   const spark = packages.find(pkg => pkg.name === "@legendapp/spark");

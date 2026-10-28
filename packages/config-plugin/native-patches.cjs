@@ -5,20 +5,27 @@ const { createRequire } = require("node:module");
 
 const cameraPackages = ["react-native-nitro-image", "react-native-vision-camera"];
 
-function prepareNativePatches(root) {
+function readManifest(file) {
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
+function prepareNativePatches(root, installed = []) {
   const manifestFile = path.join(root, "package.json");
   if (!fs.existsSync(manifestFile)) return {};
-  const app = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  const app = readManifest(manifestFile);
   if (app.name !== "@legendapp/spark" && !app.dependencies?.["@legendapp/spark"] && !app.devDependencies?.["@legendapp/spark"]) return {};
   const appRequire = createRequire(manifestFile);
   let sparkFile;
   try { sparkFile = appRequire.resolve("@legendapp/spark/package.json"); }
   catch (error) { if (error.code === "MODULE_NOT_FOUND") return {}; throw error; }
-  const spark = JSON.parse(fs.readFileSync(sparkFile, "utf8"));
+  const spark = readManifest(sparkFile);
   const directory = path.dirname(sparkFile);
   const patchesRoot = spark.spark?.bundledModuleRoot
     ? path.join(directory, "patches") : path.resolve(__dirname, "../../patches");
   const dependencies = { ...spark.dependencies, ...app.dependencies, ...app.devDependencies };
+  for (const name of cameraPackages) {
+    if (app.optionalDependencies?.[name] || installed.some(pkg => pkg.name === name)) dependencies[name] = true;
+  }
   const hasCamera = cameraPackages.some(name => dependencies[name]);
   const pins = {};
   if (hasCamera) {
@@ -35,11 +42,13 @@ function prepareNativePatches(root) {
     (dependencies["react-native-vision-camera"] && name === "react-native-nitro-image"));
   if (!active.length) return {};
   const { parsePatch, applyPatch, reversePatch } = require("diff");
-  const queue = [appRequire, createRequire(sparkFile)];
+  const queue = [appRequire, createRequire(sparkFile)].map(req => ({ req, cameraOnly: false }));
+  if (hasCamera) queue.push(...installed.map(pkg => ({ req: createRequire(path.join(pkg.root, "package.json")), cameraOnly: true })));
   const visited = new Set();
   const packages = {};
-  for (const req of queue) {
+  for (const { req, cameraOnly } of queue) {
     for (const name of active) {
+      if (cameraOnly && name !== "react-native-nitro-modules" && !cameraPackages.includes(name)) continue;
       let file;
       try { file = req.resolve(`${name}/package.json`); }
       catch (error) {
@@ -51,10 +60,13 @@ function prepareNativePatches(root) {
       if (visited.has(packageRoot)) continue;
       visited.add(packageRoot);
       packages[name] = { root: packageRoot };
-      queue.push(createRequire(file));
+      queue.push({ req: createRequire(file), cameraOnly });
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       const pin = pins[name];
-      if (manifest.version !== pin.version) throw new Error(`Spark needs ${name}@${pin.version}; found ${manifest.version}. Use the SDK's pinned dependency version.`);
+      if (manifest.version !== pin.version) {
+        const owner = readManifest(req.resolve("./package.json"));
+        throw new Error(`Spark needs ${name}@${pin.version}; found ${manifest.version} at ${packageRoot}, required by ${owner.name ?? root}. Add an override/resolution for the pinned version.`);
+      }
       const bytes = fs.readFileSync(path.join(patchesRoot, pin.patch));
       const writes = [];
       for (const patch of parsePatch(bytes.toString("utf8"))) {
@@ -96,6 +108,8 @@ function prepareNativePatches(root) {
       }
       patched.spark.dependencyPatch = { schema: 1, version: pin.version,
         patchHash: createHash("sha256").update(bytes).digest("hex"), upstreamIntegrity: pin.integrity };
+      const pkg = installed.find(pkg => pkg.root === packageRoot);
+      if (pkg) pkg.json = patched;
       const serialized = JSON.stringify(patched, null, 2) + "\n";
       if (fs.readFileSync(file, "utf8") !== serialized) {
         const temporary = `${file}.spark-${process.pid}.tmp`;

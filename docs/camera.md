@@ -46,6 +46,12 @@ Spark's install hook applies the checked-in Nitro, Nitro Image, and VisionCamera
 patches. Native preparation verifies/applies them again before native discovery,
 autolinking, and compatibility signatures. This covers disabled install scripts,
 reinstalls, and interrupted preparation without a camera install command.
+Config reads and install hooks use the app/SDK manifests rather than walking the
+dependency graph. Declare camera directly in the app for these hooks, including
+mobile autolinking. Desktop native discovery and patch preflight also prepare
+transitive camera dependencies from their already-resolved installed graph.
+Only camera optional dependencies join native discovery; other optional native
+libraries retain their existing discovery policy.
 Patching is local, idempotent, and version-specific. Conflicting sources or
 versions fail with an actionable error. Atomic file replacement preserves
 package-manager cache hardlinks. Production selection can prune the camera when
