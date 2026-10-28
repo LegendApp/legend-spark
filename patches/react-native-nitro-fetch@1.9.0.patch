@@ -7,7 +7,7 @@ index 8b08083..d08a41d 100644
    s.authors      = package["author"]
  
 -  s.platforms    = { :ios => min_ios_version_supported, :tvos => min_ios_version_supported }
-+  s.platforms    = { :ios => min_ios_version_supported, :tvos => min_ios_version_supported, :osx => "11.0" }
++  s.platforms    = { :ios => min_ios_version_supported, :tvos => min_ios_version_supported, :osx => "14.0" }
    s.source       = { :git => "https://github.com/margelo/react-native-nitro-fetch.git", :tag => "v#{s.version}" }
  
  

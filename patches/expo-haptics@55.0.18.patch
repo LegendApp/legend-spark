@@ -8,7 +8,7 @@ index a7f5bc7..93bb683 100644
    s.platforms      = {
 -    :ios => '15.1'
 +    :ios => '15.1',
-+    :osx => '11.0'
++    :osx => '14.0'
    }
    s.swift_version  = '5.9'
    s.source         = { git: 'https://github.com/expo/expo.git' }

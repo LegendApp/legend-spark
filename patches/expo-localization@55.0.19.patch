@@ -6,7 +6,7 @@ index 29b720d..117b6a0 100644
    s.homepage       = package['homepage']
    s.platforms      = {
      :ios => '15.1',
-+    :osx => '11.0',
++    :osx => '14.0',
      :tvos => '15.1'
    }
    s.swift_version  = '5.9'
