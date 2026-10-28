@@ -10,14 +10,18 @@ async function check() {
   const permission = await Location.getForegroundPermissionsAsync();
   const services = await Location.hasServicesEnabledAsync();
   const provider = await Location.getProviderStatusAsync();
-  const headingError = await Location.getHeadingAsync().then(() => "resolved", (error: { code?: string }) => error.code);
+  const headingError: unknown = await Location.getHeadingAsync().then(() => undefined, (error: unknown) => error);
+  // Permission is checked before heading support; the stream reports its error reason as a string.
+  const expectedHeadingError = permission.status === "granted"
+    ? headingError === "Heading updates not available"
+    : (headingError as { code?: string } | undefined)?.code === "ERR_DENIED_FOREGROUND_LOCATION_PERMISSION";
   return {
     info: `permission ${permission.status}, services ${services}, provider ${JSON.stringify(provider)}`,
     failures: [
       !["granted", "denied", "undetermined"].includes(permission.status) && `permission (${permission.status})`,
       typeof services !== "boolean" && "services",
       provider.locationServicesEnabled !== services && "provider status",
-      headingError === "resolved" && "heading (a Mac has no compass)",
+      !expectedHeadingError && `heading (${String(headingError)})`,
     ].filter(Boolean),
   };
 }
