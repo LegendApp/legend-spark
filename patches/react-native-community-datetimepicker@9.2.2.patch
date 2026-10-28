@@ -119,10 +119,10 @@ index ec9d7cd..2ca07f1 100644
 +#endif
 diff --git a/ios/fabric/RNDateTimePickerComponentViewMacOS.mm b/ios/fabric/RNDateTimePickerComponentViewMacOS.mm
 new file mode 100644
-index 0000000..e3b4536
+index 0000000..7f8f91e
 --- /dev/null
 +++ b/ios/fabric/RNDateTimePickerComponentViewMacOS.mm
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,179 @@
 +/**
 + * macOS: the Fabric picker on AppKit's NSDatePicker. NSDatePicker has no countdown mode, wheels,
 + * minute interval or accent color; countdown shows a time picker and spinner a stepper field.
@@ -214,17 +214,21 @@ index 0000000..e3b4536
 +  const auto &oldPickerProps = *std::static_pointer_cast<const RNDateTimePickerProps>(_props);
 +  const auto &newPickerProps = *std::static_pointer_cast<const RNDateTimePickerProps>(props);
 +
-+  if (oldPickerProps.date != newPickerProps.date) {
-+    _picker.dateValue = [NSDate dateWithTimeIntervalSince1970:newPickerProps.date / 1000.0];
-+  }
-+
-+  if (oldPickerProps.minimumDate != newPickerProps.minimumDate || oldPickerProps.maximumDate != newPickerProps.maximumDate) {
++  BOOL limitsChanged = oldPickerProps.minimumDate != newPickerProps.minimumDate || oldPickerProps.maximumDate != newPickerProps.maximumDate;
++  if (limitsChanged) {
 +    NSDate *minDate = newPickerProps.minimumDate ? [NSDate dateWithTimeIntervalSince1970:newPickerProps.minimumDate / 1000.0] : nil;
 +    NSDate *maxDate = newPickerProps.maximumDate ? [NSDate dateWithTimeIntervalSince1970:newPickerProps.maximumDate / 1000.0] : nil;
 +    // As on iOS, min > max leaves both unset and relies on the JavaScript warning.
 +    BOOL valid = !minDate || !maxDate || [minDate compare:maxDate] != NSOrderedDescending;
++    _picker.minDate = nil;
++    _picker.maxDate = nil;
 +    _picker.minDate = valid ? minDate : nil;
 +    _picker.maxDate = valid ? maxDate : nil;
++  }
++
++  // NSDatePicker clamps its date whenever the limits move, so set the date after them.
++  if (limitsChanged || oldPickerProps.date != newPickerProps.date) {
++    _picker.dateValue = [NSDate dateWithTimeIntervalSince1970:newPickerProps.date / 1000.0];
 +  }
 +
 +  if (oldPickerProps.locale != newPickerProps.locale) {
