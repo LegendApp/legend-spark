@@ -7,7 +7,7 @@ index adf83bf..ba3ba7f 100644
    s.authors      = package["author"]
  
 -  s.platforms    = { :ios => min_ios_version_supported }
-+  s.platforms    = { :ios => min_ios_version_supported, :osx => "11.0" }
++  s.platforms    = { :ios => min_ios_version_supported, :osx => "14.0" }
    s.source       = { :git => package["repository"], :tag => "#{s.version}" }
  
    s.source_files = [

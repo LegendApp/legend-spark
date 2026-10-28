@@ -7,7 +7,7 @@ index 9ce28e8..d815df0 100644
    s.authors      = package["author"]
  
 -  s.platforms    = { :ios => min_ios_version_supported }
-+  s.platforms    = { :ios => min_ios_version_supported, :osx => "12.0" }
++  s.platforms    = { :ios => min_ios_version_supported, :osx => "14.0" }
    s.source       = { :git => "https://github.com/kirillzyusko/react-native-app-logs.git", :tag => "#{s.version}" }
  
    s.source_files = "ios/**/*.{h,m,mm,swift}"
