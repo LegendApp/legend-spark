@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-import FastImage, { type FastImageRef } from "react-native-fast-image";
+import FastImage, { FastImageBackground, type FastImageRef } from "react-native-fast-image";
 import { toByteArray } from "base64-js";
 import { getDirectory, writeBytes } from "@legendapp/spark/files";
 
@@ -13,6 +13,9 @@ const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEklEQVR4nGP4z8DwHxk
 export function FastImageDemo() {
   const [uri, setUri] = useState<string>();
   const [result, setResult] = useState<string>();
+  const [backgroundLayout, setBackgroundLayout] = useState(false);
+  const [assetLoaded, setAssetLoaded] = useState(false);
+  const [placeholderReady, setPlaceholderReady] = useState(false);
   const image = useRef<FastImageRef>(null);
   const loads = useRef<string[]>([]);
   useEffect(() => {
@@ -26,7 +29,9 @@ export function FastImageDemo() {
     loads.current.push(`${width}x${height}`);
     if (loads.current.length === 1) { image.current?.reload(); return; }
     const [preloaded] = await FastImage.preload([{ uri: uri! }]);
+    const configured = await FastImage.configureCache() as { ok?: boolean; error?: string };
     const failures = [
+      !(configured.ok === false && configured.error === "FastImage.configureCache is not supported on macOS") && "configureCache",
       loads.current.join() !== "4x2,4x2" && `onLoad (${loads.current.join()})`,
       !(preloaded?.ok && preloaded.width === 4 && preloaded.height === 2) && `preload (${JSON.stringify(preloaded)})`,
       FastImage.priority.high !== "high" && "constants",
@@ -36,11 +41,23 @@ export function FastImageDemo() {
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-3 p-6">
     <Text className="text-sm text-muted">Loads a local PNG, reloads it through the ref, then preloads it; the tinted copy uses objectFit contain.</Text>
     <View style={{ flexDirection: "row", gap: 16 }}>
-      {uri && <FastImage ref={image} source={{ uri }} objectFit="cover" style={{ width: 160, height: 80, borderRadius: 8 }}
+      {uri && <FastImage ref={image} source={{ uri, width: 800, height: 600 }} objectFit="cover" style={{ width: 160, height: 80, borderRadius: 8 }}
         onLoad={event => void onLoad(event.nativeEvent.width, event.nativeEvent.height)}
         onError={event => setResult(`failed: onError ${event.nativeEvent.error}`)} />}
       {uri && <FastImage source={{ uri }} objectFit="contain" tintColor="#3b82f6" style={{ width: 160, height: 160, borderWidth: 1, borderColor: "#888" }} />}
     </View>
+    <Text className="text-sm text-muted">Bundled background fills 120×60; the object placeholder stays visible when its source fails.</Text>
+    <View style={{ flexDirection: "row", gap: 16 }}>
+      <FastImageBackground source={require("./image-scale.png")} objectFit="contain" style={{ width: 120, height: 60 }} testID={`${ID}-background`}
+        onLayout={event => setBackgroundLayout(event.nativeEvent.layout.width === 120 && event.nativeEvent.layout.height === 60)}
+        onLoad={event => setAssetLoaded(event.nativeEvent.width === 160 && event.nativeEvent.height === 80)}>
+        <Text className="text-xs text-white">Background</Text>
+      </FastImageBackground>
+      {uri && <FastImage source={{ uri: `${uri}.missing` }} placeholder={{ uri }} style={{ width: 160, height: 80 }}
+        onError={() => setPlaceholderReady(true)} />}
+    </View>
+    <Text className="text-xs text-foreground" testID={backgroundLayout && assetLoaded ? `${ID}-background-passed` : undefined}>Background: {backgroundLayout && assetLoaded ? "laid out and loaded" : "loading"}</Text>
+    <Text className="text-xs text-foreground" testID={placeholderReady ? `${ID}-placeholder-ready` : undefined}>Object placeholder: {placeholderReady ? "source failed; placeholder remains" : "loading"}</Text>
     <Text selectable className="font-mono text-xs text-foreground" testID={result ? `${ID}-${result === "passed" ? "passed" : "failed"}` : undefined}>{result ?? "running"}</Text>
   </ScrollView>;
 }
