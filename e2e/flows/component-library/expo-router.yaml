@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-router on macOS
+intent: >
+  The Expo Router screen mounts ExpoRoot on routes from a folder: the home route renders, then pushes
+  /details/42?from=home, and the details route shows its dynamic id and search param.
+checks: [COMP-EXPOROUTER-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/expo-router" }
+- extendedWaitUntil: { visible: { id: component-library-expo-router-details-42-home }, timeout: 15s }
+- takeScreenshot: expo-router
