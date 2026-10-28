@@ -121,3 +121,22 @@ test.each(["dev", "build", "doctor"])("spark %s refuses downgraded project state
   expect(out + err).toContain("Run spark upgrade");
   expect(existsSync(path.join(root, ".spark/commands.jsonl"))).toBe(false);
 });
+
+test("camera removal requires manual upgrade steps and records them once", () => {
+  const target = "0.0.2-next.0";
+  const root = app(target);
+  stamp(root, "0.0.1");
+  writeFileSync(path.join(root, "App.tsx"), "import { Camera } from '@legendapp/spark/camera';\n");
+  expect(() => migrateProject(root, target)).toThrow("Run spark upgrade");
+  expect(existsSync(path.join(root, ".spark/upgrade-notes.md"))).toBe(false);
+  expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe("0.0.1\n");
+  expect(migrateProject(root, target, false)).toEqual([target]);
+  const notes = readFileSync(path.join(root, ".spark/upgrade-notes.md"), "utf8");
+  expect(notes).toContain("@legendapp/spark/camera was removed");
+  expect(notes).toContain("see the linked upgrade notes for exact version pins");
+  expect(notes).toContain("Rebuild custom runtimes");
+  expect(notes).toContain("UPGRADING.md#002-next0");
+  expect(readFileSync(path.join(root, "App.tsx"), "utf8")).toContain("@legendapp/spark/camera");
+  expect(migrateProject(root, target, false)).toEqual([]);
+  expect(readFileSync(path.join(root, ".spark/upgrade-notes.md"), "utf8")).toBe(notes);
+});

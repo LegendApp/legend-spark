@@ -211,9 +211,10 @@ After (for this release):
 ```
 
 Camera and enriched Markdown native dependency patches are applied by the SDK.
-Use public `/camera` and `/markdown` imports; stop manually patching their bundled
-dependencies. Existing custom runtimes must rebuild to include changed native
-code. Native production builds fail when app source imports an excluded module:
+Use public `/camera` (removed in 0.0.2-next.0 — import `react-native-vision-camera`
+directly) and `/markdown` imports; stop manually patching their bundled dependencies.
+Existing custom runtimes must rebuild to include changed native code. Native
+production builds fail when app source imports an excluded module:
 check `spark analyze` and native-only `include` requirements rather than weakening
 the selection. SidebarSplitView gained a native content-list column and swipe
 actions; review customized pane composition if affected. Windows notification
@@ -321,7 +322,9 @@ desktop app by itself, such as with `--no-open`.
 No changes are needed in existing apps. Update `@legendapp/spark` to `0.0.1`
 and reinstall.
 
-## Next version
+## 0.0.2-next.0
+
+Next version (provisional version number).
 
 Breaking: yes. `@legendapp/spark/camera` was removed. Install
 `react-native-vision-camera@5.2.3` and `react-native-nitro-image@0.15.2` in your
