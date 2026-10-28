@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/react-native-app-logs.md"
+  DEVT-SENTRY-01:
+    title: "@sentry/react-native captures an error with a stack trace and native macOS context on macOS"
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/sentry-react-native.md"
