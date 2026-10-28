@@ -9,6 +9,7 @@ import { spawnProcess, type ManagedProcess, type ProcessLog } from "../../packag
 export type DriverWindow = "main" | "key" | `id:${string}` | `title:${string}`;
 export type Frame = { x: number; y: number; width: number; height: number };
 export type Capture = { file: string; width: number; height: number; scale: number };
+export type PointerEvents = { pid: number; down: string; up: string };
 export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number };
 type Reply = { id?: unknown; ok: boolean; error?: { code: string; message: string }; [key: string]: unknown };
 
@@ -111,6 +112,11 @@ export class Driver {
   }
 
   async ping() { await this.request({ command: "ping" }, 10000); }
+  /** Shows a window and encodes OS mouse events at captured-frame points. */
+  async pointerEvents(window: DriverWindow, point: { x: number; y: number }): Promise<PointerEvents> {
+    const reply = await this.request({ command: "pointerEvents", window, ...point }, 10000);
+    return { pid: reply.pid as number, down: reply.down as string, up: reply.up as string };
+  }
   /** Delivers a deep link through the app's URL handling once its first render has settled. */
   async navigate(url: string, timeoutMs = 30000) { await this.request({ command: "navigate", url, timeoutMs }, timeoutMs + 10000); }
   /** Opens an existing file (absolute path) through the app's open-file handling once its first render has settled. */

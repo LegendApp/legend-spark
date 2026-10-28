@@ -324,6 +324,11 @@ source once per run (`expo export:embed`, no Metro) and serves it to each launch
 build runs its embedded bundle. A flow whose `appId` is not the app's bundle identifier
 fails with `invalid`.
 
+Add `--pointer` to `e2e:run --backend driver` to attach the macOS OS pointer backend for
+`tapOn`. This opts into showing target windows and requires Accessibility access.
+It uses driver testIDs for lookup and real Quartz mouse events for input; it does not provide
+an AX tree or other gestures. See [real pointer input](test-driver.md#real-pointer-input-macos).
+
 | Flow | Driver |
 |---|---|
 | `launchApp` | Quits a running app, deletes its state for `clearState: true` ([clearState](#clearstate)), then launches in driver mode with the flow's `arguments` (after the driver's own) and `env`. Then it delivers `openUrl` with `navigate` and `openFile` with `openFile`, both through `application:openURLs:` once the first render settles. With `stopApp: false` and the app running, it only delivers `openUrl` and `openFile`; `clearState`, `arguments` and `env` there are `invalid`. `openFile` must be an absolute path to an existing file (`invalid` otherwise). The driver reserves `SPARK_TEST_DRIVER_DIR` and `SPARK_BUNDLE_URL` in `env`, `-RCT_jsLocation` in `arguments`, and `-AppleLanguages`/`-AppleLocale` when the matrix sets `locale`; a flow that sets one is `invalid`. `appId` and `from` are `unsupported`. |
