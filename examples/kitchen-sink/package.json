@@ -106,7 +106,8 @@
     "expo-image-manipulator": "55.0.21",
     "expo-location": "55.1.15",
     "@react-native-community/datetimepicker": "9.2.2",
-    "react-native-keyboard-controller": "1.22.9"
+    "react-native-keyboard-controller": "1.22.9",
+    "@sentry/react-native": "8.32.0"
   },
   "expo": {
     "install": {
