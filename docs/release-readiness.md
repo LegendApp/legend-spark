@@ -29,7 +29,7 @@ availability and the evidence for that platform.
 
 ## Target capability map
 
-The [56-row support matrix](release-support-matrix.md) shows every import path,
+The [55-row support matrix](release-support-matrix.md) shows every import path,
 its provider, intended targets, target-specific acceptance status, related
 source tests, and exact platform command. The corresponding
 [machine-readable matrix](release-support-matrix.json) is checked against the
