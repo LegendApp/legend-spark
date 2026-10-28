@@ -5,15 +5,18 @@ import path from "node:path";
 
 const darwin = process.platform === "darwin";
 const root = path.resolve(import.meta.dirname, "..");
-let directory = "", harness = "";
+let directory = "", harness = "", pointer = "";
 // Unix socket paths are limited to 104 bytes, so run directories live under /tmp.
 beforeAll(() => {
   if (!darwin) return;
   directory = mkdtempSync("/tmp/spark-driver-test-");
   harness = path.join(directory, "test-driver");
   const native = path.join(root, "packages/desktop-app/macos");
-  execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-I", native,
+  execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreGraphics", "-I", native,
     path.join(native, "SparkTestDriver.mm"), path.join(root, "tests/test-driver.native.mm"), "-o", harness]);
+  pointer = path.join(directory, "macos-pointer");
+  execFileSync("clang", ["-fobjc-arc", "-framework", "AppKit", "-framework", "ApplicationServices",
+    path.join(root, "scripts/e2e/macos-pointer.m"), "-o", pointer]);
 }, 60000);
 // SparkWindow.mm includes SparkDesktop.h, which needs one React Native type.
 let windowState = "";
@@ -24,11 +27,18 @@ beforeAll(() => {
   writeFileSync(path.join(shim, "RCTBridgeModule.h"), "typedef void (^RCTPromiseRejectBlock)(NSString *code, NSString *message, NSError *error);\n");
   windowState = path.join(directory, "driver-window-state");
   const native = path.join(root, "packages/desktop-app/macos");
-  execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-I", native, "-I", path.join(directory, "include"),
+  execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreGraphics", "-I", native, "-I", path.join(directory, "include"),
     path.join(native, "SparkTestDriver.mm"), path.join(native, "SparkWindow.mm"), path.join(root, "tests/driver-window-state.native.mm"), "-o", windowState]);
 }, 60000);
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
 const run = (mode: string) => spawnSync(harness, [mode, directory], { encoding: "utf8", timeout: 30000 });
+
+test.skipIf(!darwin)("the OS pointer helper preflights permission without prompting or posting input", () => {
+  const result = spawnSync(pointer, ["check"], { encoding: "utf8", timeout: 10000 });
+  expect(result.signal).toBeNull();
+  expect([0, 77]).toContain(result.status);
+  if (result.status === 77) expect(result.stderr).toContain("E_PERMISSION_DENIED: Real pointer input needs Accessibility permission");
+});
 
 test.skipIf(!darwin)("the driver is inert unless the runner launches the app", () => {
   expect(run("inert").stdout).toContain("inert passed");

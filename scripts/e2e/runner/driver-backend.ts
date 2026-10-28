@@ -4,12 +4,13 @@
 import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
-import { DriverError, type Capture as DriverCapture, type DriverWindow, type Frame } from "../driver.ts";
+import { DriverError, type Capture as DriverCapture, type DriverWindow, type Frame, type PointerEvents } from "../driver.ts";
 import { Failure, type Artifact, type Atom, type AtomKey, type Backend, type Capture, type CommandHandler, type Element, type QueryScope, type Session } from "./backend.ts";
 
 /** What the backend uses of a driver session (`Driver` in scripts/e2e/driver.ts). Tests pass a double. */
 export type DriverClient = {
   readonly running: boolean;
+  pointerEvents(window: DriverWindow, point: { x: number; y: number }): Promise<PointerEvents>;
   navigate(url: string): Promise<void>;
   openFile(file: string): Promise<void>;
   waitFor(testID: string, timeoutMs?: number): Promise<{ window: string; frame: Frame }>;
@@ -53,6 +54,9 @@ export class DriverBackend implements Backend {
   private captures = 0;
 
   constructor(private readonly app: DriverApp) {}
+
+  /** Used only by the opt-in OS pointer backend; ordinary driver runs stay hidden. */
+  pointerEvents(window: DriverWindow, point: { x: number; y: number }) { return this.client().pointerEvents(window, point); }
 
   async start(session: Session) {
     this.session = session;
