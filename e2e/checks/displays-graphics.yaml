@@ -66,3 +66,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-glass-effect.md"
+  DISP-GRAPH-01:
+    title: react-native-graph renders static and animated line graphs on macOS with Skia 2
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-graph.md"
