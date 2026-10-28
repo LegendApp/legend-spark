@@ -248,5 +248,12 @@
     "integrity": "sha512-nLoXvTbIy/9cI4p/bAXUP7Vfi6Mf2Q7g/gsh2H29C7hgUSQQLdoQjl8inhKC25oxaEibB0CMR++h3HP/k/+BVw==",
     "patch": "react-native-keyboard-controller@1.22.9.patch",
     "optional": true
+  },
+  "@sentry/react-native": {
+    "version": "8.32.0",
+    "url": "https://registry.npmjs.org/@sentry/react-native/-/react-native-8.32.0.tgz",
+    "integrity": "sha512-Z7W2t0oDrm46JU+FgdB0AL+Ru5urBVmFhYl/RjuPi2AnAjddmbNyDZGzpOLSYtl6oWqqz2u4zGuj3ZFjrCMJOg==",
+    "patch": "sentry-react-native@8.32.0.patch",
+    "optional": true
   }
 }
