@@ -15,7 +15,7 @@ beforeAll(() => {
   execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreGraphics", "-I", native,
     path.join(native, "SparkTestDriver.mm"), path.join(root, "tests/test-driver.native.mm"), "-o", harness]);
   pointer = path.join(directory, "macos-pointer");
-  execFileSync("clang", ["-fobjc-arc", "-framework", "AppKit", "-framework", "ApplicationServices",
+  execFileSync("clang", ["-fobjc-arc", "-framework", "Foundation", "-framework", "ApplicationServices",
     path.join(root, "scripts/e2e/macos-pointer.m"), "-o", pointer]);
 }, 60000);
 // SparkWindow.mm includes SparkDesktop.h, which needs one React Native type.
@@ -40,6 +40,20 @@ test.skipIf(!darwin)("the OS pointer helper preflights permission without prompt
   if (result.status === 77) expect(result.stderr).toContain("E_PERMISSION_DENIED: Real pointer input needs Accessibility permission");
 });
 
+test.skipIf(!darwin)("the OS pointer helper rejects bad arguments before posting", () => {
+  const usage = spawnSync(pointer, [], { encoding: "utf8", timeout: 10000 });
+  expect(usage.status).toBe(64);
+  expect(usage.stderr).toContain("usage: macos-pointer");
+  for (const pid of ["0", "-1", "123bad", "999999999999999999999999"]) {
+    const result = spawnSync(pointer, [pid, "bad", "bad"], { encoding: "utf8", timeout: 10000 });
+    expect(result.status).toBe(64);
+    expect(result.stderr).toContain("Expected a positive process ID");
+  }
+  const decode = spawnSync(pointer, [String(process.pid), "bad", "bad"], { encoding: "utf8", timeout: 10000 });
+  expect([1, 77]).toContain(decode.status);
+  if (decode.status === 1) expect(decode.stderr).toContain("E_EVENT: Could not decode mouse events");
+});
+
 test.skipIf(!darwin)("the driver is inert unless the runner launches the app", () => {
   expect(run("inert").stdout).toContain("inert passed");
 });
@@ -58,6 +72,10 @@ test.skipIf(!darwin)("a client that disconnects before its reply cannot kill the
   const result = run("disconnect");
   expect(result.signal).toBeNull();
   expect(result.stdout, result.stderr).toContain("disconnect passed");
+});
+test.skipIf(!darwin)("disconnect restores pointer window and activation state before quitting", () => {
+  const result = run("pointer-disconnect");
+  expect(result.stdout, result.stderr).toContain("pointer-disconnect passed");
 });
 test.skipIf(!darwin)("protocol: ping, navigate, openFile, waitFor, appearance, settled private captures and quit", () => {
   const result = run("session");
