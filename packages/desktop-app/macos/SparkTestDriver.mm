@@ -313,7 +313,13 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   }
   else if ([command isEqual:@"setAppAppearance"]) SparkSetAppearance(request, reply);
   else if ([command isEqual:@"capture"]) SparkCapture(request, reply);
-  else if ([command isEqual:@"pointerEvents"]) SparkPointerEvents(request, reply);
+  else if ([command isEqual:@"pointerEvents"]) {
+    SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 5), ^{ return SparkSettled(); }, ^(BOOL settled) {
+      if (!settled) { reply(SparkFailure(@"E_NOT_SETTLED", @"The UI kept mounting changes until the timeout")); return; }
+      // Gesture recognizers attach after their views mount; do not click mid-mount.
+      SparkPointerEvents(request, reply);
+    });
+  }
   else if ([command isEqual:@"restorePointer"]) { SparkRestorePointer(); reply(@{ @"ok": @YES }); }
   else if ([command isKindOfClass:NSString.class] && SparkModuleCommands()[command]) SparkModuleCommands()[command](request, reply);
   else reply(SparkFailure(@"E_UNKNOWN_COMMAND", [NSString stringWithFormat:@"Unknown command %@", command]));
