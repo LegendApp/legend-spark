@@ -56,13 +56,23 @@ See [known Windows limits](windows-issues.md). Optional OP-SQLite SQLCipher, lib
 Turso, and vector builds are not enabled. WebView follows upstream Windows prop
 coverage and does not promise macOS-only WebKit features.
 
-## Built-in backend dependencies
+## Optional backend dependencies
 
-Spark installs `react-native-enriched-markdown` 1.1.1 and
-`react-native-enriched-html` 1.1.1 as pinned dependencies and applies their
-checked-in compatibility patches automatically, using the same install
-and native-preparation boundaries as camera. Applications do not need a
-package-manager patch declaration. Reinstalls and disabled install scripts are
+Apps using `/markdown`, `/html`, `/webview`, or `/sqlite` must install the matching
+optional peer: `react-native-enriched-markdown@1.1.1`,
+`react-native-enriched-html@1.1.1`, `react-native-webview@16.0.0`, or
+`@op-engineering/op-sqlite@18.2.1`. Starter overrides pin compatibility without
+installing these libraries. `spark doctor` reports missing app declarations or
+installations for these imports. Keep the SDK archive overrides for WebView and
+SQLite; see the installed UPGRADING.md. Nitro Modules and Runtimes remain hard
+core dependencies, as do utilities and tooling used at runtime. Type-only tooling
+belongs in development dependencies.
+
+For installed Enriched Markdown and HTML backends, Spark applies their
+checked-in compatibility patches automatically, using the install
+and native-preparation boundaries. Direct app declarations activate config hooks;
+desktop discovery also supports backends reached through app dependency edges.
+Applications do not need a package-manager patch declaration. Reinstalls and disabled install scripts are
 handled by native preparation. The backends remain ordinary npm dependencies;
 their implementations are not extracted into the Spark archive. Production builds
 can prune their native modules when unused. Upstream Markdown already supports

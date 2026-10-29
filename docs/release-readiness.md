@@ -2,6 +2,15 @@
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
+Apps own the optional backends for `/markdown`, `/html`, `/webview`, and `/sqlite`:
+install Enriched Markdown/HTML, React Native WebView, or OP-SQLite only when used.
+Starter overrides retain supported versions without installing them. `spark doctor`
+reports missing app declarations/installations; native patching and discovery only
+activate installed dependencies. Keep the SDK's patched WebView/SQLite overrides.
+Nitro Modules, Runtimes, runtime utilities, and CLI/config engines remain hard;
+type-only tooling is development-only. See [library policy](external-libraries.md#optional-backend-dependencies)
+and the shipped [upgrade notes](../packages/desktop/skills/spark/UPGRADING.md#002-next0).
+
 ## Current decision
 
 The next candidate is `@legendapp/spark@0.0.1-next.5` on the `next` channel. The source

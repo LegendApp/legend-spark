@@ -332,3 +332,20 @@ app, with `react-native-nitro-modules@0.37.0`. Import camera APIs directly from
 `react-native-vision-camera`, and `NitroImage` / `Image` from
 `react-native-nitro-image`. Spark still applies its version-pinned native patches
 automatically when your app depends on these libraries. Rebuild custom runtimes.
+
+The `/markdown`, `/html`, `/webview`, and `/sqlite` APIs remain available, but
+Spark no longer installs their backends. Add only the libraries your app uses
+to its own `dependencies`, retaining the SDK's tested overrides:
+
+| Spark import | App dependency |
+| --- | --- |
+| `@legendapp/spark/markdown` | `react-native-enriched-markdown@1.1.1` |
+| `@legendapp/spark/html` | `react-native-enriched-html@1.1.1` |
+| `@legendapp/spark/webview` | `react-native-webview@16.0.0` |
+| `@legendapp/spark/sqlite` | `@op-engineering/op-sqlite@18.2.1` |
+
+For WebView and SQLite, keep the matching patched SDK archive override supplied
+by `spark upgrade` or `spark add desktop`. Run your package manager's install,
+then `spark doctor` and rebuild custom runtimes. Native discovery and patching
+activate only for installed app dependencies; optional peers alone do not select
+native code. Nitro Modules and Runtimes remain hard dependencies.
