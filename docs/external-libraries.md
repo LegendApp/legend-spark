@@ -68,6 +68,10 @@ SQLite; see the installed UPGRADING.md. Nitro Modules and Runtimes remain hard
 core dependencies, as do utilities and tooling used at runtime. Type-only tooling
 belongs in development dependencies.
 
+Universal apps targeting Windows must exclude `react-native-enriched-html` and
+`react-native-enriched-markdown` in `expoByPlatform.windows.autolinking.exclude`
+in `desktop.config.json`, because these backends have no Windows implementation.
+
 For installed Enriched Markdown and HTML backends, Spark applies their
 checked-in compatibility patches automatically, using the install
 and native-preparation boundaries. Direct app declarations activate config hooks;

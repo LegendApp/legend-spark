@@ -61,11 +61,12 @@ is not guaranteed to retain its original spelling after an edit.
 
 ## Installation
 
-Spark installs `react-native-enriched-markdown@1.1.1` and
-`react-native-enriched-html@1.1.1` and applies their compatibility patches
-automatically during installation and native preparation. No separate
-installation or package-manager patch configuration is needed. Native preparation
-also repairs reinstalls when install scripts were disabled.
+Apps using `/markdown` or `/html` must install the matching optional peer,
+`react-native-enriched-markdown@1.1.1` or `react-native-enriched-html@1.1.1`,
+in their own `dependencies`, retaining the SDK's tested overrides. Spark applies
+the installed backends' compatibility patches automatically during installation
+and native preparation; no package-manager patch configuration is needed. Native
+preparation also repairs reinstalls when install scripts were disabled.
 
 The workspace and kitchen sink disable math and syntax highlighting to avoid
 downloading and compiling their heavy assets. These flags remain per application:

@@ -349,3 +349,11 @@ by `spark upgrade` or `spark add desktop`. Run your package manager's install,
 then `spark doctor` and rebuild custom runtimes. Native discovery and patching
 activate only for installed app dependencies; optional peers alone do not select
 native code. Nitro Modules and Runtimes remain hard dependencies.
+
+Universal apps targeting Windows must exclude `react-native-enriched-html` and
+`react-native-enriched-markdown` in `expoByPlatform.windows.autolinking.exclude`
+in `desktop.config.json`, because these backends have no Windows implementation.
+
+The `/native` `NativeConfiguration` type now describes only Spark's emitted
+`platforms` and `dependencies` overrides; use your own CLI configuration type for
+extra project or dependency fields, preserved by `withSparkNative`.

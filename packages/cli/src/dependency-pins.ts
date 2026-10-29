@@ -28,6 +28,7 @@ export function optionalBackendIssues(root: string): DependencyPinIssue[] {
   };
   const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
   const dependencies = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies };
+  const platforms = supportedPlatforms(root);
   const req = createRequire(path.join(root, "package.json"));
   const issues = new Map<string, DependencyPinIssue>();
   function visit(directory: string) {
@@ -35,6 +36,8 @@ export function optionalBackendIssues(root: string): DependencyPinIssue[] {
       const file = path.join(directory, entry.name);
       if (entry.isDirectory() && !["node_modules", ".git", ".spark", "spark-packages", "build", "dist", "Pods"].includes(entry.name)) visit(file);
       else if (entry.isFile() && /\.[cm]?[jt]sx?$/.test(file)) {
+        const suffix = /\.(ios|android|macos|windows|web|native|desktop)\.[cm]?[jt]sx?$/.exec(entry.name)?.[1];
+        if (suffix && !platforms.some(platform => suffix === platform || (suffix === "native" && platform !== "web") || (suffix === "desktop" && ["macos", "windows"].includes(platform)))) continue;
         const source = readFileSync(file, "utf8");
         if (!source.includes("@legendapp/spark/")) continue;
         for (const imported of ts.preProcessFile(source, true, true).importedFiles) {
@@ -44,7 +47,7 @@ export function optionalBackendIssues(root: string): DependencyPinIssue[] {
           if (!dependencies[name] || !installed) issues.set(name, {
             package: name, found: dependencies[name] ? "(not installed)" : "(not declared)",
             expected: defaults.overrides[name], missing: true,
-            where: ["dependencies", name, `Install for ${imported.fileName} in ${path.relative(root, file)}`],
+            where: ["dependencies", name, `Install for ${imported.fileName} in ${path.relative(root, file)}${["react-native-webview", "@op-engineering/op-sqlite"].includes(name) ? ", keeping the SDK archive override (spark upgrade)" : ""}`],
           });
         }
       }

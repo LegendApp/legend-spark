@@ -310,6 +310,7 @@ test.each([
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-optional-backend-"));
   try {
     const manifest = path.join(root, "package.json");
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ platforms: ["macos"] }));
     writeFileSync(manifest, "{}");
     const file = path.join(root, "App.tsx");
     writeFileSync(file, `// import '@legendapp/spark/${entry}'`);
@@ -317,7 +318,9 @@ test.each([
     for (const source of [`import '@legendapp/spark/${entry}'`, `export * from '@legendapp/spark/${entry}'`,
       `require('@legendapp/spark/${entry}')`, `import('@legendapp/spark/${entry}')`]) {
       writeFileSync(file, source);
-      expect(optionalBackendIssues(root)).toMatchObject([{ package: name, expected: version, found: "(not declared)" }]);
+      const issues = optionalBackendIssues(root);
+      expect(issues).toMatchObject([{ package: name, expected: version, found: "(not declared)" }]);
+      if (["webview", "sqlite"].includes(entry)) expect(issues[0].where.at(-1)).toContain("keeping the SDK archive override (spark upgrade)");
     }
     writeFileSync(manifest, JSON.stringify({ dependencies: { [name]: version } }));
     expect(optionalBackendIssues(root)).toMatchObject([{ package: name, found: "(not installed)" }]);
@@ -330,5 +333,26 @@ test.each([
     writeFileSync(file, "export {};");
     writeFileSync(path.join(installed, "index.ts"), `import '@legendapp/spark/${entry}'`);
     expect(optionalBackendIssues(root)).toEqual([]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test.each([
+  [["ios"], ["ios", "native", ""]],
+  [["android"], ["android", "native", ""]],
+  [["macos"], ["macos", "native", "desktop", ""]],
+  [["windows"], ["windows", "native", "desktop", ""]],
+  [["web"], ["web", ""]],
+  [["windows", "macos"], ["windows", "macos", "native", "desktop", ""]],
+])("doctor scans only source suffixes applicable to %j", (platforms, applicable) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-backend-platform-"));
+  try {
+    writeFileSync(path.join(root, "package.json"), "{}");
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ platforms }));
+    for (const suffix of ["ios", "android", "macos", "windows", "web", "native", "desktop", ""]) {
+      const file = path.join(root, `App${suffix ? `.${suffix}` : ""}.tsx`);
+      writeFileSync(file, 'export { WebView } from "@legendapp/spark/webview";');
+      expect(optionalBackendIssues(root)).toHaveLength(applicable.includes(suffix) ? 1 : 0);
+      rmSync(file);
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
