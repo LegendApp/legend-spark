@@ -1,6 +1,7 @@
 import { overridePackageName } from "./package-manager.ts";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import ts from "typescript";
 import { supportedPlatforms } from "@legendapp/spark-desktop-config/config.cjs";
 
@@ -15,6 +16,42 @@ export interface DependencyPinIssue {
   expected: string;
   where: string[];
   missing?: boolean;
+}
+
+/** Optional feature backends belong to the app, even when Spark supplies the API. */
+export function optionalBackendIssues(root: string): DependencyPinIssue[] {
+  const backends: Record<string, string> = {
+    "@legendapp/spark/markdown": "react-native-enriched-markdown",
+    "@legendapp/spark/html": "react-native-enriched-html",
+    "@legendapp/spark/webview": "react-native-webview",
+    "@legendapp/spark/sqlite": "@op-engineering/op-sqlite",
+  };
+  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  const dependencies = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies };
+  const req = createRequire(path.join(root, "package.json"));
+  const issues = new Map<string, DependencyPinIssue>();
+  function visit(directory: string) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory() && !["node_modules", ".git", ".spark", "spark-packages", "build", "dist", "Pods"].includes(entry.name)) visit(file);
+      else if (entry.isFile() && /\.[cm]?[jt]sx?$/.test(file)) {
+        const source = readFileSync(file, "utf8");
+        if (!source.includes("@legendapp/spark/")) continue;
+        for (const imported of ts.preProcessFile(source, true, true).importedFiles) {
+          const name = backends[imported.fileName];
+          if (!name || issues.has(name)) continue;
+          const installed = req.resolve.paths(name)?.some(base => existsSync(path.join(base, name, "package.json")));
+          if (!dependencies[name] || !installed) issues.set(name, {
+            package: name, found: dependencies[name] ? "(not installed)" : "(not declared)",
+            expected: defaults.overrides[name], missing: true,
+            where: ["dependencies", name, `Install for ${imported.fileName} in ${path.relative(root, file)}`],
+          });
+        }
+      }
+    }
+  }
+  visit(root);
+  return [...issues.values()];
 }
 
 export function dependencyPinIssues(pkg: any, platforms: readonly string[], expected = expectedDependencyPins): DependencyPinIssue[] {

@@ -149,7 +149,7 @@ test.each([false, true])("removed camera manifests retain app errors and transit
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("camera-less preparation skips unrelated graph failures and transitive integration pins", () => {
+test("preparation skips unrelated graph failures and non-backend integration pins", () => {
   const { root, spark, packages } = fixture();
   try {
     writeFileSync(path.join(spark, "package.json"), JSON.stringify({ name: "@legendapp/spark", version: "1.0.0",
@@ -159,13 +159,13 @@ test("camera-less preparation skips unrelated graph failures and transitive inte
     expect(() => installedPackages(root)).toThrow("Dependency missing is not installed yet");
     expect(prepareNativePatches(root)).toEqual({});
     writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({
-      "react-native-enriched-html": { version: "1.0.0", patch: "missing.patch" },
+      "unrelated-native": { version: "1.0.0", patch: "missing.patch" },
     }));
-    expect(prepareNativePatches(root, [{ name: "react-native-enriched-html", root: packages, json: {} }])).toEqual({});
+    expect(prepareNativePatches(root, [{ name: "unrelated-native", root: packages, json: {} }])).toEqual({});
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test.each([false, true])("optional native discovery remains restricted to camera (transitive: %s)", transitive => {
+test.each([false, true])("optional native discovery ignores unrelated libraries (transitive: %s)", transitive => {
   const { root, spark, packages } = fixture();
   try {
     const manifest = JSON.parse(readFileSync(path.join(spark, "package.json"), "utf8"));
@@ -287,5 +287,29 @@ test.each(["react-native-enriched-markdown", "react-native-enriched-html"])("%s 
     rmSync(path.join(directory, "macos"), { recursive: true });
     prepareNativePatches(root);
     expect(readFileSync(path.join(directory, "macos/View.swift"), "utf8")).toBe("AppKit\n");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test.each(["react-native-enriched-markdown", "react-native-enriched-html"])("%s patches only after app opt-in, including nested optional dependencies", name => {
+  const { root, spark } = fixture();
+  try {
+    writeFileSync(path.join(spark, "package.json"), JSON.stringify({ name: "@legendapp/spark", version: "1.0.0",
+      peerDependencies: { [name]: "1.0.0" }, peerDependenciesMeta: { [name]: { optional: true } }, spark: { bundledModuleRoot: "vendor" } }));
+    const library = path.join(root, "node_modules/component");
+    const backend = path.join(library, "node_modules", name);
+    mkdirSync(backend, { recursive: true });
+    writeFileSync(path.join(library, "package.json"), JSON.stringify({ name: "component", version: "1.0.0", optionalDependencies: { [name]: "1.0.0" } }));
+    writeFileSync(path.join(backend, "package.json"), JSON.stringify({ name, version: "1.0.0" }));
+    writeFileSync(path.join(backend, "Native.podspec"), "upstream\n");
+    writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ [name]: { version: "1.0.0", patch: "camera/react-native-nitro-image.patch" } }));
+    expect(installedPackages(root).some(pkg => pkg.name === name)).toBe(false);
+    expect(prepareNativePatches(root)).toEqual({});
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "app", dependencies: { "@legendapp/spark": "1.0.0", component: "1.0.0" } }));
+    const native = nativePackages(root);
+    expect(native.map(pkg => pkg.name)).toContain(name);
+    expect(readFileSync(path.join(backend, "Native.podspec"), "utf8")).toBe("patched\n");
+    expect(selection(native, new Set()).included).toEqual([]);
+    expect(selection(native, new Set([name])).included.map(pkg => pkg.name)).toEqual([name]);
+    prepareNativePatches(root, installedPackages(root));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -10,11 +10,12 @@ import { assertNativePatchPreflight, validatePackedNativePatches, validateWorksp
 import { VERSION } from "../packages/cli/src/project.ts";
 import { build } from "../packages/cli/src/build.ts";
 
-const requiredNames = ["@react-native-runtimes/core", "react-native-nitro-modules", "@op-engineering/op-sqlite", "react-native-webview"];
+const requiredNames = ["@react-native-runtimes/core", "react-native-nitro-modules"];
+const optionalNames = ["@op-engineering/op-sqlite", "react-native-webview", "expo-audio"];
 const fixtureRequirements = {
   schema: 1 as const,
   frameworkVersion: VERSION,
-  packages: Object.fromEntries(requiredNames.map(name => [name, {
+  packages: Object.fromEntries([...requiredNames, ...optionalNames].map(name => [name, {
     version: "1.0.0", patchHash: "a".repeat(64), upstreamIntegrity: "sha512-upstream",
   }])) as Record<string, { version: string; patchHash: string; upstreamIntegrity: string }>,
 };
@@ -30,7 +31,7 @@ test("packed SDK records the exact patch recipes used by its public native packa
   expect(requirements.frameworkVersion).toBe(VERSION);
   expect(requirements.packages["@react-native-runtimes/core"].upstreamRevision).toBe(runtimesRevision);
   expect(() => assertRuntimesRevision("different-revision")).toThrow("does not match the revision used by the native patch builder");
-  expect(Object.keys(requirements.packages).sort()).toEqual([...requiredNames, "expo-audio"].sort());
+  expect(Object.keys(requirements.packages).sort()).toEqual([...requiredNames, ...optionalNames].sort());
   for (const record of Object.values(requirements.packages)) expect(record.patchHash).toMatch(/^[a-f0-9]{64}$/);
 });
 
@@ -139,4 +140,12 @@ test("build rejects missing SDK provenance before creating its preparation lock"
     await expect(build(root, "dev")).rejects.toThrow("Native patch preparation stopped before changing project files");
     expect(existsSync(path.join(root, ".spark/build.lock"))).toBe(false);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test.each(optionalNames)("optional %s is checked when installed and may be absent", name => {
+  expect(validatePackedNativePatches(packedFixtures(), fixtureRequirements)).toEqual([]);
+  const packages = packedFixtures([...requiredNames, name]);
+  expect(validatePackedNativePatches(packages, fixtureRequirements)).toEqual([]);
+  packages.at(-1)!.json.spark.patchHash = "b".repeat(64);
+  expect(validatePackedNativePatches(packages, fixtureRequirements).join(" ")).toContain(`${name}@1.0.0`);
 });

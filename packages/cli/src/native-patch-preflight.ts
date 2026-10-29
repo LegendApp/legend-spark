@@ -9,8 +9,8 @@ import { installedPackages, readJson, VERSION, type NativePackage } from "./proj
 type PatchRecord = { version: string; patchHash: string; upstreamIntegrity?: string; upstreamRevision?: string };
 export type PackedPatchRequirements = { schema: 1; frameworkVersion: string; packages: Record<string, PatchRecord> };
 
-const required = ["@react-native-runtimes/core", "react-native-nitro-modules", "@op-engineering/op-sqlite", "react-native-webview"];
-const optional = ["expo-audio"];
+const required = ["@react-native-runtimes/core", "react-native-nitro-modules"];
+const optional = ["@op-engineering/op-sqlite", "react-native-webview", "expo-audio"];
 
 export function validatePackedNativePatches(packages: Pick<NativePackage, "name" | "json">[], requirements: PackedPatchRequirements | undefined, frameworkVersion = VERSION): string[] {
   if (!requirements || requirements.schema !== 1 || requirements.frameworkVersion !== frameworkVersion || !requirements.packages || typeof requirements.packages !== "object")

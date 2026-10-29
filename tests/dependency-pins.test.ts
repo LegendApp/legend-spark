@@ -1,9 +1,9 @@
 import { expect, test, vi } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { supportedPlatforms } from "@legendapp/spark-desktop-config/config.cjs";
-import { dependencyPinIssues, expectedDependencyPins as pins, printDependencyPins, upgradeDependencyPins } from "../packages/cli/src/dependency-pins.ts";
+import { optionalBackendIssues, dependencyPinIssues, expectedDependencyPins as pins, printDependencyPins, upgradeDependencyPins } from "../packages/cli/src/dependency-pins.ts";
 
 test("uses the desktop starter compatibility matrix and accepts exact direct pins", () => {
   const template = JSON.parse(readFileSync(new URL("../packages/cli/templates/blank-typescript/package.json", import.meta.url), "utf8"));
@@ -301,4 +301,34 @@ test.each(["no app", "malformed", "duplicate", "mismatched", "matching"])("docto
     vi.restoreAllMocks();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test.each([
+  ["markdown", "react-native-enriched-markdown", "1.1.1"], ["html", "react-native-enriched-html", "1.1.1"],
+  ["webview", "react-native-webview", "16.0.0"], ["sqlite", "@op-engineering/op-sqlite", "18.2.1"],
+])("doctor reports app-owned /%s backends for imports, re-exports, require and dynamic import", (entry, name, version) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-optional-backend-"));
+  try {
+    const manifest = path.join(root, "package.json");
+    writeFileSync(manifest, "{}");
+    const file = path.join(root, "App.tsx");
+    writeFileSync(file, `// import '@legendapp/spark/${entry}'`);
+    expect(optionalBackendIssues(root)).toEqual([]);
+    for (const source of [`import '@legendapp/spark/${entry}'`, `export * from '@legendapp/spark/${entry}'`,
+      `require('@legendapp/spark/${entry}')`, `import('@legendapp/spark/${entry}')`]) {
+      writeFileSync(file, source);
+      expect(optionalBackendIssues(root)).toMatchObject([{ package: name, expected: version, found: "(not declared)" }]);
+    }
+    writeFileSync(manifest, JSON.stringify({ dependencies: { [name]: version } }));
+    expect(optionalBackendIssues(root)).toMatchObject([{ package: name, found: "(not installed)" }]);
+    const installed = path.join(root, "node_modules", name);
+    mkdirSync(installed, { recursive: true });
+    writeFileSync(path.join(installed, "package.json"), JSON.stringify({ name, version }));
+    expect(optionalBackendIssues(root)).toEqual([]);
+    writeFileSync(manifest, "{}");
+    expect(optionalBackendIssues(root)).toMatchObject([{ package: name, found: "(not declared)" }]);
+    writeFileSync(file, "export {};");
+    writeFileSync(path.join(installed, "index.ts"), `import '@legendapp/spark/${entry}'`);
+    expect(optionalBackendIssues(root)).toEqual([]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -12,6 +12,13 @@ const { initializeTemplate } = createRequire(import.meta.url)("../packages/cli/s
 const templates = path.resolve(import.meta.dirname, "../packages/cli/templates");
 const { pointer, claudePointer } = createRequire(import.meta.url)("../packages/cli/src/migrations.cjs");
 for (const folder of ["blank-typescript", "windows", "universal"]) {
+  test(`${folder} pins optional backends without installing them`, () => {
+    const pkg = JSON.parse(readFileSync(path.join(templates, folder, "package.json"), "utf8"));
+    for (const name of ["react-native-enriched-markdown", "react-native-enriched-html", "react-native-webview", "@op-engineering/op-sqlite"]) {
+      expect(pkg.dependencies).not.toHaveProperty(name);
+      expect(pkg.overrides[name]).toBeTypeOf("string");
+    }
+  });
   test(`${folder} ships thin AI pointers to the installed skill`, () => {
     for (const file of ["AGENTS.md", "CLAUDE.md"]) expect(readFileSync(path.join(templates, folder, file), "utf8")).toBe(pointer + "\n");
     expect(readFileSync(path.join(templates, folder, ".claude/skills/spark/SKILL.md"), "utf8")).toBe(claudePointer);

@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 
+const optionalBackends = ["react-native-enriched-markdown", "react-native-enriched-html", "react-native-webview", "@op-engineering/op-sqlite"];
 const cameraPackages = ["react-native-nitro-image", "react-native-vision-camera"];
 
 function readManifest(file) {
@@ -23,7 +24,7 @@ function prepareNativePatches(root, installed = []) {
   const patchesRoot = spark.spark?.bundledModuleRoot
     ? path.join(directory, "patches") : path.resolve(__dirname, "../../patches");
   const dependencies = { ...spark.dependencies, ...app.dependencies, ...app.devDependencies };
-  for (const name of cameraPackages) {
+  for (const name of [...cameraPackages, ...optionalBackends]) {
     if (app.optionalDependencies?.[name] || installed.some(pkg => pkg.name === name)) dependencies[name] = true;
   }
   const hasCamera = cameraPackages.some(name => dependencies[name]);
@@ -42,13 +43,13 @@ function prepareNativePatches(root, installed = []) {
     (dependencies["react-native-vision-camera"] && name === "react-native-nitro-image"));
   if (!active.length) return {};
   const { parsePatch, applyPatch, reversePatch } = require("diff");
-  const queue = [appRequire, createRequire(sparkFile)].map(req => ({ req, cameraOnly: false }));
-  if (hasCamera) queue.push(...installed.map(pkg => ({ req: createRequire(path.join(pkg.root, "package.json")), cameraOnly: true })));
+  const queue = [appRequire, createRequire(sparkFile)].map(req => ({ req, optionalOnly: false }));
+  if (hasCamera || optionalBackends.some(name => dependencies[name])) queue.push(...installed.map(pkg => ({ req: createRequire(path.join(pkg.root, "package.json")), optionalOnly: true })));
   const visited = new Set();
   const packages = {};
-  for (const { req, cameraOnly } of queue) {
+  for (const { req, optionalOnly } of queue) {
     for (const name of active) {
-      if (cameraOnly && name !== "react-native-nitro-modules" && !cameraPackages.includes(name)) continue;
+      if (optionalOnly && name !== "react-native-nitro-modules" && !cameraPackages.includes(name) && !optionalBackends.includes(name)) continue;
       let file;
       try { file = req.resolve(`${name}/package.json`); }
       catch (error) {
@@ -60,7 +61,7 @@ function prepareNativePatches(root, installed = []) {
       if (visited.has(packageRoot)) continue;
       visited.add(packageRoot);
       packages[name] = { root: packageRoot };
-      queue.push({ req: createRequire(file), cameraOnly });
+      queue.push({ req: createRequire(file), optionalOnly });
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       const pin = pins[name];
       if (manifest.version !== pin.version) {

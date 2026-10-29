@@ -64,7 +64,7 @@ export function installedPackages(root: string): Package[] {
       ...Object.fromEntries((Array.isArray(bundled) ? bundled : []).map(name => [name, true])),
       ...current.json.dependencies,
       ...Object.fromEntries(Object.entries(current.json.optionalDependencies ?? {})
-        .filter(([name]) => ["react-native-vision-camera", "react-native-nitro-image"].includes(name))),
+        .filter(([name]) => ["react-native-vision-camera", "react-native-nitro-image", "react-native-enriched-markdown", "react-native-enriched-html", "react-native-webview", "@op-engineering/op-sqlite"].includes(name))),
       ...(current.app ? current.json.devDependencies : {}),
       // Optional peers do not require a native module. If an application uses
       // one, its own dependency edge includes it. Resolving optional peers here
