@@ -237,6 +237,8 @@ int main(int argc, char **argv) { @autoreleasepool {
       [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer) { if (mounting) SparkTestDriverDidMount(); else [timer invalidate]; }];
     });
     Check([Code(Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"busy", @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"capture waits for mounts to settle");
+    Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60, @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"pointer input waits for mounts and gesture attachment to settle");
+    Check(!window.isVisible && NSApp.activationPolicy == NSApplicationActivationPolicyProhibited, @"unsettled pointer input never shows or activates the app");
     mounting = false;
     NSDictionary *capture = Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"cache" });
     Check([capture[@"ok"] boolValue] && [capture[@"file"] isEqual:@"cache.png"], [NSString stringWithFormat:@"capture %@", capture]);
