@@ -325,9 +325,11 @@ build runs its embedded bundle. A flow whose `appId` is not the app's bundle ide
 fails with `invalid`.
 
 Add `--pointer` to `e2e:run --backend driver` to attach the macOS OS pointer backend for
-`tapOn`. This opts into showing target windows and requires Accessibility access.
+`tapOn`. This opts into showing and activating target windows and requires Accessibility access.
 It uses driver testIDs for lookup and real Quartz mouse events for input; it does not provide
-an AX tree or other gestures. See [real pointer input](test-driver.md#real-pointer-input-macos).
+an AX tree or other gestures. With `--pointer`, visibility checks use the pointer backend's
+driver queries, with the same white-box testID semantics. The release gate does not accept
+`--pointer`; use `e2e:run` for pointer flows. See [real pointer input](test-driver.md#real-pointer-input-macos).
 
 | Flow | Driver |
 |---|---|
