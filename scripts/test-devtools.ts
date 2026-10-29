@@ -171,12 +171,12 @@ try {
   assert.equal(await main.evaluate("1 + 1"), 2);
   assert.equal((await target(SHARED)).id, shared.id);
   pass(`reload: the shared target ${shared.id} kept its id and the same session evaluates in the reloaded runtime`);
-  // Isolated runtimes are destroyed on reload. Re-registering needs the worker to start again, which it does not:
-  // after a reload ThreadedRuntime.run never reaches native (#291). Reported, not asserted.
+  // The reload destroyed the worker; the DevTools screen of the reloaded app starts it again as a new target,
+  // which /json/list lists shortly after the screen shows it running.
   await driver.navigate("spark-ks://devtools/devtools");
-  const restarted = await driver.waitFor("devtools-devtools-worker-running", 20000).then(() => true, () => false);
-  const reloadedWorker = restarted ? (await targets()).find(item => item.title === WORKER && item.id !== worker.id) : undefined;
-  console.log(reloadedWorker ? `PASS reload: the worker re-registered as ${reloadedWorker.id}` : "KNOWN ISSUE #291: the worker runtime did not restart after the reload, so it has no target");
+  await driver.waitFor("devtools-devtools-worker-running", 20000);
+  const reloadedWorker = await until(async () => (await targets()).find(item => item.title === WORKER && item.id !== worker.id), "the restarted worker registers its target");
+  pass(`reload: the worker re-registered as ${reloadedWorker.id}`);
 } catch (error) {
   const pauses = debuggerEvents.filter(message => message.method === "Debugger.paused" || message.method === "Debugger.resumed");
   console.error(`Shared runtime debugger events: ${JSON.stringify(pauses.map(message => message.method === "Debugger.paused" ? `paused(${message.params.reason}: ${message.params.callFrames?.[0]?.functionName}) ${JSON.stringify(message.params.data?.description ?? "").slice(0, 120)}` : "resumed"))}`);

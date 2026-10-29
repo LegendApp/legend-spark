@@ -148,6 +148,14 @@
   });
 }
 - (void)didMountComponentsWithRootTag:(NSInteger)rootTag { SparkTestDriverDidMount(); }
+// Worker runtimes' hosts forward hostDidStart: here too; only the main host's restart reloads the app UI.
+- (void)hostDidStart:(RCTHost *)host {
+  [super hostDidStart:host];
+  if (host != self.rootViewFactory.reactHost) return;
+  // A reload starts a new instance with its own surface presenter, which reports the reloaded UI's mounts.
+  if (SparkTestDriverActive()) [host.surfacePresenter addObserver:self];
+  SparkTestDriverDidReload();
+}
 - (BOOL)windowShouldClose:(NSWindow *)window {
   NSString *behavior = SparkLifecycleConfiguration()[@"mainWindow"][@"closeBehavior"];
   if ([behavior isEqual:@"hide"]) { [window orderOut:nil]; return NO; }
