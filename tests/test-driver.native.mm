@@ -470,6 +470,10 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check([Request(fd, @{ @"command": @"openFile", @"path": @"/etc/hosts" })[@"ok"] boolValue], @"openFile");
     Check([Code(Request(fd, @{ @"command": @"openFile", @"path": @"etc/hosts" })) isEqual:@"E_INVALID_ARGUMENT"], @"openFile needs an absolute path");
     Check([Code(Request(fd, @{ @"command": @"openFile", @"path": @"/etc/spark-driver-missing" })) isEqual:@"E_NOT_FOUND"], @"openFile needs an existing file");
+    dispatch_sync(dispatch_get_main_queue(), ^{ SparkTestDriverDidReload(); });
+    Check([Code(Request(fd, @{ @"command": @"navigate", @"url": @"spark-ks://reloaded", @"timeoutMs": @200 })) isEqual:@"E_TIMEOUT"], @"navigate after a reload waits for the reloaded UI");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{ SparkTestDriverDidMount(); });
+    Check([Request(fd, @{ @"command": @"navigate", @"url": @"spark-ks://reloaded" })[@"ok"] boolValue], @"navigate after the reloaded UI mounts");
     NSDictionary *found = Request(fd, @{ @"command": @"waitFor", @"testID": @"probe-layer" });
     Check([found[@"ok"] boolValue] && [found[@"frame"][@"width"] isEqual:@100] && [found[@"window"] isEqual:@"spark.main"], @"waitFor finds an existing view");
     probeFrame = found[@"frame"];
@@ -1069,8 +1073,9 @@ int main(int argc, char **argv) { @autoreleasepool {
   Pump(^{ return (BOOL)(access([directory stringByAppendingPathComponent:@"driver.sock"].fileSystemRepresentation, F_OK) != 0); }, 2);
   Check(access([directory stringByAppendingPathComponent:@"driver.sock"].fileSystemRepresentation, F_OK) != 0, @"socket is removed");
   if ([mode isEqual:@"session"]) {
-    Check(openedURLs.count == 2 && [openedURLs[0].absoluteString isEqual:@"spark-ks://windows/frame"], @"navigate opens the URL through the app delegate");
+    Check(openedURLs.count == 3 && [openedURLs[0].absoluteString isEqual:@"spark-ks://windows/frame"], @"navigate opens the URL through the app delegate");
     Check(openedURLs[1].isFileURL && [openedURLs[1].path isEqual:@"/etc/hosts"], @"openFile opens a file URL through the app delegate");
+    Check([openedURLs[2].absoluteString isEqual:@"spark-ks://reloaded"], @"a navigate that timed out opens nothing");
     // A window that was never shown renders everything drawn in-process.
     Check(Near(Sample(@"cache.png", NSMakeRect(0, 200, 100, 100), window), 1, 0, 0), @"capture renders layer background colors");
     CGFloat scale = [[NSBitmapImageRep imageRepWithData:[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"cache.png"]]] pixelsWide] / window.frame.size.width;

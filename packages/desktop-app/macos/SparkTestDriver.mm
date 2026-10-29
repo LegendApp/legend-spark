@@ -69,6 +69,7 @@ void SparkTestDriverDidMount(void) {
   if (now - firstMount <= SparkStartupWindow && quietPoints.count < SparkMaxQuietPoints)
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SparkSettleInterval * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ SparkNoteQuiet(CACurrentMediaTime()); });
 }
+void SparkTestDriverDidReload(void) { lastMount = 0; }
 static NSArray<NSString *> *SparkBuiltInCommands(void) {
   return [[[@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"startup", @"quit"]
     arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()] arrayByAddingObjectsFromArray:[SparkDriverFrameCommandNames() arrayByAddingObjectsFromArray:SparkDriverCommitCommandNames()]]

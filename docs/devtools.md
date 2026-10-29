@@ -28,10 +28,9 @@ closes the previous DevTools session, which reports that a new debugger opened; 
 ([#292](https://github.com/LegendApp/legend-spark/issues/292)).
 
 A debugger session survives source edits and full reloads (`r`, or reload from DevTools): the shared runtime keeps its
-target, so its DevTools window stays attached. Spark destroys isolated runtimes on reload; each would come back as a
-new target with the same title when the app starts it again, but today isolated runtimes do not restart after a reload
-([#291](https://github.com/LegendApp/legend-spark/issues/291)). In the Kitchen Sink, edits currently arrive as full
-reloads rather than hot updates (#291).
+target, so its DevTools window stays attached. Spark destroys isolated runtimes on reload; each comes back as a
+new target with the same title when the app starts it again. In the Kitchen Sink, edits currently arrive as full
+reloads rather than hot updates ([#291](https://github.com/LegendApp/legend-spark/issues/291)).
 
 ## API
 
@@ -421,8 +420,8 @@ instead, headless:
    reconnects, then calls `openDevTools` for both runtimes and an absent one (`CHROME_PATH` points React Native's
    browser launcher at a recorder, so no browser opens).
 5. It edits a source file and restores it, pauses on an uncaught exception, and reloads, checking that the shared
-   runtime's session stays attached throughout. It reports, without failing, whether the worker restarted after the
-   reload (#291).
+   runtime's session stays attached throughout. After the reload, it checks that the worker restarts as a new
+   target.
 
 `bun scripts/test-network-inspector.ts` checks the network inspector the same way, against loopback fixtures
 (`scripts/testing/network-fixtures.ts`, 127.0.0.1 only). It attaches to the shared runtime over CDP and runs the
