@@ -119,9 +119,13 @@
     "@legendapp/spark-html": "0.0.1",
     "react-native-enriched-markdown": "1.1.1",
     "react-native-enriched-html": "1.1.1",
+    "react-native-webview": "16.0.0",
+    "@op-engineering/op-sqlite": "18.2.1",
     "yaml": "2.9.1",
     "ajv": "8.20.0",
-    "pngjs": "3.4.0"
+    "pngjs": "3.4.0",
+    "react-native-vision-camera": "5.2.3",
+    "react-native-nitro-image": "0.15.2"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

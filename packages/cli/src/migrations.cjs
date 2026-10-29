@@ -95,6 +95,11 @@ const migrations = [
     planPointers(context);
     context.manualStep('If the app uses a custom runtime, rebuild it for next.4 native dependency patches; review production module selection and affected SidebarSplitView/Windows native flows.');
   } },
+  // At release, align this version, UPGRADING.md, and migrations.test.ts with the first release without ./camera.
+  { version: '0.0.2-next.0', automatic: false, breaking: true, apply(context) {
+    context.manualStep('Apps importing @legendapp/spark/markdown, /html, /webview or /sqlite must add the corresponding optional backend to app dependencies. See the linked upgrade notes for library names and version pins; run spark doctor and rebuild custom runtimes.');
+    context.manualStep('@legendapp/spark/camera was removed. Install the camera libraries in your app; see the linked upgrade notes for exact version pins. Import camera APIs directly from react-native-vision-camera, and NitroImage / Image from react-native-nitro-image. Spark still applies its version-pinned native patches automatically when your app depends on these libraries. Rebuild custom runtimes.');
+  } },
 ];
 
 /** @param {string} root */

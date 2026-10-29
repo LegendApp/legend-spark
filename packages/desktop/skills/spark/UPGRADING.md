@@ -211,9 +211,10 @@ After (for this release):
 ```
 
 Camera and enriched Markdown native dependency patches are applied by the SDK.
-Use public `/camera` and `/markdown` imports; stop manually patching their bundled
-dependencies. Existing custom runtimes must rebuild to include changed native
-code. Native production builds fail when app source imports an excluded module:
+Use public `/camera` (removed in 0.0.2-next.0 — import `react-native-vision-camera`
+directly) and `/markdown` imports; stop manually patching their bundled dependencies.
+Existing custom runtimes must rebuild to include changed native code. Native
+production builds fail when app source imports an excluded module:
 check `spark analyze` and native-only `include` requirements rather than weakening
 the selection. SidebarSplitView gained a native content-list column and swipe
 actions; review customized pane composition if affected. Windows notification
@@ -320,3 +321,39 @@ desktop app by itself, such as with `--no-open`.
 
 No changes are needed in existing apps. Update `@legendapp/spark` to `0.0.1`
 and reinstall.
+
+## 0.0.2-next.0
+
+Next version (provisional version number).
+
+Breaking: yes. `@legendapp/spark/camera` was removed. Install
+`react-native-vision-camera@5.2.3` and `react-native-nitro-image@0.15.2` in your
+app, with `react-native-nitro-modules@0.37.0`. Import camera APIs directly from
+`react-native-vision-camera`, and `NitroImage` / `Image` from
+`react-native-nitro-image`. Spark still applies its version-pinned native patches
+automatically when your app depends on these libraries. Rebuild custom runtimes.
+
+The `/markdown`, `/html`, `/webview`, and `/sqlite` APIs remain available, but
+Spark no longer installs their backends. Add only the libraries your app uses
+to its own `dependencies`, retaining the SDK's tested overrides:
+
+| Spark import | App dependency |
+| --- | --- |
+| `@legendapp/spark/markdown` | `react-native-enriched-markdown@1.1.1` |
+| `@legendapp/spark/html` | `react-native-enriched-html@1.1.1` |
+| `@legendapp/spark/webview` | `react-native-webview@16.0.0` |
+| `@legendapp/spark/sqlite` | `@op-engineering/op-sqlite@18.2.1` |
+
+For WebView and SQLite, keep the matching patched SDK archive override supplied
+by `spark upgrade` or `spark add desktop`. Run your package manager's install,
+then `spark doctor` and rebuild custom runtimes. Native discovery and patching
+activate only for installed app dependencies; optional peers alone do not select
+native code. Nitro Modules and Runtimes remain hard dependencies.
+
+Universal apps targeting Windows must exclude `react-native-enriched-html` and
+`react-native-enriched-markdown` in `expoByPlatform.windows.autolinking.exclude`
+in `desktop.config.json`, because these backends have no Windows implementation.
+
+The `/native` `NativeConfiguration` type now describes only Spark's emitted
+`platforms` and `dependencies` overrides; use your own CLI configuration type for
+extra project or dependency fields, preserved by `withSparkNative`.

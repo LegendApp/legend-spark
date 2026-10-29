@@ -334,3 +334,20 @@ test("app overrides retain patched native packages reached through linked worksp
     expect(installedPackages(app).find(pkg => pkg.name === "native-fixture")?.root).toBe(realpathSync(path.join(library, "node_modules/native-fixture")));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test.each(["react-native-enriched-markdown", "react-native-enriched-html", "react-native-webview", "@op-engineering/op-sqlite"])("optional backend %s enters discovery only through an app dependency", name => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-optional-graph-"));
+  try {
+    const sdk = path.join(root, "node_modules/@legendapp/spark");
+    const backend = path.join(root, "node_modules", name);
+    mkdirSync(sdk, { recursive: true });
+    mkdirSync(backend, { recursive: true });
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "1.0.0" } }));
+    writeFileSync(path.join(sdk, "package.json"), JSON.stringify({ name: "@legendapp/spark", version: "1.0.0",
+      peerDependencies: { [name]: "1.0.0" }, peerDependenciesMeta: { [name]: { optional: true } } }));
+    writeFileSync(path.join(backend, "package.json"), JSON.stringify({ name, version: "1.0.0" }));
+    expect(installedPackages(root).map(pkg => pkg.name)).not.toContain(name);
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "1.0.0" }, optionalDependencies: { [name]: "1.0.0" } }));
+    expect(installedPackages(root).map(pkg => pkg.name)).toContain(name);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

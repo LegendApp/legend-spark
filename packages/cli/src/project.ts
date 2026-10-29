@@ -63,6 +63,8 @@ export function installedPackages(root: string): Package[] {
     const names = Object.keys({
       ...Object.fromEntries((Array.isArray(bundled) ? bundled : []).map(name => [name, true])),
       ...current.json.dependencies,
+      ...Object.fromEntries(Object.entries(current.json.optionalDependencies ?? {})
+        .filter(([name]) => ["react-native-vision-camera", "react-native-nitro-image", "react-native-enriched-markdown", "react-native-enriched-html", "react-native-webview", "@op-engineering/op-sqlite"].includes(name))),
       ...(current.app ? current.json.devDependencies : {}),
       // Optional peers do not require a native module. If an application uses
       // one, its own dependency edge includes it. Resolving optional peers here
@@ -74,7 +76,7 @@ export function installedPackages(root: string): Package[] {
       // Linked workspace packages resolve peers from their original checkout.
       // Explicit app overrides must select the app's installed native copy.
       const req = Object.hasOwn(manifest.overrides ?? {}, name) ? appRequire : contextualRequire;
-      let file: string;
+      let file: string | undefined;
       try {
         file = req.resolve(`${name}/package.json`);
       } catch {
@@ -92,17 +94,13 @@ export function installedPackages(root: string): Package[] {
               dir = path.dirname(dir);
             file = path.join(dir, "package.json");
           }
-        } catch {
-          if (
-            current.app &&
-            (current.json.dependencies?.[name] ||
-              current.json.devDependencies?.[name])
-          )
-            throw new Error(
-              `Dependency ${name} is not installed yet. Finish the package installation, then retry.`,
-            );
-          continue;
-        }
+        } catch {}
+      }
+      if (!file || !existsSync(file)) {
+        if (current.app &&
+          (current.json.dependencies?.[name] || current.json.devDependencies?.[name]))
+          throw new Error(`Dependency ${name} is not installed yet. Finish the package installation, then retry.`);
+        continue;
       }
       const dir = realpathSync(path.dirname(file));
       if (visited.has(dir)) continue;
@@ -167,8 +165,8 @@ export function hashFiles(root: string, entries: string[], windows = false, excl
 }
 export function nativePackages(root: string, { applyExcludes = true } = {}): NativePackage[] {
   assertEnrichedHtmlPins(root);
-  prepareNativePatches(root);
   const installed = installedPackages(root);
+  prepareNativePatches(root, installed);
   if (projectPlatform(root) === "windows") return windowsNativePackages(root, installed);
   const excluded: string[] = ["app.json", "desktop.config.json"].some(file => existsSync(path.join(root, file)))
     ? readAppConfig(root).expo?.autolinking?.exclude ?? [] : [];

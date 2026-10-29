@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { run } from "../packages/cli/src/commands.ts";
-import { writeJson } from "../packages/cli/src/json.ts";
+import { readJson, writeJson } from "../packages/cli/src/json.ts";
 import { create } from "../packages/cli/src/create.ts";
 import { prepareGoProfile } from "../packages/cli/src/go-profile.ts";
 import { packSpark } from "../scripts/pack-spark.ts";
@@ -25,11 +25,14 @@ process.env.SPARK_HOME = path.join(temporary, "spark-home");
 process.env.CI = "1";
 await run(temporary, ["npm", "exec", "--yes", "--package", path.join(archives, creator), "--", "create-spark", "SmokeApp", "--packages", packages, "--platform", "macos", "--package-manager", "npm"]);
 const app = path.join(temporary, "SmokeApp");
-await run(app, ["npm", "install", "--no-audit", "--no-fund"]);
+await run(app, ["npm", "install", "--save-exact", "react-native-enriched-markdown@1.1.1", "--no-audit", "--no-fund"]);
 await run(app, ["npm", "exec", "--no", "--", "tsc", "--noEmit"]);
-// Match sdk build-runner's project preparation without compiling native code.
+// Opt the Bun Runner fixture into the same backend before comparing native profiles.
 const runner = path.join(temporary, "SparkRunner");
 await create(runner, packages, "macos", false, undefined, "bun");
+const runnerPackage = readJson(path.join(runner, "package.json"));
+runnerPackage.dependencies["react-native-enriched-markdown"] = "1.1.1";
+writeJson(path.join(runner, "package.json"), runnerPackage);
 await prepareGoProfile(runner, packages, "macos", "bun");
 for (const root of [app, runner]) {
   for (const directory of ["cpp/highlight/vendor/grammars", "cpp/highlight/vendor/tree-sitter", "ios/vendor"]) {

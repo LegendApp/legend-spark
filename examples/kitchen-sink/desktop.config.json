@@ -59,7 +59,9 @@
           "expo-dev-menu-interface",
           "expo-manifests",
           "expo-updates-interface",
-          "react-native-macos"
+          "react-native-macos",
+          "react-native-enriched-html",
+          "react-native-enriched-markdown"
         ]
       }
     }

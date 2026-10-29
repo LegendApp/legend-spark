@@ -9,6 +9,12 @@ import { readJson } from "../packages/cli/src/project.ts";
 
 const framework = path.resolve(import.meta.dirname, "..");
 export async function installCameraPackages(root: string) {
+  const pins = readJson(path.join(framework, "patches/camera/upstream.json"));
+  const cameraVersion = pins["react-native-vision-camera"]?.version;
+  const imageVersion = pins["react-native-nitro-image"]?.version;
+  for (const [name, version] of [["react-native-vision-camera", cameraVersion], ["react-native-nitro-image", imageVersion]]) {
+    if (typeof version !== "string") throw new Error(`Missing camera version pin for ${name} in patches/camera/upstream.json`);
+  }
   const packages: Record<string, string> = {};
   const probe = path.join(framework, "examples/camera/nitro-view-probe");
   const output = path.join(framework, "artifacts/camera/packages/nitro-view-probe.tgz");
@@ -19,7 +25,10 @@ export async function installCameraPackages(root: string) {
   const pkg = readJson(path.join(root, "package.json"));
   const manager = packageManager(root);
   const dependencies = Object.fromEntries(Object.entries(packages).map(([name, archive]) => [name, localArchive(archive)]));
-  pkg.dependencies = { ...pkg.dependencies, ...dependencies };
+  pkg.dependencies = { ...pkg.dependencies,
+    "react-native-vision-camera": cameraVersion,
+    "react-native-nitro-image": imageVersion,
+    ...dependencies };
   applyOverrides(pkg, dependencies, manager);
   writePackageConfig(root, pkg, manager);
   await run(root, managerCommand(manager, ["install"]), { capture: true });

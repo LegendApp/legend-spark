@@ -1,4 +1,4 @@
-import type { ExpoConfig } from "@expo/config-types";
+import type { ExpoConfig } from "expo/config";
 import type { WindowConfiguration } from "@legendapp/spark-window-options";
 export type { WindowConfiguration } from "@legendapp/spark-window-options";
 export type SparkPlatform = "macos" | "windows" | "ios" | "android" | "web";

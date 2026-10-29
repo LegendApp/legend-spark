@@ -2,6 +2,15 @@
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
+Apps own the optional backends for `/markdown`, `/html`, `/webview`, and `/sqlite`:
+install Enriched Markdown/HTML, React Native WebView, or OP-SQLite only when used.
+Starter overrides retain supported versions without installing them. `spark doctor`
+reports missing app declarations/installations; native patching and discovery only
+activate installed dependencies. Keep the SDK's patched WebView/SQLite overrides.
+Nitro Modules, Runtimes, runtime utilities, and CLI/config engines remain hard;
+type-only tooling is development-only. See [library policy](external-libraries.md#optional-backend-dependencies)
+and the shipped [upgrade notes](../packages/desktop/skills/spark/UPGRADING.md#002-next0).
+
 ## Current decision
 
 The next candidate is `@legendapp/spark@0.0.1-next.5` on the `next` channel. The source
@@ -11,7 +20,7 @@ exports as supported on every platform. Record new evidence in a completed
 [release dossier](release-test-dossier.md) tied to an immutable source revision
 and exact archive digest.
 
-The package currently declares **56 export paths**. Fifty-four are functional
+The package currently declares **55 export paths**. Fifty-three are functional
 or tooling entry paths and two expose package/schema metadata. An export is a
 public import boundary; it is not evidence that every platform implements or
 passes that feature. Platform-specific support is determined by native package
@@ -21,7 +30,7 @@ availability and the evidence for that platform.
 
 | Group | Export paths |
 | --- | --- |
-| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./menus`, `./notifications`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos`, `./camera` |
+| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./menus`, `./notifications`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos` |
 | UI | `./ui`, `./ui/classnames`, `./ui/glass`, `./ui/search`, `./ui/sidebar`, `./ui/split-view`, `./ui/symbol`, `./ui/swipe`, `./ui/uniwind`, `./markdown`, `./html` |
 | AI and diagnostics | `./ai`, `./ai/codex`, `./diagnostics`, `./contracts`, `./customize` |
 | Configuration and build integration | `./config`, `./config-plugin`, `./expo-config`, `./metro`, `./runtime-entry`, `./metro-gate`, `./init-template`, `./native`, `./cli` |
@@ -29,7 +38,7 @@ availability and the evidence for that platform.
 
 ## Target capability map
 
-The [56-row support matrix](release-support-matrix.md) shows every import path,
+The [55-row support matrix](release-support-matrix.md) shows every import path,
 its provider, intended targets, target-specific acceptance status, related
 source tests, and exact platform command. The corresponding
 [machine-readable matrix](release-support-matrix.json) is checked against the

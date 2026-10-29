@@ -4,6 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import os from "node:os";
 import path from "node:path";
 import { copyKitchenSinkScreens, prepareKitchenSink } from "../scripts/prepare-kitchen-sink.ts";
+import { optionalBackendIssues } from "../packages/cli/src/dependency-pins.ts";
+import { nativePackages } from "../packages/cli/src/project.ts";
 import { planMigrations } from "../packages/cli/src/migrations.cjs";
 
 test("packaged consumers receive screens without workspace manifests or native projects", () => {
@@ -64,4 +66,21 @@ test("a clean checkout of kitchen sink has no pending migrations", () => {
     expect(plan.versions).toEqual([]);
     expect(plan.manualSteps).toEqual([]);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("kitchen sink declares its backends and excludes unsupported rich text on Windows", () => {
+  const root = path.resolve("examples/kitchen-sink");
+  expect(optionalBackendIssues(root)).toEqual([]);
+  const previous = process.env.SPARK_PLATFORM;
+  try {
+    process.env.SPARK_PLATFORM = "windows";
+    const names = nativePackages(root).map(pkg => pkg.name);
+    expect(names).toContain("react-native-webview");
+    expect(names).toContain("@op-engineering/op-sqlite");
+    expect(names).not.toContain("react-native-enriched-html");
+    expect(names).not.toContain("react-native-enriched-markdown");
+  } finally {
+    if (previous === undefined) delete process.env.SPARK_PLATFORM;
+    else process.env.SPARK_PLATFORM = previous;
+  }
 });

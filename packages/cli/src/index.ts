@@ -23,7 +23,7 @@ import { doctor, run } from "./commands.ts";
 import { findFramework, findProject, sparkHome, creationManifest, packageManifest, registerRuntime } from "./local.ts";
 import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
 import { devCommand } from "./dev-command.ts";
-import { printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
+import { optionalBackendIssues, printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
 import { upgrade } from "./upgrade.ts";
 import { ensureProjectVersion } from "./project-version.ts";
 import { reportError } from "./errors.ts";
@@ -166,7 +166,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       if (root) {
         ensureProjectVersion(root);
         try {
-          const issues = [...upgradeDependencyPins(root, true), ...enrichedHtmlPinIssues(root)];
+          const issues = [...upgradeDependencyPins(root, true), ...enrichedHtmlPinIssues(root), ...optionalBackendIssues(root)];
           printDependencyPins(issues);
           if (issues.length) {
             process.exitCode = 1;
