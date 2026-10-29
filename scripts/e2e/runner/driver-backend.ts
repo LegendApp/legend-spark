@@ -10,6 +10,7 @@ import { Failure, type Artifact, type Atom, type AtomKey, type Backend, type Cap
 /** What the backend uses of a driver session (`Driver` in scripts/e2e/driver.ts). Tests pass a double. */
 export type DriverClient = {
   readonly running: boolean;
+  restorePointer(): Promise<void>;
   pointerEvents(window: DriverWindow, point: { x: number; y: number }): Promise<PointerEvents>;
   navigate(url: string): Promise<void>;
   openFile(file: string): Promise<void>;
@@ -57,6 +58,8 @@ export class DriverBackend implements Backend {
 
   /** Used only by the opt-in OS pointer backend; ordinary driver runs stay hidden. */
   pointerEvents(window: DriverWindow, point: { x: number; y: number }) { return this.client().pointerEvents(window, point); }
+
+  async restorePointer() { if (this.driver?.running) await this.driver.restorePointer(); }
 
   async start(session: Session) {
     this.session = session;

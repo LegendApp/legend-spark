@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Platform, Text, TurboModuleRegistry, UIManager, View } from "react-native";
+import { Text, TurboModuleRegistry, UIManager, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView, RectButton } from "react-native-gesture-handler";
 
 // Test IDs: component-library-gesture-handler-native when the native module and button component are
@@ -19,7 +19,7 @@ export function GestureHandlerDemo() {
     <View style={{ padding: 24, gap: 12 }}>
       <Text className="text-sm text-muted" testID={native ? `${ID}-native` : undefined}>{`Native module and button registered: ${native ? "yes" : "no"}`}</Text>
       <GestureDetector gesture={gesture}>
-        <View {...(Platform.OS === "macos" ? { acceptsFirstMouse: true } : {})} testID={`${ID}-target`} collapsable={false} style={{ height: 120, borderRadius: 12, backgroundColor: "#3b82f6", justifyContent: "center", alignItems: "center" }}>
+        <View testID={`${ID}-target`} collapsable={false} style={{ height: 120, borderRadius: 12, backgroundColor: "#3b82f6", justifyContent: "center", alignItems: "center" }}>
           <Text style={{ color: "white" }}>Click or drag here</Text>
         </View>
       </GestureDetector>
