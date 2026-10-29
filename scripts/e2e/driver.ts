@@ -117,6 +117,7 @@ export class Driver {
     const reply = await this.request({ command: "pointerEvents", window, ...point }, 10000);
     return { pid: reply.pid as number, down: reply.down as string, up: reply.up as string };
   }
+  async restorePointer() { await this.request({ command: "restorePointer" }, 10000); }
   /** Delivers a deep link through the app's URL handling once its first render has settled. */
   async navigate(url: string, timeoutMs = 30000) { await this.request({ command: "navigate", url, timeoutMs }, timeoutMs + 10000); }
   /** Opens an existing file (absolute path) through the app's open-file handling once its first render has settled. */
