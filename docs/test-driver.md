@@ -103,7 +103,7 @@ await driver.close();
 
 ## Focus and window state
 
-A driven app never takes focus from the person using the Mac:
+By default, a driven app never takes focus from the person using the Mac:
 
 - Activation policy `NSApplicationActivationPolicyProhibited`: no Dock icon, no menu
   bar, cannot activate.
@@ -124,8 +124,11 @@ still ordered on screen, without activation.
 ### Real pointer input (macOS)
 
 Run `bun run e2e:run <flow> --backend driver --pointer` to enable `tapOn`. This explicitly
-allows the driver to show the target window. Ordinary driver runs retain the hidden-window
-behavior above.
+allows the driver to show the target window, change the activation policy from Prohibited
+to Regular, and activate the app for foreground clicks. At flow end (including failure),
+`restorePointer` hides windows the driver showed, restores their animation behavior and the
+activation policy, and reactivates the previously foreground app. Disconnect also restores
+this state before quitting. Ordinary driver runs retain the hidden-window behavior above.
 
 The pointer backend resolves `id` selectors through the existing driver, so element lookup
 is white-box; the click itself is OS input, posted as Quartz left mouse-down/up events by
@@ -135,11 +138,13 @@ its captured-frame coordinates to AppKit window points after showing the window,
 the title bar and Y flip. It constructs and serializes the mouse events in the window-owning
 process, where AppKit can resolve the window number and local hit point. The helper decodes
 and posts those events to that process without a CGWindow search.
-AppKit's background-click rules still apply: an inactive plain View needs
-`acceptsFirstMouse` to handle the first click. The Kitchen Sink gesture target opts into this on macOS.
+Foreground clicks work with React Native Pressable and gesture-handler targets without
+per-view `acceptsFirstMouse` props. Each tap uses one monotonic event number shared by its
+down and up events so React Native can pair the press and release.
 
 Grant the e2e runner Accessibility access in System Settings > Privacy & Security >
-Accessibility. The helper checks `CGPreflightPostEventAccess` before showing the window;
+Accessibility. The helper is compiled once per run and checks `CGPreflightPostEventAccess`
+at each flow start, before launching the app;
 missing permission fails with `E_PERMISSION_DENIED`, without prompting or waiting for a grant.
 Screen Recording permission is unnecessary. Posting events is not proof that a control
 handled them; flows must assert the resulting callback or state change.
@@ -158,7 +163,8 @@ send one request at a time; each reply echoes `id`. Failures are
 | `waitFor` | `testID`, `timeoutMs` (10000) | `window` identifier and `frame` of the first visible view whose accessibility identifier (React Native `testID`) matches. `frame` is in points from the top-left of the window's frame view, the area `capture` renders, so frame × `scale` is the view's pixels in a capture. `E_TIMEOUT` otherwise; `timeoutMs: 0` checks once. |
 | `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Waits for the first rendered UI to settle (an override set while the app is still launching did not last), then sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. `timeoutMs` bounds each wait. |
 | `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, once mounted UI updates have settled. `E_NOT_SETTLED` if they never do. |
-| `pointerEvents` | `window` (same as `capture`), `x`, `y` (top-left captured-frame points) | Shows the window, then returns `pid` and base64-encoded `down`/`up` CGEvent data for that window and point. Explicitly opts out of hidden-window behavior. `E_NO_WINDOW`, `E_INVALID_ARGUMENT`, or `E_EVENT` on failure. Posts no input itself. |
+| `restorePointer` | | Restores window visibility, animation and app activation state changed by `pointerEvents`. Safe to repeat; also runs on disconnect. |
+| `pointerEvents` | `window` (same as `capture`), `x`, `y` (top-left captured-frame points) | Shows and activates the window, then returns `pid` and base64-encoded `down`/`up` CGEvent data for that window and point. Explicitly opts out of hidden-window behavior. `E_NO_WINDOW`, `E_INVALID_ARGUMENT`, or `E_EVENT` on failure. Posts no input itself. |
 | `quit` | | `ok`, then the session ends and the app quits. |
 
 "Settled" means no Fabric mount transaction for 100 ms. The host reports mounts through
