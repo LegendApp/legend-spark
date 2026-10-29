@@ -81,6 +81,9 @@ export async function packSpark(root: string, output: string, release?: ReleaseM
     for (const name of ["@react-native-runtimes/core", "react-native-nitro-modules"]) {
       if (!external[name]) throw new Error(`Spark package is missing required native dependency ${name}`);
     }
+    for (const name of ["react-native-enriched-markdown", "react-native-enriched-html", "react-native-webview", "@op-engineering/op-sqlite"]) {
+      if (external[name] || !peers[name] || requiredPeers.has(name)) throw new Error(`Spark backend ${name} must be an optional peer dependency`);
+    }
     for (const pkg of bundled) {
       const destination = path.join(stage, "node_modules", pkg.json.name);
       await unpack(await pack(path.join(root, "packages", pkg.directory)), destination);

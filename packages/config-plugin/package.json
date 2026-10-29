@@ -14,8 +14,10 @@
     "@legendapp/spark-desktop-host": "0.0.1",
     "@legendapp/spark-window-options": "0.0.1",
     "@expo/config-plugins": "54.0.5",
-    "@expo/config-types": "54.0.10",
     "diff": "8.0.4"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@expo/config-types": "54.0.10"
+  }
 }

@@ -8,9 +8,16 @@
     "src"
   ],
   "dependencies": {
-    "@op-engineering/op-sqlite": "18.2.1",
     "@legendapp/spark-desktop-app": "0.0.1",
     "@legendapp/spark-file-system": "0.0.1"
   },
-  "private": true
+  "private": true,
+  "peerDependencies": {
+    "@op-engineering/op-sqlite": "18.2.1"
+  },
+  "peerDependenciesMeta": {
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    }
+  }
 }

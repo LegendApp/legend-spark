@@ -8,8 +8,15 @@
     "src"
   ],
   "dependencies": {
-    "react-native-webview": "16.0.0",
     "@legendapp/spark-desktop-app": "0.0.1"
   },
-  "private": true
+  "private": true,
+  "peerDependencies": {
+    "react-native-webview": "16.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react-native-webview": {
+      "optional": true
+    }
+  }
 }
