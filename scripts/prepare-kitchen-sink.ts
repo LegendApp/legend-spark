@@ -29,9 +29,9 @@ async function prepareKitchenSinkConsumer(root: string, packageManifest?: string
   if (!existsSync(path.join(root, "package.json"))) await create(root, manifest);
   else await refreshLocalPackages(root, manifest);
   const pkg = readJson(path.join(root, "package.json"));
-  for (const name of ["@legendapp/spark"]) {
+  for (const name of ["@legendapp/spark", "react-native-enriched-markdown", "react-native-enriched-html", "react-native-webview", "@op-engineering/op-sqlite"]) {
     const overrides = pkg.overrides ?? pkg.resolutions ?? pkg.pnpm?.overrides ?? {};
-    if (!overrides[name]) throw new Error(`Kitchen Sink needs the packed ${name} archive`);
+    if (!overrides[name]) throw new Error(`Kitchen Sink needs the ${name} override`);
     pkg.dependencies[name] = overrides[name];
   }
   pkg.dependencies["base64-js"] = "1.5.1";

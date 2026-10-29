@@ -156,8 +156,5 @@
   },
   "scripts": {
     "postinstall": "node postinstall.cjs"
-  },
-  "devDependencies": {
-    "@react-native-community/cli-types": "20.1.3"
   }
 }

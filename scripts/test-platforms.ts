@@ -96,7 +96,7 @@ try {
     writeFileSync(path.join(root, "App.tsx"), 'export { default } from "./PlatformChecks";\n');
     if (desktop) {
       const pkg = readJson(path.join(root, "package.json"));
-      for (const name of ["@legendapp/spark", "react-native-nitro-modules", "@react-native-runtimes/core"]) pkg.dependencies[name] = pkg.overrides[name];
+      for (const name of ["@legendapp/spark", "react-native-nitro-modules", "@react-native-runtimes/core", "react-native-webview", "@op-engineering/op-sqlite"]) pkg.dependencies[name] = pkg.overrides[name];
       writeJson(path.join(root, "package.json"), pkg); await run(root, managerCommand(packageManager(root), ["install"]), { capture: true });
     }
     // A unique application ID prevents this probe replacing another test or user app.
