@@ -46,3 +46,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "vault tasks/spark/desktop-libs/expo-router.md"
+  COMP-POINTER-01:
+    title: React Native Pressable handles successive OS mouse clicks on macOS, pairing each down and up
+    platforms: [macos]
+    blocking: false
+    spec: "docs/test-driver.md#real-pointer-input-macos"
