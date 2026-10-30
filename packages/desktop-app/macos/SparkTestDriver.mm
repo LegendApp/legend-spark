@@ -235,15 +235,7 @@ static void SparkRestorePointer(void) {
   for (dispatch_block_t restore in pointerRestores.reverseObjectEnumerator) restore();
   pointerRestores = nil;
 }
-static void SparkPointerEvents(NSDictionary *request, SparkDriverReply reply) {
-  NSString *failure = nil;
-  NSWindow *window = SparkResolveWindow(request[@"window"], &failure);
-  if (!window) { reply(SparkFailure(@"E_NO_WINDOW", failure)); return; }
-  id x = request[@"x"], y = request[@"y"];
-  if (![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class] ||
-      !isfinite([x doubleValue]) || !isfinite([y doubleValue])) {
-    reply(SparkFailure(@"E_INVALID_ARGUMENT", @"pointerEvents expects finite x,y")); return;
-  }
+static void SparkPreparePointer(NSWindow *window, NSNumber *x, NSNumber *y, SparkDriverReply reply) {
   if (!pointerRestores) {
     pointerRestores = [NSMutableArray new];
     NSApplicationActivationPolicy policy = NSApp.activationPolicy;
@@ -280,6 +272,21 @@ static void SparkPointerEvents(NSDictionary *request, SparkDriverReply reply) {
   }
   reply(@{ @"ok": @YES, @"pid": @(getpid()), @"down": events[0], @"up": events[1] });
 }
+static void SparkPointerEvents(NSDictionary *request, SparkDriverReply reply) {
+  NSString *failure = nil;
+  NSWindow *window = SparkResolveWindow(request[@"window"], &failure);
+  if (!window) { reply(SparkFailure(@"E_NO_WINDOW", failure)); return; }
+  id x = request[@"x"], y = request[@"y"];
+  if (![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class] ||
+      !isfinite([x doubleValue]) || !isfinite([y doubleValue])) {
+    reply(SparkFailure(@"E_INVALID_ARGUMENT", @"pointerEvents expects finite x,y")); return;
+  }
+  // Gesture recognizers attach after their views mount; do not click mid-mount.
+  SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 5), ^{ return SparkSettled(); }, ^(BOOL settled) {
+    if (!settled) { reply(SparkFailure(@"E_NOT_SETTLED", @"The UI kept mounting changes until the timeout")); return; }
+    SparkPreparePointer(window, x, y, reply);
+  });
+}
 static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   NSString *command = request[@"command"];
   if ([command isEqual:@"ping"]) reply(@{ @"ok": @YES });
@@ -313,13 +320,7 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   }
   else if ([command isEqual:@"setAppAppearance"]) SparkSetAppearance(request, reply);
   else if ([command isEqual:@"capture"]) SparkCapture(request, reply);
-  else if ([command isEqual:@"pointerEvents"]) {
-    SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 5), ^{ return SparkSettled(); }, ^(BOOL settled) {
-      if (!settled) { reply(SparkFailure(@"E_NOT_SETTLED", @"The UI kept mounting changes until the timeout")); return; }
-      // Gesture recognizers attach after their views mount; do not click mid-mount.
-      SparkPointerEvents(request, reply);
-    });
-  }
+  else if ([command isEqual:@"pointerEvents"]) SparkPointerEvents(request, reply);
   else if ([command isEqual:@"restorePointer"]) { SparkRestorePointer(); reply(@{ @"ok": @YES }); }
   else if ([command isKindOfClass:NSString.class] && SparkModuleCommands()[command]) SparkModuleCommands()[command](request, reply);
   else reply(SparkFailure(@"E_UNKNOWN_COMMAND", [NSString stringWithFormat:@"Unknown command %@", command]));
