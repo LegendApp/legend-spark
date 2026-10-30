@@ -17,7 +17,7 @@ export class FakeDriver implements DriverClient {
 
   async restorePointer() { this.log.push("restorePointer"); }
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
-  async pointerEvents(window: DriverWindow, point: { x: number; y: number }) {
+  async pointerEvents(window: DriverWindow, point: { x: number; y: number }, _timeoutMs?: number) {
     this.log.push(`pointerEvents ${window} ${point.x},${point.y}`);
     return { pid: 123, down: "down-event", up: "up-event" };
   }
