@@ -131,7 +131,8 @@ activation policy, and reactivates the previously foreground app. Disconnect als
 this state before quitting. Ordinary driver runs retain the hidden-window behavior above.
 
 The driver waits for mounted UI updates to settle before preparing pointer input, allowing
-native gesture recognizers to attach to their views.
+native gesture recognizers to attach to their views. `tapOn` waits up to its timeout; on a
+screen that keeps mounting, such as a spinner, it taps once the timeout is spent.
 The pointer backend resolves `id` selectors through the existing driver, so element lookup
 is white-box; the click itself is OS input, posted as Quartz left mouse-down/up events by
 a small native helper using `CGEventPostToPid`. It does not invoke a view action or a
@@ -166,7 +167,7 @@ send one request at a time; each reply echoes `id`. Failures are
 | `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Waits for the first rendered UI to settle (an override set while the app is still launching did not last), then sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. `timeoutMs` bounds each wait. |
 | `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, once mounted UI updates have settled. `E_NOT_SETTLED` if they never do. |
 | `restorePointer` | | Restores window visibility, animation and app activation state changed by `pointerEvents`. Safe to repeat; also runs on disconnect. |
-| `pointerEvents` | `window` (same as `capture`), `x`, `y` (top-left captured-frame points), `timeoutMs` (5000) | Waits for mounted UI updates to settle, shows and activates the window, then returns `pid` and base64-encoded `down`/`up` CGEvent data for that window and point. Explicitly opts out of hidden-window behavior. `E_NOT_SETTLED`, `E_NO_WINDOW`, `E_INVALID_ARGUMENT`, or `E_EVENT` on failure. Posts no input itself. |
+| `pointerEvents` | `window` (same as `capture`), `x`, `y` (top-left captured-frame points), `timeoutMs` (5000; 0 does not wait) | Validates the window and point, waits for mounted UI updates to settle, shows and activates the window, then returns `pid` and base64-encoded `down`/`up` CGEvent data for that window and point. Explicitly opts out of hidden-window behavior. `E_NOT_SETTLED`, `E_NO_WINDOW`, `E_INVALID_ARGUMENT`, or `E_EVENT` on failure. Posts no input itself. |
 | `quit` | | `ok`, then the session ends and the app quits. |
 
 "Settled" means no Fabric mount transaction for 100 ms. The host reports mounts through
