@@ -239,6 +239,8 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check([Code(Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"busy", @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"capture waits for mounts to settle");
     Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60, @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"pointer input waits for mounts and gesture attachment to settle");
     Check(!window.isVisible && NSApp.activationPolicy == NSApplicationActivationPolicyProhibited, @"unsettled pointer input never shows or activates the app");
+    Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"id:missing", @"x": @10, @"y": @20, @"timeoutMs": @200 })) isEqual:@"E_NO_WINDOW"], @"pointer resolves its window before waiting");
+    Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @"bad", @"y": @20, @"timeoutMs": @200 })) isEqual:@"E_INVALID_ARGUMENT"], @"pointer validates its point before waiting");
     mounting = false;
     NSDictionary *capture = Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"cache" });
     Check([capture[@"ok"] boolValue] && [capture[@"file"] isEqual:@"cache.png"], [NSString stringWithFormat:@"capture %@", capture]);
