@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
+import { DriverError } from "../driver.ts";
 import { Failure, type Backend, type CommandHandler, type Session } from "./backend.ts";
 import type { DriverBackend } from "./driver-backend.ts";
 
 const execute = promisify(execFile);
+/** The longest single settle wait, well under the driver's reply limit. */
+const SETTLE_SLICE_MS = 5000;
 
 /** OS mouse input with in-process testID lookup. Requires Accessibility input-posting access. */
 export class PointerBackend implements Backend {
@@ -17,9 +20,18 @@ export class PointerBackend implements Backend {
   readonly commands: Readonly<Record<string, CommandHandler>> = {
     tapOn: async (args, context) => {
       if ((args.modifiers as string[] | undefined)?.length) throw new Failure("unsupported", "pointer tapOn does not support modifiers");
-      const target = await context.target();
-      const { pid, down, up } = await this.driver.pointerEvents(`id:${target.element.window}`, target.point);
-      await this.post([String(pid), down, up]);
+      // Gesture recognizers attach after their views mount, so a tap waits for mounts to settle. A screen that keeps
+      // mounting (a spinner) is waited on in slices that re-resolve the target, then tapped once the timeout is spent.
+      const until = Date.now() + context.timeoutMs;
+      for (;;) {
+        const target = await context.target(), settleMs = Math.max(0, Math.min(until - Date.now(), SETTLE_SLICE_MS));
+        try {
+          const { pid, down, up } = await this.driver.pointerEvents(`id:${target.element.window}`, target.point, settleMs);
+          return await this.post([String(pid), down, up]);
+        } catch (error) {
+          if (!(error instanceof DriverError && error.code === "E_NOT_SETTLED")) throw error;
+        }
+      }
     },
   };
 

@@ -281,8 +281,9 @@ static void SparkPointerEvents(NSDictionary *request, SparkDriverReply reply) {
       !isfinite([x doubleValue]) || !isfinite([y doubleValue])) {
     reply(SparkFailure(@"E_INVALID_ARGUMENT", @"pointerEvents expects finite x,y")); return;
   }
-  // Gesture recognizers attach after their views mount; do not click mid-mount.
-  SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 5), ^{ return SparkSettled(); }, ^(BOOL settled) {
+  // Gesture recognizers attach after their views mount; do not click mid-mount. A zero timeout skips the wait.
+  NSTimeInterval timeout = SparkTimeout(request[@"timeoutMs"], 5);
+  SparkWaitUntil(timeout, ^{ return (BOOL)(timeout == 0 || SparkSettled()); }, ^(BOOL settled) {
     if (!settled) { reply(SparkFailure(@"E_NOT_SETTLED", @"The UI kept mounting changes until the timeout")); return; }
     SparkPreparePointer(window, x, y, reply);
   });

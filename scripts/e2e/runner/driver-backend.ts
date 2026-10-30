@@ -11,7 +11,7 @@ import { Failure, type Artifact, type Atom, type AtomKey, type Backend, type Cap
 export type DriverClient = {
   readonly running: boolean;
   restorePointer(): Promise<void>;
-  pointerEvents(window: DriverWindow, point: { x: number; y: number }): Promise<PointerEvents>;
+  pointerEvents(window: DriverWindow, point: { x: number; y: number }, timeoutMs?: number): Promise<PointerEvents>;
   navigate(url: string): Promise<void>;
   openFile(file: string): Promise<void>;
   waitFor(testID: string, timeoutMs?: number): Promise<{ window: string; frame: Frame }>;
@@ -57,7 +57,7 @@ export class DriverBackend implements Backend {
   constructor(private readonly app: DriverApp) {}
 
   /** Used only by the opt-in OS pointer backend; ordinary driver runs stay hidden. */
-  pointerEvents(window: DriverWindow, point: { x: number; y: number }) { return this.client().pointerEvents(window, point); }
+  pointerEvents(window: DriverWindow, point: { x: number; y: number }, timeoutMs?: number) { return this.client().pointerEvents(window, point, timeoutMs); }
 
   async restorePointer() { if (this.driver?.running) await this.driver.restorePointer(); }
 

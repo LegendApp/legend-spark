@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
+import { DriverError } from "../scripts/e2e/driver.ts";
 import { DriverBackend } from "../scripts/e2e/runner/driver-backend.ts";
 import { PointerBackend } from "../scripts/e2e/runner/pointer-backend.ts";
 import { runFlows } from "../scripts/e2e/runner/executor.ts";
@@ -17,13 +18,13 @@ vi.mock("node:child_process", async importOriginal => ({
   },
 }));
 
-async function run(command: string, flows = 1) {
+async function run(command: string, flows = 1, app = new FakeApp({ target: 1 })) {
   native.calls = [];
   const dir = mkdtempSync(path.join(tmpdir(), "e2e-pointer-"));
   mkdirSync(path.join(dir, "flows"));
   const file = path.join(dir, "flows/test.yaml");
   writeFileSync(file, `appId: so.legend.spark.examples.kitchensink\nname: Pointer\nintent: A real click.\n---\n- launchApp\n${command}\n`);
-  const app = new FakeApp({ target: 1 }), driver = new DriverBackend(app);
+  const driver = new DriverBackend(app);
   const results = await runFlows(Array.from({ length: flows }, () => file), { backends: [driver, new PointerBackend(driver)], runDir: path.join(dir, "run") });
   return { result: results[0]!, results, app };
 }
@@ -71,6 +72,42 @@ test.skipIf(process.platform !== "darwin")("pointer state is restored after a ta
   const { result, app } = await run("- tapOn: { id: target }\n- assertNotVisible: { id: target, timeout: 20ms }");
   expect(result.failure?.kind).toBe("assertion");
   expect(app.log.slice(-4)).toEqual(["restorePointer", "quit", "close", "app close"]);
+});
+
+/** An app whose UI keeps mounting for its first `unsettled` pointer requests, which wait out their timeout. */
+function mountingApp(unsettled: number) {
+  const app = new FakeApp({ target: 1 }), timeouts: number[] = [], launched = app.launch.bind(app);
+  app.launch = async options => {
+    const driver = await launched(options), pointerEvents = driver.pointerEvents.bind(driver);
+    driver.pointerEvents = async (window, point, timeoutMs) => {
+      timeouts.push(timeoutMs!);
+      if (timeouts.length > unsettled || !timeoutMs) return pointerEvents(window, point);
+      await new Promise(resolve => setTimeout(resolve, Math.min(timeoutMs, 100)));
+      throw new DriverError("E_NOT_SETTLED", "The UI kept mounting changes until the timeout");
+    };
+    return driver;
+  };
+  return { app, timeouts };
+}
+
+test.skipIf(process.platform !== "darwin")("a screen that keeps mounting is tapped once the tap's timeout is spent", async () => {
+  native.denied = false;
+  const { app, timeouts } = mountingApp(Infinity);
+  const { result } = await run("- tapOn: { id: target, timeout: 300ms }", 1, app);
+  expect(result.status, JSON.stringify(result.failure)).toBe("passed");
+  expect(timeouts[0]).toBeGreaterThan(200);
+  expect(timeouts.at(-1)).toBe(0);
+  expect(native.calls.slice(1).map(call => call.slice(1))).toEqual([["check"], ["123", "down-event", "up-event"]]);
+});
+
+test.skipIf(process.platform !== "darwin")("long tap timeouts wait in slices under the driver's reply limit and re-resolve the target", async () => {
+  native.denied = false;
+  const { app, timeouts } = mountingApp(1);
+  const { result } = await run("- tapOn: { id: target, timeout: 60s }", 1, app);
+  expect(result.status, JSON.stringify(result.failure)).toBe("passed");
+  expect(timeouts).toEqual([5000, expect.any(Number)]);
+  expect(timeouts[1]).toBeGreaterThan(4000);
+  expect(app.log.filter(line => line.startsWith("waitFor target"))).toHaveLength(2);
 });
 
 test("--pointer requires a driver session rather than starting a second app", async () => {
