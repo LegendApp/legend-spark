@@ -1,3 +1,4 @@
+import "./global.css";
 import { useState } from "react";
 import { Uniwind } from "uniwind";
 import { ScrollView, Text, View } from "react-native";
