@@ -112,9 +112,9 @@ export class Driver {
   }
 
   async ping() { await this.request({ command: "ping" }, 10000); }
-  /** Shows a window and encodes OS mouse events at captured-frame points. */
-  async pointerEvents(window: DriverWindow, point: { x: number; y: number }): Promise<PointerEvents> {
-    const reply = await this.request({ command: "pointerEvents", window, ...point }, 10000);
+  /** Shows a window and encodes OS mouse events at captured-frame points once mounted UI updates settle; a zero timeout does not wait. */
+  async pointerEvents(window: DriverWindow, point: { x: number; y: number }, timeoutMs = 5000): Promise<PointerEvents> {
+    const reply = await this.request({ command: "pointerEvents", window, ...point, timeoutMs }, timeoutMs + 10000);
     return { pid: reply.pid as number, down: reply.down as string, up: reply.up as string };
   }
   async restorePointer() { await this.request({ command: "restorePointer" }, 10000); }

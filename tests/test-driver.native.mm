@@ -286,6 +286,13 @@ int main(int argc, char **argv) { @autoreleasepool {
         Check([pointer[@"pid"] intValue] == getpid(), @"pointer events target the owning process");
         Check(window.isVisible, @"pointerEvents explicitly shows the hidden window");
       }
+      mounting = true;
+      dispatch_sync(dispatch_get_main_queue(), ^{
+        SparkTestDriverDidMount();
+        [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer) { if (mounting) SparkTestDriverDidMount(); else [timer invalidate]; }];
+      });
+      Check([Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60, @"timeoutMs": @0 })[@"ok"] boolValue], @"a zero timeout prepares pointer input without waiting to settle");
+      mounting = false;
       for (id x in @[@-1, @400, @"bad", NSNull.null])
         Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": x, @"y": @20 })) isEqual:@"E_INVALID_ARGUMENT"], @"pointer coordinates must be inside the frame");
       dispatch_sync(dispatch_get_main_queue(), ^{ ((PointerWindow *)window).shrinkOnOrder = YES; });
