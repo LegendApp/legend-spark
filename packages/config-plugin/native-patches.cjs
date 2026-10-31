@@ -137,7 +137,7 @@ function prepareNativePatches(root, installed = []) {
     }
   }
   for (const name of active) {
-    if (!packages[name]) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
+    if (!packages[name] && !pins[name].optional) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
   }
   return packages;
 }
