@@ -8,8 +8,10 @@ function ExpoButton({ variant, label, ...props }: Omit<ComponentProps<Compose["B
 }
 function Segments({ labels, selected, enabled, onSelect }: { labels: string[]; selected: number; enabled: boolean; onSelect: (index: number) => void }) {
   const { Host, Text, SingleChoiceSegmentedButtonRow, SegmentedButton } = compose();
+  const { selectable } = require("@expo/ui/jetpack-compose/modifiers") as typeof import("@expo/ui/jetpack-compose/modifiers");
   return <Host style={{ flex: 1 }}><SingleChoiceSegmentedButtonRow>{labels.map((label, index) =>
-    <SegmentedButton key={index} selected={index === selected} enabled={enabled} onClick={() => onSelect(index)}><SegmentedButton.Label><Text>{label}</Text></SegmentedButton.Label></SegmentedButton>)}
+    <SegmentedButton key={index} selected={index === selected} enabled={enabled} onClick={() => onSelect(index)}
+      modifiers={[selectable(index === selected, () => onSelect(index), "radioButton")]}><SegmentedButton.Label><Text>{label}</Text></SegmentedButton.Label></SegmentedButton>)}
   </SingleChoiceSegmentedButtonRow></Host>;
 }
 import { View, Text } from "react-native";
