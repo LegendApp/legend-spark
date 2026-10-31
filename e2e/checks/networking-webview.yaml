@@ -4,15 +4,15 @@ checks:
   WEB-NITROFETCH-01:
     title: react-native-nitro-fetch performs a native HTTPS request on macOS with status, headers and JSON, reports a 404, serves a prefetched response, and keeps its URL cache in the app's Caches folder
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-nitro-fetch.md"
   WEB-EXPOBROWSER-01:
     title: expo-web-browser opens a page in its macOS web window and dismissBrowser closes it, resolving openBrowserAsync with dismiss
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-web-browser.md"
   WEB-NETINFO-01:
     title: "@react-native-community/netinfo reports a connected wifi or ethernet state on macOS"
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-community-netinfo.md"

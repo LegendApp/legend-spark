@@ -274,6 +274,8 @@ Promoting npm `latest` does not change the platform support listed above.
   `e2e/gate.yaml` (see [Release gate](e2e-flows.md#release-gate)). It fails today:
   no e2e backend exists yet and coverage is incomplete. `bun run release` does not
   run it yet ([#55](https://github.com/LegendApp/legend-spark/issues/55)).
+- On macOS, also run the pointer flows the gate leaves out:
+  `bun run gate:pointer --app <KitchenSink.app>` (needs Accessibility access).
 - Verify the configured GitHub repository visibility and npm identity before
   publishing; do not change either as an implicit release step.
 - For signed production Runner distribution, configure the authorized Developer

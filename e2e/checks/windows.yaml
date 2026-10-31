@@ -9,5 +9,5 @@ checks:
   WIN-SAFEAREA-01:
     title: react-native-safe-area-context's provider reports the window frame and finite insets on macOS, and SafeAreaView lays out its content
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-safe-area-context.md"
