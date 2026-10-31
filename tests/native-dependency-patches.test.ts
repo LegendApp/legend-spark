@@ -313,3 +313,71 @@ test.each(["react-native-enriched-markdown", "react-native-enriched-html"])("%s 
     prepareNativePatches(root, installedPackages(root));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("optional pins patch only the app's own installs of the pinned version, without marking them SDK packages", () => {
+  const { root, spark, packages } = fixture();
+  const name = "react-native-mmkv";
+  try {
+    const directory = path.join(packages, name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "4.3.2" }, null, 2) + "\n");
+    writeFileSync(path.join(directory, "Native.podspec"), "upstream\n");
+    writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ [name]: { version: "4.3.2", integrity: "sha512-fixture", patch: `${name}.patch`, optional: true } }));
+    writeFileSync(path.join(spark, "patches", `${name}.patch`), readFileSync(path.join(spark, "patches/camera", `${names[0]}.patch`)));
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(directory, "Native.podspec"), "utf8")).toBe("upstream\n");
+    const app = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ ...app, dependencies: { ...app.dependencies, [name]: "4.3.2" } }));
+    expect(prepareNativePatches(root)[name]).toEqual({ root: realpathSync(directory) });
+    expect(readFileSync(path.join(directory, "macos/View.swift"), "utf8")).toBe("AppKit\n");
+    const receipt = JSON.parse(readFileSync(path.join(directory, "package.json"), "utf8")).spark;
+    expect(receipt).toMatchObject({ dependencyPatch: { version: "4.3.2" } });
+    expect(receipt.sdk).toBeUndefined();
+    // Another version keeps upstream behavior instead of failing the app's native preparation.
+    rmSync(directory, { recursive: true });
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "4.2.0" }, null, 2) + "\n");
+    writeFileSync(path.join(directory, "Native.podspec"), "upstream\n");
+    expect(prepareNativePatches(root)[name]).toBeUndefined();
+    expect(readFileSync(path.join(directory, "Native.podspec"), "utf8")).toBe("upstream\n");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("package.json hunks apply to tab-indented manifests and still converge after the receipt rewrites them", () => {
+  const { root, spark, packages } = fixture();
+  const name = "tabbed";
+  try {
+    const directory = path.join(packages, name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "1.0.0", codegenConfig: { name: "spec" } }, null, "\t") + "\n");
+    const app = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ ...app, dependencies: { ...app.dependencies, [name]: "1.0.0" } }));
+    writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ [name]: { version: "1.0.0", integrity: "sha512-fixture", patch: `${name}.patch`, optional: true } }));
+    writeFileSync(path.join(spark, "patches", `${name}.patch`), [
+      "diff --git a/package.json b/package.json", "--- a/package.json", "+++ b/package.json", "@@ -3,5 +3,6 @@",
+      '   "version": "1.0.0",', '   "codegenConfig": {', '-    "name": "spec"', '+    "name": "spec",', '+    "ios": {}', "   }", " }", "",
+    ].join("\n"));
+    prepareNativePatches(root);
+    const first = readFileSync(path.join(directory, "package.json"), "utf8");
+    expect(JSON.parse(first).codegenConfig).toEqual({ name: "spec", ios: {} });
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(directory, "package.json"), "utf8")).toBe(first);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("optional pins patch packages whose exports map hides package.json", () => {
+  const { root, spark, packages } = fixture();
+  const name = "exported";
+  try {
+    const directory = path.join(packages, name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "1.0.0", exports: { ".": "./index.js" } }, null, 2) + "\n");
+    writeFileSync(path.join(directory, "Native.podspec"), "upstream\n");
+    const app = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ ...app, dependencies: { ...app.dependencies, [name]: "1.0.0" } }));
+    writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ [name]: { version: "1.0.0", integrity: "sha512-fixture", patch: `${name}.patch`, optional: true } }));
+    writeFileSync(path.join(spark, "patches", `${name}.patch`), ["diff --git a/Native.podspec b/Native.podspec", "--- a/Native.podspec", "+++ b/Native.podspec", "@@ -1 +1 @@", "-upstream", "+patched", ""].join("\n"));
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(directory, "Native.podspec"), "utf8")).toBe("patched\n");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -6,3 +6,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
+  I18N-EXPOLOCALIZATION-01:
+    title: expo-localization returns the user's preferred locale and calendar with a time zone on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-localization.md"

@@ -20,6 +20,15 @@ static const char *token = "0123456789abcdef0123456789abcdef0123456789abcdef0123
 - (void)application:(NSApplication *)application openURLs:(NSArray<NSURL *> *)urls { [openedURLs addObjectsFromArray:urls]; }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { terminateRequested = YES; return NSTerminateCancel; }
 @end
+@interface PointerWindow : NSWindow
+@property BOOL shrinkOnOrder;
+@end
+@implementation PointerWindow
+- (void)makeKeyAndOrderFront:(id)sender {
+  [super makeKeyAndOrderFront:sender];
+  if (self.shrinkOnOrder) { self.shrinkOnOrder = NO; [self setContentSize:NSMakeSize(200, 300)]; }
+}
+@end
 @interface DrawnView : NSView
 @end
 @implementation DrawnView
@@ -88,7 +97,7 @@ static NSString *Code(NSDictionary *reply) { return reply[@"error"][@"code"]; }
 static void Client(void (^body)(void)) { [NSThread detachNewThreadWithBlock:body]; }
 
 static NSWindow *MakeWindow(void) {
-  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300)
+  NSWindow *window = [[PointerWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300)
     styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
   window.identifier = @"spark.main"; window.title = @"Probe"; window.releasedWhenClosed = NO;
   NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 400, 300)];
@@ -149,7 +158,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   Check(SparkTestDriverStart() && SparkTestDriverActive(), @"driver start");
   // Optional modules add commands; built-in and duplicate names are refused.
   SparkTestDriverRegisterCommand(@"echo", ^(NSDictionary *request, SparkTestDriverReply reply) { reply(@{ @"ok": @YES, @"echo": request[@"value"] ?: NSNull.null }); });
-  for (NSString *taken in @[@"ping", @"openFile", @"echo"]) {
+  for (NSString *taken in @[@"ping", @"openFile", @"pointerEvents", @"restorePointer", @"echo"]) {
     BOOL refused = NO;
     @try { SparkTestDriverRegisterCommand(taken, ^(NSDictionary *, SparkTestDriverReply reply) { reply(@{ @"ok": @NO }); }); } @catch (NSException *) { refused = YES; }
     Check(refused, [NSString stringWithFormat:@"%@ cannot be registered twice", taken]);
@@ -178,6 +187,15 @@ int main(int argc, char **argv) { @autoreleasepool {
     close(fd);
     finished = YES;
   });
+  else if ([mode isEqual:@"pointer-disconnect"]) Client(^{
+    int fd = Connect();
+    SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+    Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+    if (NSScreen.screens.count)
+      Check([Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60 })[@"ok"] boolValue], @"pointer before disconnect");
+    close(fd);
+    finished = YES;
+  });
   else if ([mode isEqual:@"session"]) Client(^{
     int fd = Connect();
     // Split writes exercise partial reads on the accepted socket.
@@ -188,6 +206,7 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check([hello[@"ok"] boolValue] && [hello[@"protocol"] isEqual:@1], @"authenticated");
     Check([Request(fd, @{ @"command": @"ping" })[@"ok"] boolValue], @"ping");
     Check([Code(Request(fd, @{ @"command": @"fly" })) isEqual:@"E_UNKNOWN_COMMAND"], @"unknown command");
+    Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"id:missing", @"x": @10, @"y": @20 })) isEqual:@"E_NO_WINDOW"], @"pointer requires an existing window");
     Check([Request(fd, @{ @"command": @"navigate", @"url": @"spark-ks://windows/frame" })[@"ok"] boolValue], @"navigate");
     Check([Code(Request(fd, @{ @"command": @"navigate", @"url": @"file:///etc/hosts" })) isEqual:@"E_INVALID_ARGUMENT"], @"file URLs are not navigation");
     Check([Request(fd, @{ @"command": @"openFile", @"path": @"/etc/hosts" })[@"ok"] boolValue], @"openFile");
@@ -218,6 +237,10 @@ int main(int argc, char **argv) { @autoreleasepool {
       [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer) { if (mounting) SparkTestDriverDidMount(); else [timer invalidate]; }];
     });
     Check([Code(Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"busy", @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"capture waits for mounts to settle");
+    Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60, @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"pointer input waits for mounts and gesture attachment to settle");
+    Check(!window.isVisible && NSApp.activationPolicy == NSApplicationActivationPolicyProhibited, @"unsettled pointer input never shows or activates the app");
+    Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"id:missing", @"x": @10, @"y": @20, @"timeoutMs": @200 })) isEqual:@"E_NO_WINDOW"], @"pointer resolves its window before waiting");
+    Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @"bad", @"y": @20, @"timeoutMs": @200 })) isEqual:@"E_INVALID_ARGUMENT"], @"pointer validates its point before waiting");
     mounting = false;
     NSDictionary *capture = Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"cache" });
     Check([capture[@"ok"] boolValue] && [capture[@"file"] isEqual:@"cache.png"], [NSString stringWithFormat:@"capture %@", capture]);
@@ -233,6 +256,56 @@ int main(int argc, char **argv) { @autoreleasepool {
     // Two requests in one write are answered in order.
     SendRaw(fd, @"{\"id\":\"a\",\"command\":\"ping\"}\n{\"id\":\"b\",\"command\":\"ping\"}\n");
     Check([Receive(fd)[@"id"] isEqual:@"a"] && [Receive(fd)[@"id"] isEqual:@"b"], @"pipelined requests");
+    if (NSScreen.screens.count) {
+      dispatch_sync(dispatch_get_main_queue(), ^{
+        [window setFrameOrigin:NSMakePoint(100, 150)];
+      });
+      NSWindowAnimationBehavior animation = window.animationBehavior;
+      int64_t previousNumber = 0;
+      for (int tap = 0; tap < 2; tap++) {
+        NSDictionary *pointer = Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60 });
+        Check([pointer[@"ok"] boolValue], [NSString stringWithFormat:@"pointer window geometry: %@", pointer]);
+        int64_t downNumber = 0;
+        for (NSString *key in @[@"down", @"up"]) {
+          NSData *data = [[NSData alloc] initWithBase64EncodedString:pointer[key] options:0];
+          CGEventRef event = CGEventCreateFromData(NULL, (__bridge CFDataRef)data);
+          Check(event != NULL, @"pointer event data decodes");
+          NSEvent *mouse = [NSEvent eventWithCGEvent:event];
+          CGPoint screen = CGEventGetLocation(event);
+          Check(mouse.windowNumber == window.windowNumber && fabs(mouse.locationInWindow.x - 50) < 1 && fabs(mouse.locationInWindow.y - (NSHeight(window.frame) - 60)) < 1, [NSString stringWithFormat:@"encoded events preserve the window and AppKit-local hit point: %@ global=%@ frame=%@", NSStringFromPoint(mouse.locationInWindow), NSStringFromPoint(NSPointFromCGPoint(screen)), NSStringFromRect(window.frame)]);
+          Check(fabs(screen.x - (NSMinX(window.frame) + 50)) < 0.1 && fabs(screen.y - (NSMaxY(NSScreen.screens.firstObject.frame) - NSMaxY(window.frame) + 60)) < 0.1, @"encoded events preserve Quartz screen coordinates");
+          Check(CGEventGetType(event) == ([key isEqual:@"down"] ? kCGEventLeftMouseDown : kCGEventLeftMouseUp), @"pointer encodes mouse down then up");
+          int64_t number = CGEventGetIntegerValueField(event, kCGMouseEventNumber);
+          if ([key isEqual:@"down"]) {
+            Check(number > previousNumber, @"each tap gets a monotonic event number");
+            downNumber = number;
+          } else Check(number == downNumber, @"down and up share kCGMouseEventNumber after serialization");
+          CFRelease(event);
+        }
+        previousNumber = downNumber;
+        Check([pointer[@"pid"] intValue] == getpid(), @"pointer events target the owning process");
+        Check(window.isVisible, @"pointerEvents explicitly shows the hidden window");
+      }
+      mounting = true;
+      dispatch_sync(dispatch_get_main_queue(), ^{
+        SparkTestDriverDidMount();
+        [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer) { if (mounting) SparkTestDriverDidMount(); else [timer invalidate]; }];
+      });
+      Check([Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60, @"timeoutMs": @0 })[@"ok"] boolValue], @"a zero timeout prepares pointer input without waiting to settle");
+      mounting = false;
+      for (id x in @[@-1, @400, @"bad", NSNull.null])
+        Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": x, @"y": @20 })) isEqual:@"E_INVALID_ARGUMENT"], @"pointer coordinates must be inside the frame");
+      dispatch_sync(dispatch_get_main_queue(), ^{ ((PointerWindow *)window).shrinkOnOrder = YES; });
+      Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @350, @"y": @20 })) isEqual:@"E_INVALID_ARGUMENT"], @"pointer bounds use geometry after ordering and layout");
+      dispatch_sync(dispatch_get_main_queue(), ^{ [window setContentSize:NSMakeSize(400, 300)]; });
+      Check([Request(fd, @{ @"command": @"restorePointer" })[@"ok"] boolValue], @"restore pointer state");
+      dispatch_sync(dispatch_get_main_queue(), ^{
+        Check(!window.isVisible && !NSApp.keyWindow, @"pointer cleanup hides the window");
+        Check(NSApp.activationPolicy == NSApplicationActivationPolicyProhibited, @"pointer cleanup restores prohibited activation");
+        Check(window.animationBehavior == animation, @"pointer cleanup restores animation");
+      });
+      Check([Request(fd, @{ @"command": @"restorePointer" })[@"ok"] boolValue], @"pointer cleanup is idempotent");
+    } else puts("pointer geometry skipped: no display");
     Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
     Check(Receive(fd) == nil, @"quit ends the session");
     finished = YES;
@@ -242,6 +315,10 @@ int main(int argc, char **argv) { @autoreleasepool {
   Pump(^{ return (BOOL)(finished && terminateRequested); }, 20);
   Check(finished, @"client finished");
   Check(terminateRequested, @"the app quits when the session ends");
+  if ([mode isEqual:@"pointer-disconnect"]) {
+    Check(!window.isVisible, @"disconnect hides the pointer window before termination");
+    Check(NSApp.activationPolicy == NSApplicationActivationPolicyProhibited, @"disconnect restores activation before termination");
+  }
   Pump(^{ return (BOOL)(access([directory stringByAppendingPathComponent:@"driver.sock"].fileSystemRepresentation, F_OK) != 0); }, 2);
   Check(access([directory stringByAppendingPathComponent:@"driver.sock"].fileSystemRepresentation, F_OK) != 0, @"socket is removed");
   if ([mode isEqual:@"session"]) {

@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-web-browser on macOS
+intent: >
+  The Expo Web Browser screen opens example.com in expo-web-browser's macOS web window (needs network
+  access), closes it with dismissBrowser, and shows the dismiss result.
+checks: [WEB-EXPOBROWSER-01]
+tags: [networking-webview]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://networking-webview/expo-web-browser" }
+- extendedWaitUntil: { visible: { id: networking-webview-expo-web-browser-dismiss }, timeout: 15s }

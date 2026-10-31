@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@sentry/react-native on macOS"
+intent: >
+  The Sentry screen initializes the SDK with a placeholder DSN, captures an error and keeps the event in
+  beforeSend without sending it; the event has the message, a stack trace and the native module's macOS os
+  context, so the screen shows passed.
+checks: [DEVT-SENTRY-01]
+tags: [devtools]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://devtools/sentry" }
+- extendedWaitUntil: { visible: { id: devtools-sentry-passed }, timeout: 15s }

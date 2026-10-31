@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-tracking-transparency on macOS
+intent: >
+  The Tracking transparency screen imports the library and asks for the status. App Tracking Transparency
+  does nothing on the Mac, so the library answers unavailable without native code.
+checks: [SEC-ATT-01]
+tags: [security]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://security/tracking-transparency" }
+- extendedWaitUntil: { visible: { id: security-tracking-transparency-status-unavailable }, timeout: 10s }

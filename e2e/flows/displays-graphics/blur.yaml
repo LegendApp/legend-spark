@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@react-native-community/blur on macOS"
+intent: >
+  The Blur screen finds BlurView and VibrancyView in the native component registry and shows four blur
+  materials (light, dark, adaptive material, thin dark) and a vibrancy view over colored stripes. Each
+  blur view reports a native frame and the vibrancy view shows its child inside the material. The capture
+  records how the materials look; it cannot show the live backdrop blur.
+checks: [DISP-BLUR-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/blur" }
+- extendedWaitUntil: { visible: { id: displays-graphics-blur-BlurView-registered }, timeout: 10s }
+- assertVisible: { id: displays-graphics-blur-VibrancyView-registered }
+- assertVisible: { id: displays-graphics-blur-light-laid-out }
+- assertVisible: { id: displays-graphics-blur-dark-laid-out }
+- assertVisible: { id: displays-graphics-blur-material-laid-out }
+- assertVisible: { id: displays-graphics-blur-thinMaterialDark-laid-out }
+- assertVisible: { id: displays-graphics-blur-vibrancy-child }
+- takeScreenshot: blur-materials

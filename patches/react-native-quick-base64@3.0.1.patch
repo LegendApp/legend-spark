@@ -1,0 +1,13 @@
+diff --git a/react-native-quick-base64.podspec b/react-native-quick-base64.podspec
+index eb43697..f02ee48 100644
+--- a/react-native-quick-base64.podspec
++++ b/react-native-quick-base64.podspec
+@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => min_ios_version_supported }
++  s.platforms    = { :ios => min_ios_version_supported, :osx => "14.0" }
+   s.source       = { :git => "https://github.com/craftzdog/react-native-quick-base64.git", :tag => "#{s.version}" }
+ 
+   s.source_files = "ios/**/*.{h,m,mm}", "cpp/**/*.{hpp,cpp,c,h}", "ios/generated/*.{h,cpp,mm}"

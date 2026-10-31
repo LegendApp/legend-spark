@@ -10,6 +10,17 @@ function readManifest(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
+// Find a package's manifest even when its exports map hides package.json, as Node finds the package.
+function resolveManifest(req, name) {
+  try { return req.resolve(`${name}/package.json`); }
+  catch (error) {
+    if (error.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
+    const file = (req.resolve.paths(name) ?? []).map(directory => path.join(directory, name, "package.json")).find(fs.existsSync);
+    if (!file) throw error;
+    return file;
+  }
+}
+
 function prepareNativePatches(root, installed = []) {
   const manifestFile = path.join(root, "package.json");
   if (!fs.existsSync(manifestFile)) return {};
@@ -51,7 +62,7 @@ function prepareNativePatches(root, installed = []) {
     for (const name of active) {
       if (optionalOnly && name !== "react-native-nitro-modules" && !cameraPackages.includes(name) && !optionalBackends.includes(name)) continue;
       let file;
-      try { file = req.resolve(`${name}/package.json`); }
+      try { file = resolveManifest(req, name); }
       catch (error) {
         if (error.code !== "MODULE_NOT_FOUND") throw error;
         continue;
@@ -60,10 +71,14 @@ function prepareNativePatches(root, installed = []) {
       const packageRoot = fs.realpathSync(path.dirname(file));
       if (visited.has(packageRoot)) continue;
       visited.add(packageRoot);
-      packages[name] = { root: packageRoot };
-      queue.push({ req: createRequire(file), optionalOnly });
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       const pin = pins[name];
+      if (pin.optional && manifest.version !== pin.version) {
+        console.warn(`Spark's desktop patch for ${name} needs ${pin.version}; found ${manifest.version}, so it stays unpatched.`);
+        continue;
+      }
+      packages[name] = { root: packageRoot };
+      queue.push({ req: createRequire(file), optionalOnly });
       if (manifest.version !== pin.version) {
         const owner = readManifest(req.resolve("./package.json"));
         throw new Error(`Spark needs ${name}@${pin.version}; found ${manifest.version} at ${packageRoot}, required by ${owner.name ?? root}. Add an override/resolution for the pinned version.`);
@@ -82,12 +97,15 @@ function prepareNativePatches(root, installed = []) {
           writes.push([target, next]);
           continue;
         }
-        if (relative === "package.json" && manifest.spark?.dependencyPatch) {
+        // The receipt rewrites package.json with two-space JSON, so its patch hunks target that form.
+        if (relative === "package.json") {
           const original = JSON.parse(current);
-          delete original.spark.dependencyPatch;
-          delete original.spark.sdk;
-          delete original.spark.requires;
-          if (!Object.keys(original.spark).length) delete original.spark;
+          if (manifest.spark?.dependencyPatch) {
+            delete original.spark.dependencyPatch;
+            delete original.spark.sdk;
+            delete original.spark.requires;
+            if (!Object.keys(original.spark).length) delete original.spark;
+          }
           current = JSON.stringify(original, null, 2) + "\n";
         }
         if (applyPatch(current, reversePatch(patch)) !== false) continue;
@@ -103,7 +121,7 @@ function prepareNativePatches(root, installed = []) {
       }
       const patched = JSON.parse(fs.readFileSync(file, "utf8"));
       patched.spark ??= {};
-      if (name !== "react-native-nitro-modules") {
+      if (name !== "react-native-nitro-modules" && !pin.optional) {
         patched.spark.sdk = true;
         patched.spark.requires = pin.requires ?? [];
       }
@@ -119,7 +137,7 @@ function prepareNativePatches(root, installed = []) {
     }
   }
   for (const name of active) {
-    if (!packages[name]) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
+    if (!packages[name] && !pins[name].optional) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
   }
   return packages;
 }

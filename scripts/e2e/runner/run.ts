@@ -5,6 +5,7 @@ import { collect } from "../files.ts";
 import { KitchenSinkApp } from "../kitchen-sink.ts";
 import type { Artifact, Backend, BackendFactory } from "./backend.ts";
 import { DriverBackend } from "./driver-backend.ts";
+import { PointerBackend } from "./pointer-backend.ts";
 import { realClock, runFlows, type Clock, type FailureReport, type FlowResult, type RunEvent, type RunOptions } from "./executor.ts";
 import { buildReport, failureText, writeReports, type RunReport } from "./report.ts";
 
@@ -12,7 +13,7 @@ const repo = path.resolve(import.meta.dirname, "../../..");
 
 /**
  * Production backends by `--backend` name. `driver` is the Spark in-app driver (docs/e2e-flows.md#the-driver-backend);
- * the macOS black-box backend (AX + CGEvent) lands with #50.
+ * `--pointer` attaches OS mouse input to that driver's session; a full AX backend is separate (#50).
  */
 export const BACKENDS: Readonly<Record<string, BackendFactory>> = {
   driver: ({ app }) => new DriverBackend(new KitchenSinkApp(app)),
@@ -20,10 +21,10 @@ export const BACKENDS: Readonly<Record<string, BackendFactory>> = {
 export const NO_BACKENDS = "no backends are registered";
 
 export type RunIO = { backends: Readonly<Record<string, BackendFactory>>; stdout(line: string): void; stderr(line: string): void; clock?: Clock; signal?: AbortSignal };
-const USAGE = "usage: bun run e2e:run [flow|dir…] [--backend name[,name…]] [--agent] [--report dir] [--app path]";
+const USAGE = "usage: bun run e2e:run [flow|dir…] [--backend name[,name…]] [--pointer] [--agent] [--report dir] [--app path]";
 
 function parse(args: string[]) {
-  const options = { targets: [] as string[], backends: [] as string[], agent: false, report: undefined as string | undefined, app: undefined as string | undefined };
+  const options = { targets: [] as string[], backends: [] as string[], pointer: false, agent: false, report: undefined as string | undefined, app: undefined as string | undefined };
   for (let index = 0; index < args.length; index++) {
     const [flag, inline] = args[index]!.startsWith("--") ? args[index]!.split(/=(.*)/s, 2) as [string, string | undefined] : [undefined, undefined];
     const value = () => {
@@ -33,6 +34,7 @@ function parse(args: string[]) {
     };
     if (flag === undefined) options.targets.push(args[index]!);
     else if (flag === "--agent" && inline === undefined) options.agent = true;
+    else if (flag === "--pointer" && inline === undefined) options.pointer = true;
     else if (flag === "--backend") options.backends.push(...value().split(",").filter(Boolean));
     else if (flag === "--report") options.report = value();
     else if (flag === "--app") options.app = value();
@@ -80,6 +82,11 @@ export async function runCommand(args: string[], io: RunIO): Promise<number> {
   const unknown = names.filter(name => !Object.hasOwn(io.backends, name));
   if (unknown.length) { io.stderr(`unknown backend ${unknown.join(", ")} (available: ${Object.keys(io.backends).join(", ") || "none"})`); return 2; }
   const backends: Backend[] = names.map(name => io.backends[name]!({ app: options.app && path.resolve(options.app) }));
+  if (options.pointer) {
+    const driver = backends.find(backend => backend instanceof DriverBackend);
+    if (!(driver instanceof DriverBackend)) { io.stderr("--pointer requires the driver backend"); return 2; }
+    backends.push(new PointerBackend(driver));
+  }
   const platforms = new Set(backends.map(backend => backend.platform));
   if (platforms.size > 1) { io.stderr(`backends target different platforms: ${[...platforms].join(", ")}`); return 2; }
 

@@ -8,6 +8,7 @@ import {
   hashFiles,
   dependencyStamp,
   nativePackages,
+  lacksMacOSPod,
   nativePreparationFingerprint,
   installedPackages,
   localSigningIdentity,
@@ -350,4 +351,27 @@ test.each(["react-native-enriched-markdown", "react-native-enriched-html", "reac
     writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "1.0.0" }, optionalDependencies: { [name]: "1.0.0" } }));
     expect(installedPackages(root).map(pkg => pkg.name)).toContain(name);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("codegen libraries whose podspecs list platforms without macOS are left out of macOS codegen", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-macos-pod-"));
+  onTestFinished(() => rmSync(root, { recursive: true, force: true }));
+  const pkg = (name: string, podspec: string | null, codegen = true) => {
+    const directory = path.join(root, name);
+    mkdirSync(directory);
+    if (podspec !== null) writeFileSync(path.join(directory, "Lib.podspec"), podspec);
+    return { name, root: directory, json: codegen ? { codegenConfig: { name: "Spec" } } : {} };
+  };
+  expect(lacksMacOSPod(pkg("ios-only", 's.platforms = { :ios => "15.1", :tvos => "15.1" }'))).toBe(true);
+  expect(lacksMacOSPod(pkg("with-macos", 's.platforms = { :ios => "15.1", :osx => "11.0" }'))).toBe(false);
+  expect(lacksMacOSPod(pkg("with-macos-new-syntax", "s.platforms = { ios: '11.0', osx: '10.15' }"))).toBe(false);
+  expect(lacksMacOSPod(pkg("singular-ios", "s.platform = :ios, '13.4'"))).toBe(true);
+  expect(lacksMacOSPod(pkg("singular-macos", "s.platform = :osx, '14.0'"))).toBe(false);
+  expect(lacksMacOSPod(pkg("macos-in-comment", "s.platforms = { ios: '15.0' }\n# macos: not built"))).toBe(true);
+  expect(lacksMacOSPod(pkg("osx-deployment-target", "s.platforms = { :ios => '15.1' }\ns.osx.deployment_target = '14.0'"))).toBe(false);
+  expect(lacksMacOSPod(pkg("computed-platforms", "s.platforms = min_supported_versions"))).toBe(false);
+  expect(lacksMacOSPod(pkg("all-platforms", "s.source_files = 'ios/**/*'"))).toBe(false);
+  expect(lacksMacOSPod(pkg("no-codegen", 's.platforms = { :ios => "15.1" }', false))).toBe(false);
+  expect(lacksMacOSPod(pkg("no-podspec", null))).toBe(false);
+  expect(lacksMacOSPod(pkg("react-native-macos", 's.platforms = { :ios => "15.1" }'))).toBe(false);
 });

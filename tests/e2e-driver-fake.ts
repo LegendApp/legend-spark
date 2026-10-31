@@ -15,7 +15,12 @@ export class FakeDriver implements DriverClient {
   private readonly directory = mkdtempSync(path.join(tmpdir(), "fake-driver-"));
   constructor(private readonly log: string[], private readonly views: Record<string, number>) {}
 
+  async restorePointer() { this.log.push("restorePointer"); }
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
+  async pointerEvents(window: DriverWindow, point: { x: number; y: number }, _timeoutMs?: number) {
+    this.log.push(`pointerEvents ${window} ${point.x},${point.y}`);
+    return { pid: 123, down: "down-event", up: "up-event" };
+  }
   async openFile(file: string) { this.log.push(`openFile ${file}`); }
   async waitFor(testID: string, timeoutMs?: number) {
     this.log.push(`waitFor ${testID} ${timeoutMs}`);

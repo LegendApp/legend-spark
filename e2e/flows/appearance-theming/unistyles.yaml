@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-unistyles adaptive themes on macOS
+intent: >
+  The Unistyles screen styles a card from Unistyles themes. Its native runtime reports the window size and
+  pixel ratio. Overriding the app's appearance to dark switches the adaptive theme to dark, and light
+  switches it back, with no reload.
+checks: [APPR-UNISTYLES-01]
+tags: [appearance-theming]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://appearance-theming/unistyles" }
+- extendedWaitUntil: { visible: { id: appearance-theming-unistyles-runtime-ready }, timeout: 10s }
+- setAppAppearance: dark
+- extendedWaitUntil: { visible: { id: appearance-theming-unistyles-theme-dark }, timeout: 5s }
+- setAppAppearance: light
+- extendedWaitUntil: { visible: { id: appearance-theming-unistyles-theme-light }, timeout: 5s }

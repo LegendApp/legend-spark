@@ -10,5 +10,257 @@
     "url": "https://registry.npmjs.org/react-native-enriched-html/-/react-native-enriched-html-1.1.1.tgz",
     "integrity": "sha512-OlJLESOgA4eqgWQe3BXOK9kFk7iypOnQo22sIce5k/x2eGsOtnAwDPqHnaVfnOZlzzNWh+wXRzxuSL1tSBOkgA==",
     "patch": "react-native-enriched-html@1.1.1.patch"
+  },
+  "react-native-mmkv": {
+    "version": "4.3.2",
+    "url": "https://registry.npmjs.org/react-native-mmkv/-/react-native-mmkv-4.3.2.tgz",
+    "integrity": "sha512-49OAyfkg0/TMWiWELZN6VuVQPZPhizwL4DTmp8b7B1md3dB/s3LH3mGfC3T+lp9W0y/rqxZMEnotLFTIbOAenQ==",
+    "patch": "react-native-mmkv@4.3.2.patch",
+    "optional": true
+  },
+  "react-native-unistyles": {
+    "version": "3.6.0",
+    "url": "https://registry.npmjs.org/react-native-unistyles/-/react-native-unistyles-3.6.0.tgz",
+    "integrity": "sha512-eYqixPy6auBj6k/ica9fCYIPgFQsLzUwRoxGZ04hX3hkANTNjaz3/LzNfXPfgJbwF/fQrhaK0qII4nhtSqUPfA==",
+    "patch": "react-native-unistyles@3.6.0.patch",
+    "optional": true
+  },
+  "react-native-quick-crypto": {
+    "version": "1.1.9",
+    "url": "https://registry.npmjs.org/react-native-quick-crypto/-/react-native-quick-crypto-1.1.9.tgz",
+    "integrity": "sha512-u60Kr4EdAYI1ksGq7uwJfOXNJR/iWkCQ1AxfoVbjM/pEpiydddzsFXFYqwyv7EeB7eTDgg5/LiCGwNxA7W7NKA==",
+    "patch": "react-native-quick-crypto@1.1.9.patch",
+    "optional": true
+  },
+  "react-native-quick-base64": {
+    "version": "3.0.1",
+    "url": "https://registry.npmjs.org/react-native-quick-base64/-/react-native-quick-base64-3.0.1.tgz",
+    "integrity": "sha512-EjUP2U7WqKmlMmoY7XGyHomy8bM0q4+yCDCRg4ZezQ6zedYRwc7yVk4V2O/iSftKaLEzhuW98lpyPMdk1iPHXQ==",
+    "patch": "react-native-quick-base64@3.0.1.patch",
+    "optional": true
+  },
+  "react-native-nitro-fetch": {
+    "version": "1.9.0",
+    "url": "https://registry.npmjs.org/react-native-nitro-fetch/-/react-native-nitro-fetch-1.9.0.tgz",
+    "integrity": "sha512-4rxaPcXKudZW1Ma1Y63rHF8/7hbanOyqr01Gac6ROUYApcCH8/YtS0d02cm0ZEbSzwPvmcvFRzPoT4cHWxhJGA==",
+    "patch": "react-native-nitro-fetch@1.9.0.patch",
+    "optional": true
+  },
+  "@react-native-community/blur": {
+    "version": "4.4.1",
+    "url": "https://registry.npmjs.org/@react-native-community/blur/-/blur-4.4.1.tgz",
+    "integrity": "sha512-XBSsRiYxE/MOEln2ayunShfJtWztHwUxLFcSL20o+HNNRnuUDv+GXkF6FmM2zE8ZUfrnhQ/zeTqvnuDPGw6O8A==",
+    "patch": "react-native-community-blur@4.4.1.patch",
+    "optional": true
+  },
+  "react-native-worklets-core": {
+    "version": "1.6.3",
+    "url": "https://registry.npmjs.org/react-native-worklets-core/-/react-native-worklets-core-1.6.3.tgz",
+    "integrity": "sha512-r3Q40XQBccx/iAI5tlyiua+micvO1UGzzUOskNweZUXyfrrE+rb5aqxqruBPqXf90rO+bBiplylLMEAXCLTyGA==",
+    "patch": "react-native-worklets-core@1.6.3.patch",
+    "optional": true
+  },
+  "react-native-fast-image": {
+    "version": "10.9.9",
+    "url": "https://registry.npmjs.org/react-native-fast-image/-/react-native-fast-image-10.9.9.tgz",
+    "integrity": "sha512-Dev69p1kcTxx7qLLFwax5hB/3X5wMNpviUIXS6K6KnITyhu+O2AEUhenZoq2OmGnT9UzHBIYHkEKoFebZNK/lA==",
+    "patch": "react-native-fast-image@10.9.9.patch",
+    "optional": true
+  },
+  "react-native-release-profiler": {
+    "version": "0.4.5",
+    "url": "https://registry.npmjs.org/react-native-release-profiler/-/react-native-release-profiler-0.4.5.tgz",
+    "integrity": "sha512-1w05jDlKRdIMxTuSPep67eMc+FW805SJZjWJwBVsPIQHmRYttxBdrdbzF0mG5XVvMVRNji4RHLidu54+V54lRQ==",
+    "patch": "react-native-release-profiler@0.4.5.patch",
+    "optional": true
+  },
+  "react-native-blurhash": {
+    "version": "2.1.3",
+    "url": "https://registry.npmjs.org/react-native-blurhash/-/react-native-blurhash-2.1.3.tgz",
+    "integrity": "sha512-tYyFketZkrrEIABJ5Z1Pt6N2dqPqtSp7w4Lce17sx1bvspdppgVu/ehtZoPRZu02fYyX92RkyCeGXtCbtUNntg==",
+    "patch": "react-native-blurhash@2.1.3.patch",
+    "optional": true
+  },
+  "react-native-screen-corner-radius": {
+    "version": "0.2.3",
+    "url": "https://registry.npmjs.org/react-native-screen-corner-radius/-/react-native-screen-corner-radius-0.2.3.tgz",
+    "integrity": "sha512-8JgiHI/S2Xf6swquEjopHW//wI4a/nV/dEImJMR8YXQVWVdnjbhcMi0NGk1s1cW8xuunwlFT173PozsS3Gvgxg==",
+    "patch": "react-native-screen-corner-radius@0.2.3.patch",
+    "optional": true
+  },
+  "react-native-app-logs": {
+    "version": "0.3.1",
+    "url": "https://registry.npmjs.org/react-native-app-logs/-/react-native-app-logs-0.3.1.tgz",
+    "integrity": "sha512-Nyxwx92vJRTIBdIRiHlFrz0IFJq+rKIsq6XFRiYT7ZBA1jQIPBYX/kx9kCRwqLDGnSBzec2oYwPScGEllRpNCw==",
+    "patch": "react-native-app-logs@0.3.1.patch",
+    "optional": true
+  },
+  "react-native-nitro-zxing": {
+    "version": "0.3.0",
+    "url": "https://registry.npmjs.org/react-native-nitro-zxing/-/react-native-nitro-zxing-0.3.0.tgz",
+    "integrity": "sha512-SQ/qwmfakdPcOMVzph99vFOPbPkVg3JZaTGrjVVXG6RS8ZUqMocHqbeM4V17qPDTzFK+rsAp6T7u2aFe3Hot/w==",
+    "patch": "react-native-nitro-zxing@0.3.0.patch",
+    "optional": true
+  },
+  "expo-keep-awake": {
+    "version": "55.0.8",
+    "url": "https://registry.npmjs.org/expo-keep-awake/-/expo-keep-awake-55.0.8.tgz",
+    "integrity": "sha512-PfIpMfM+STOBwkR5XOE+yVtER86c44MD+W8QD8JxuO0sT9pF7Y1SJYakWlpvX8xsGA+bjKLxftm9403s9kQhKA==",
+    "patch": "expo-keep-awake@55.0.8.patch",
+    "optional": true
+  },
+  "react-native-screens": {
+    "version": "4.23.0",
+    "url": "https://registry.npmjs.org/react-native-screens/-/react-native-screens-4.23.0.tgz",
+    "integrity": "sha512-XhO3aK0UeLpBn4kLecd+J+EDeRRJlI/Ro9Fze06vo1q163VeYtzfU9QS09/VyDFMWR1qxDC1iazCArTPSFFiPw==",
+    "patch": "react-native-screens@4.23.0.patch",
+    "optional": true
+  },
+  "@react-navigation/native-stack": {
+    "version": "7.21.0",
+    "url": "https://registry.npmjs.org/@react-navigation/native-stack/-/native-stack-7.21.0.tgz",
+    "integrity": "sha512-bYrNW87nDtbMXAJsosYwu59xwTqeuaurfCDA+62MQ6hY4+2Iv71+Sik3ulW92fOqg8s2SZinOJosHEWoi9Ayqw==",
+    "patch": "react-navigation-native-stack@7.21.0.patch",
+    "optional": true
+  },
+  "expo-web-browser": {
+    "version": "55.0.20",
+    "url": "https://registry.npmjs.org/expo-web-browser/-/expo-web-browser-55.0.20.tgz",
+    "integrity": "sha512-masGrfbi/jqMezm/8cHHZ8chW+ifxumzt7QOCPiL+9aix0BSwuwDIBryEm2QPVmqJX51jckS0n245vWhwheQuQ==",
+    "patch": "expo-web-browser@55.0.20.patch",
+    "optional": true
+  },
+  "expo-application": {
+    "version": "55.0.19",
+    "url": "https://registry.npmjs.org/expo-application/-/expo-application-55.0.19.tgz",
+    "integrity": "sha512-RFer4T46/OaIkNQEweA9PQj6xlXKor71IPNydWxlupx/XG05Yv/269HJJ3Q9zejdY9M7R3jTeTlAYYmXwbLBgA==",
+    "patch": "expo-application@55.0.19.patch",
+    "optional": true
+  },
+  "expo-device": {
+    "version": "55.0.21",
+    "url": "https://registry.npmjs.org/expo-device/-/expo-device-55.0.21.tgz",
+    "integrity": "sha512-W2DNWWnjk3KSdAy2BtK9ie1lByO6IsJIpriQAnvS1+d/e12wXhq14iZLUB5iA0CCVftU3eliQRIzkyT2cdL9Ng==",
+    "patch": "expo-device@55.0.21.patch",
+    "optional": true
+  },
+  "expo-localization": {
+    "version": "55.0.19",
+    "url": "https://registry.npmjs.org/expo-localization/-/expo-localization-55.0.19.tgz",
+    "integrity": "sha512-rw8pcC4QL8HC3K8Vs5pdVCB+ayFkaVD0f+Ul+jHgM6W7XdzGtCzd0x7rI3M/9PzP1YpAgQ4jYZid/g+UKi9IIA==",
+    "patch": "expo-localization@55.0.19.patch",
+    "optional": true
+  },
+  "expo-haptics": {
+    "version": "55.0.18",
+    "url": "https://registry.npmjs.org/expo-haptics/-/expo-haptics-55.0.18.tgz",
+    "integrity": "sha512-bEH0bf5bBGn7U2eTZVdiXBUk4vTfNGbfv9/9PCYLg3gL7L/WE2g8WKs2vYg1B4/BDSucyO8prZofH3IgvLJojQ==",
+    "patch": "expo-haptics@55.0.18.patch",
+    "optional": true
+  },
+  "react-native-svg": {
+    "version": "15.15.3",
+    "url": "https://registry.npmjs.org/react-native-svg/-/react-native-svg-15.15.3.tgz",
+    "integrity": "sha512-/k4KYwPBLGcx2f5d4FjE+vCScK7QOX14cl2lIASJ28u4slHHtIhL0SZKU7u9qmRBHxTCKPoPBtN6haT1NENJNA==",
+    "patch": "react-native-svg@15.15.3.patch",
+    "optional": true
+  },
+  "expo-font": {
+    "version": "55.0.8",
+    "url": "https://registry.npmjs.org/expo-font/-/expo-font-55.0.8.tgz",
+    "integrity": "sha512-WyP75pnKqhLNktYwDn3xKAUNt5rLihRDv8XWGhhz6VEhVqypixpT86NA3uGtiDTlM3gGjhrYCY7o7ypXgCUOZg==",
+    "patch": "expo-font@55.0.8.patch",
+    "optional": true
+  },
+  "expo-blur": {
+    "version": "55.0.18",
+    "url": "https://registry.npmjs.org/expo-blur/-/expo-blur-55.0.18.tgz",
+    "integrity": "sha512-eXuVAahonZXLrXa//isvq72ed1to/MmbHUyd2WTkRH2/FjC9X91rZ4BUNIFBZnAxaNXQrKw/ITfG/VMVz1DIhQ==",
+    "patch": "expo-blur@55.0.18.patch",
+    "optional": true
+  },
+  "expo-image": {
+    "version": "55.0.11",
+    "url": "https://registry.npmjs.org/expo-image/-/expo-image-55.0.11.tgz",
+    "integrity": "sha512-PVIBYQJW/h1f6Zb9xnoWlgfqyOPVm2yb6eo6ZogaKbvMrhb/Q/fiERbagi4oqmR6IPljWPEpkXXQyFBUh7TjpQ==",
+    "patch": "expo-image@55.0.11.patch",
+    "optional": true
+  },
+  "expo-symbols": {
+    "version": "55.0.9",
+    "url": "https://registry.npmjs.org/expo-symbols/-/expo-symbols-55.0.9.tgz",
+    "integrity": "sha512-F85C/8ExQjd2gYjasLVKMT8wPj+1+19TVTqg4jAeVjVZklqiQtLO72io9Ji1xAjYNgmDeUI0diVHlFMMTC4Ekg==",
+    "patch": "expo-symbols@55.0.9.patch",
+    "optional": true
+  },
+  "@react-native-masked-view/masked-view": {
+    "version": "0.3.2",
+    "url": "https://registry.npmjs.org/@react-native-masked-view/masked-view/-/masked-view-0.3.2.tgz",
+    "integrity": "sha512-XwuQoW7/GEgWRMovOQtX3A4PrXhyaZm0lVUiY8qJDvdngjLms9Cpdck6SmGAUNqQwcj2EadHC1HwL0bEyoa/SQ==",
+    "patch": "react-native-masked-view-masked-view@0.3.2.patch",
+    "optional": true
+  },
+  "expo-glass-effect": {
+    "version": "55.0.11",
+    "url": "https://registry.npmjs.org/expo-glass-effect/-/expo-glass-effect-55.0.11.tgz",
+    "integrity": "sha512-wqq7GUOqSkfoFJzreZvBG0jzjsq5c582m3glhWSjcmIuByxXXWp6j6GY6hyFuYKzpOXhbuvusVxGCQi0yWnp3g==",
+    "patch": "expo-glass-effect@55.0.11.patch",
+    "optional": true
+  },
+  "expo-system-ui": {
+    "version": "55.0.22",
+    "url": "https://registry.npmjs.org/expo-system-ui/-/expo-system-ui-55.0.22.tgz",
+    "integrity": "sha512-/ma8XGdwXvWkeZN++pHQt66jEQ4ZsaV9B5nP/+PAmXa4hAukPxG2bXjZaNOOOlTssWlaJRclJgGeC+Wo2uJlXQ==",
+    "patch": "expo-system-ui@55.0.22.patch",
+    "optional": true
+  },
+  "expo-image-picker": {
+    "version": "55.0.24",
+    "url": "https://registry.npmjs.org/expo-image-picker/-/expo-image-picker-55.0.24.tgz",
+    "integrity": "sha512-scbtvQIgiqiOxQx/lFEocJkWPzYANHjwFLnzfKjdZNWh3RJjjMmtHaEoeu7lM9RzqE3EwF+JQecgy+FATXNfiQ==",
+    "patch": "expo-image-picker@55.0.24.patch",
+    "optional": true
+  },
+  "expo-image-manipulator": {
+    "version": "55.0.21",
+    "url": "https://registry.npmjs.org/expo-image-manipulator/-/expo-image-manipulator-55.0.21.tgz",
+    "integrity": "sha512-BlVl692hVDKuWzOCnbUsfp1u0XqujOABm/Kv3ISMg0qRMchvD6vUSJ/XOIj80+6B9CCm1hNgklgeJ0SIEHiCVQ==",
+    "patch": "expo-image-manipulator@55.0.21.patch",
+    "optional": true
+  },
+  "expo-location": {
+    "version": "55.1.15",
+    "url": "https://registry.npmjs.org/expo-location/-/expo-location-55.1.15.tgz",
+    "integrity": "sha512-4wTDpVZg2/ZH4FnLkobY+PeIrfPz0uFTQqx7LIkxgviucNcRUPGstODBd+XRBOd8mIU1tN1vf6TSs8qEzOOJAw==",
+    "patch": "expo-location@55.1.15.patch",
+    "optional": true
+  },
+  "@react-native-community/datetimepicker": {
+    "version": "9.2.2",
+    "url": "https://registry.npmjs.org/@react-native-community/datetimepicker/-/datetimepicker-9.2.2.tgz",
+    "integrity": "sha512-0cZGrK61UZ8VxpKKV/lun/L/b5wKus55IhvqqdewUayHwIc73lrLI0l5CIlHw8tA0/yQEzHEMEdtHQglAD+hKA==",
+    "patch": "react-native-community-datetimepicker@9.2.2.patch",
+    "optional": true
+  },
+  "react-native-keyboard-controller": {
+    "version": "1.22.9",
+    "url": "https://registry.npmjs.org/react-native-keyboard-controller/-/react-native-keyboard-controller-1.22.9.tgz",
+    "integrity": "sha512-nLoXvTbIy/9cI4p/bAXUP7Vfi6Mf2Q7g/gsh2H29C7hgUSQQLdoQjl8inhKC25oxaEibB0CMR++h3HP/k/+BVw==",
+    "patch": "react-native-keyboard-controller@1.22.9.patch",
+    "optional": true
+  },
+  "@sentry/react-native": {
+    "version": "8.32.0",
+    "url": "https://registry.npmjs.org/@sentry/react-native/-/react-native-8.32.0.tgz",
+    "integrity": "sha512-Z7W2t0oDrm46JU+FgdB0AL+Ru5urBVmFhYl/RjuPi2AnAjddmbNyDZGzpOLSYtl6oWqqz2u4zGuj3ZFjrCMJOg==",
+    "patch": "sentry-react-native@8.32.0.patch",
+    "optional": true
+  },
+  "react-native-graph": {
+    "version": "1.4.0",
+    "url": "https://registry.npmjs.org/react-native-graph/-/react-native-graph-1.4.0.tgz",
+    "integrity": "sha512-Mh0P3kXWrbg9WxPAgce3a+XzKSE36sE9lSi+VwXw/5Ps1VChsa4eApI8LHqpcdvlWH7qjCNk5cSdFkGDuA8Kgw==",
+    "patch": "react-native-graph@1.4.0.patch",
+    "optional": true
   }
 }

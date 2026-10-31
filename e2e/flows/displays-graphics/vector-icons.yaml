@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@expo/vector-icons on macOS"
+intent: >
+  The Vector icons screen loads the Ionicons and Material Community Icons fonts through expo-font, both
+  register, and three icons draw as glyphs, matching the approved golden.
+checks: [DISP-ICONS-01]
+tags: [displays-graphics]
+platforms: [macos]
+matrix: { appearance: [dark], locale: [en] }
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/vector-icons" }
+- extendedWaitUntil: { visible: { id: displays-graphics-vector-icons-loaded }, timeout: 10s }
+- assertScreenshot: { golden: displays-graphics-vector-icons, mask: [{ id: infra-shell-sidebar }] }

@@ -1,0 +1,32 @@
+diff --git a/ios/ExpoLocalization.podspec b/ios/ExpoLocalization.podspec
+index 29b720d..117b6a0 100644
+--- a/ios/ExpoLocalization.podspec
++++ b/ios/ExpoLocalization.podspec
+@@ -12,6 +12,7 @@ Pod::Spec.new do |s|
+   s.homepage       = package['homepage']
+   s.platforms      = {
+     :ios => '15.1',
++    :osx => '14.0',
+     :tvos => '15.1'
+   }
+   s.swift_version  = '5.9'
+diff --git a/ios/LocalizationModule.swift b/ios/LocalizationModule.swift
+index ffc4593..df54b76 100644
+--- a/ios/LocalizationModule.swift
++++ b/ios/LocalizationModule.swift
+@@ -8,7 +8,14 @@ let CALENDAR_SETTINGS_CHANGED = "onCalendarSettingsChanged"
+ 
+ let OBSERVED_EVENTS: Set<Notification.Name> = [
+   // swiftlint:disable legacy_objc_type
+-  UIApplication.significantTimeChangeNotification,
++  // macOS has no significant-time-change notification; a time zone change is the closest.
++  {
++    #if os(macOS)
++    return Notification.Name.NSSystemTimeZoneDidChange
++    #else
++    return UIApplication.significantTimeChangeNotification
++    #endif
++  }(),
+   NSLocale.currentLocaleDidChangeNotification
+   // swiftlint:enable legacy_objc_type
+ ]

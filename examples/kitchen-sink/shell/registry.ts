@@ -1,5 +1,5 @@
-import { createElement, type ComponentType } from "react";
-import { View } from "react-native";
+import { Component, createElement, type ComponentType, type ReactNode } from "react";
+import { Text, View } from "react-native";
 import { AREAS, type Area, type AreaId } from "./areas";
 import type { Locale } from "./i18n";
 
@@ -28,6 +28,26 @@ const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function screenTitle(screen: Screen, locale: Locale): string { return locale === "en" ? screen.title : screen.titles[locale]; }
 export function screenSummary(screen: Screen, locale: Locale): string { return locale === "en" ? screen.summary : screen.summaries[locale]; }
+
+/**
+ * A screen whose module loads on its first render, so a library without a build for this platform
+ * breaks only its own screen, not the catalog at import. A screen that throws shows its error instead
+ * of unmounting the whole Kitchen Sink.
+ */
+export function lazyScreen(load: () => ComponentType): ComponentType {
+  let component: ComponentType | undefined;
+  const Loaded = () => { component ??= load(); return createElement(component); };
+  return function LazyScreen() { return createElement(ScreenErrorBoundary, null, createElement(Loaded)); };
+}
+
+class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error?: unknown }> {
+  state: { error?: unknown } = {};
+  static getDerivedStateFromError(error: unknown) { return { error }; }
+  render() {
+    return this.state.error === undefined ? this.props.children
+      : createElement(Text, { selectable: true, style: { padding: 24, color: "#ef4444", fontFamily: "Menlo" } }, String(this.state.error));
+  }
+}
 
 /** The test driver waits for this ID to confirm a navigated screen has rendered. */
 export function screenRootTestID(area: string, screen: string) { return `${area}-${screen}-root`; }

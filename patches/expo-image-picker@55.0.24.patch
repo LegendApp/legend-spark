@@ -1,0 +1,327 @@
+diff --git a/ios/ExpoImagePicker.podspec b/ios/ExpoImagePicker.podspec
+index c9bac13..348e96e 100644
+--- a/ios/ExpoImagePicker.podspec
++++ b/ios/ExpoImagePicker.podspec
+@@ -11,7 +11,8 @@ Pod::Spec.new do |s|
+   s.author         = package['author']
+   s.homepage       = package['homepage']
+   s.platforms      = {
+-    :ios => '15.1'
++    :ios => '15.1',
++    :osx => '14.0'
+   }
+   s.swift_version  = '5.9'
+   s.source         = { git: 'https://github.com/expo/expo.git' }
+diff --git a/ios/ImagePickerExceptions.swift b/ios/ImagePickerExceptions.swift
+index a0810e5..cb6e87c 100644
+--- a/ios/ImagePickerExceptions.swift
++++ b/ios/ImagePickerExceptions.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ import ExpoModulesCore
+@@ -139,3 +140,4 @@ internal final class FailedToPickLivePhotoException: Exception {
+     "Failed to read the selected item as a live photo"
+   }
+ }
++#endif
+diff --git a/ios/ImagePickerHandler.swift b/ios/ImagePickerHandler.swift
+index 476910d..4e1dd8d 100644
+--- a/ios/ImagePickerHandler.swift
++++ b/ios/ImagePickerHandler.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ import PhotosUI
+@@ -106,3 +107,4 @@ extension PHPickerViewController: PickerUIController {
+     self.presentationController?.delegate = handler
+   }
+ }
++#endif
+diff --git a/ios/ImagePickerModule.swift b/ios/ImagePickerModule.swift
+index 4b7bf34..f990a2f 100644
+--- a/ios/ImagePickerModule.swift
++++ b/ios/ImagePickerModule.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ import UIKit
+@@ -249,3 +250,4 @@ public class ImagePickerModule: Module, OnMediaPickingResultHandler {
+     }
+   }
+ }
++#endif
+diff --git a/ios/ImagePickerModuleMacOS.swift b/ios/ImagePickerModuleMacOS.swift
+new file mode 100644
+index 0000000..02df7a3
+--- /dev/null
++++ b/ios/ImagePickerModuleMacOS.swift
+@@ -0,0 +1,111 @@
++// Copyright 2022-present 650 Industries. All rights reserved.
++
++#if os(macOS)
++import AppKit
++import AVFoundation
++import ExpoModulesCore
++import UniformTypeIdentifiers
++
++// macOS has no photo library or camera picker UI. The library opens an NSOpenPanel on image and
++// movie files; launchCameraAsync is not defined, so the JavaScript layer reports it unavailable.
++internal struct MacImagePickerOptions: Record {
++  @Field var mediaTypes: [String] = ["images"]
++  @Field var allowsMultipleSelection: Bool = false
++  @Field var selectionLimit: Int = 0
++  @Field var base64: Bool = false
++}
++
++public class ImagePickerModule: Module {
++  public func definition() -> ModuleDefinition {
++    Name("ExponentImagePicker")
++
++    AsyncFunction("getCameraPermissionsAsync") { () -> [String: Any] in
++      Self.cameraPermission(AVCaptureDevice.authorizationStatus(for: .video))
++    }
++
++    AsyncFunction("requestCameraPermissionsAsync") { (promise: Promise) in
++      AVCaptureDevice.requestAccess(for: .video) { _ in
++        promise.resolve(Self.cameraPermission(AVCaptureDevice.authorizationStatus(for: .video)))
++      }
++    }
++
++    // Files the user picks in the open panel need no library permission.
++    AsyncFunction("getMediaLibraryPermissionsAsync") { (_: Bool) -> [String: Any] in
++      Self.permission("granted", canAskAgain: true, extra: ["accessPrivileges": "all"])
++    }
++
++    AsyncFunction("requestMediaLibraryPermissionsAsync") { (_: Bool) -> [String: Any] in
++      Self.permission("granted", canAskAgain: true, extra: ["accessPrivileges": "all"])
++    }
++
++    AsyncFunction("launchImageLibraryAsync") { (options: MacImagePickerOptions, promise: Promise) in
++      let panel = NSOpenPanel()
++      panel.canChooseDirectories = false
++      panel.allowsMultipleSelection = options.allowsMultipleSelection
++      panel.allowedContentTypes = options.mediaTypes.compactMap { type in
++        switch type {
++        case "images", "livePhotos": return UTType.image
++        case "videos": return UTType.movie
++        default: return nil
++        }
++      }
++      let finish = { (response: NSApplication.ModalResponse) in
++        guard response == .OK else {
++          return promise.resolve(["canceled": true, "assets": NSNull()])
++        }
++        let urls = options.selectionLimit > 0 ? Array(panel.urls.prefix(options.selectionLimit)) : panel.urls
++        promise.resolve(["canceled": false, "assets": urls.map { Self.asset($0, base64: options.base64) }])
++      }
++      if let window = NSApp.keyWindow ?? NSApp.mainWindow {
++        panel.beginSheetModal(for: window, completionHandler: finish)
++      } else {
++        panel.begin(completionHandler: finish)
++      }
++    }
++    .runOnQueue(.main)
++  }
++
++  private static func asset(_ url: URL, base64: Bool) -> [String: Any] {
++    let type = UTType(filenameExtension: url.pathExtension)
++    let isVideo = type?.conforms(to: .movie) ?? false
++    var asset: [String: Any] = [
++      "assetId": NSNull(),
++      "type": isVideo ? "video" : "image",
++      "uri": url.absoluteString,
++      "fileName": url.lastPathComponent,
++      "fileSize": (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? NSNull(),
++      "mimeType": type?.preferredMIMEType ?? NSNull(),
++      "exif": NSNull(),
++      "base64": NSNull(),
++      "width": 0,
++      "height": 0
++    ]
++    if isVideo {
++      let track = AVURLAsset(url: url).tracks(withMediaType: .video).first
++      let size = track.map { $0.naturalSize.applying($0.preferredTransform) } ?? .zero
++      asset["width"] = abs(size.width)
++      asset["height"] = abs(size.height)
++      asset["duration"] = AVURLAsset(url: url).duration.seconds * 1000
++    } else if let rep = NSImageRep(contentsOf: url) {
++      asset["width"] = rep.pixelsWide
++      asset["height"] = rep.pixelsHigh
++      if base64, let data = try? Data(contentsOf: url) {
++        asset["base64"] = data.base64EncodedString()
++      }
++    }
++    return asset
++  }
++
++  private static func cameraPermission(_ status: AVAuthorizationStatus) -> [String: Any] {
++    switch status {
++    case .authorized: return permission("granted", canAskAgain: true)
++    case .notDetermined: return permission("undetermined", canAskAgain: true)
++    default: return permission("denied", canAskAgain: false)
++    }
++  }
++
++  private static func permission(_ status: String, canAskAgain: Bool, extra: [String: Any] = [:]) -> [String: Any] {
++    ["status": status, "granted": status == "granted", "canAskAgain": canAskAgain, "expires": "never"].merging(extra) { _, new in new }
++  }
++}
++#endif
+diff --git a/ios/ImagePickerOptions.swift b/ios/ImagePickerOptions.swift
+index bdaf98f..e945b97 100644
+--- a/ios/ImagePickerOptions.swift
++++ b/ios/ImagePickerOptions.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ import ExpoModulesCore
+@@ -257,3 +258,4 @@ internal enum CameraType: String, Enumerable {
+   case back
+   case front
+ }
++#endif
+diff --git a/ios/ImagePickerPermissionRequesters.swift b/ios/ImagePickerPermissionRequesters.swift
+index ad92115..2679aaf 100644
+--- a/ios/ImagePickerPermissionRequesters.swift
++++ b/ios/ImagePickerPermissionRequesters.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ import Photos
+@@ -122,3 +123,4 @@ extension DefaultMediaLibraryPermissionRequester {
+     return PHAccessLevel.readWrite
+   }
+ }
++#endif
+diff --git a/ios/ImagePickerResponse.swift b/ios/ImagePickerResponse.swift
+index 21b9bb1..3e693bf 100644
+--- a/ios/ImagePickerResponse.swift
++++ b/ios/ImagePickerResponse.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ // swiftlint:disable redundant_optional_initialization
+@@ -41,3 +42,4 @@ internal struct AssetInfo: Record {
+   @Field var duration: Double? = nil
+   @Field var pairedVideoAsset: AssetInfo? = nil
+ }
++#endif
+diff --git a/ios/ImagePickerUtils.swift b/ios/ImagePickerUtils.swift
+index cfd0bcb..eb76f4c 100644
+--- a/ios/ImagePickerUtils.swift
++++ b/ios/ImagePickerUtils.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2024-present 650 Industries. All rights reserved.
+ 
+ /**
+@@ -14,3 +15,4 @@ func asyncMap<ItemsType: Sequence, ResultType>(
+   }
+   return values
+ }
++#endif
+diff --git a/ios/ImageUtils.swift b/ios/ImageUtils.swift
+index d9d1cd4..f09532f 100644
+--- a/ios/ImageUtils.swift
++++ b/ios/ImageUtils.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2024-present 650 Industries. All rights reserved.
+ 
+ import CoreGraphics
+@@ -390,3 +391,4 @@ internal struct ImageUtils {
+     return CGSize(width: width, height: height)
+   }
+ }
++#endif
+diff --git a/ios/MediaHandler.swift b/ios/MediaHandler.swift
+index a0e3a44..e11aec4 100644
+--- a/ios/MediaHandler.swift
++++ b/ios/MediaHandler.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ import ExpoModulesCore
+@@ -564,3 +565,4 @@ extension PHAssetResourceManager {
+     }
+   }
+ }
++#endif
+diff --git a/ios/NSItemProvider+Async.swift b/ios/NSItemProvider+Async.swift
+index 08cdf4c..83b2542 100644
+--- a/ios/NSItemProvider+Async.swift
++++ b/ios/NSItemProvider+Async.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ import Foundation
+ import Photos
+ 
+@@ -30,3 +31,4 @@ internal extension NSItemProvider {
+     }
+   }
+ }
++#endif
+diff --git a/ios/StatusBarVisibilityController.swift b/ios/StatusBarVisibilityController.swift
+index 907af58..61cce12 100644
+--- a/ios/StatusBarVisibilityController.swift
++++ b/ios/StatusBarVisibilityController.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ /**
+@@ -50,3 +51,4 @@ internal class StatusBarVisibilityController {
+ //    prints "Hello Fabio!"
+   }
+ }
++#endif
+diff --git a/ios/UIImage+fixOrientation.swift b/ios/UIImage+fixOrientation.swift
+index 22849c2..d005706 100644
+--- a/ios/UIImage+fixOrientation.swift
++++ b/ios/UIImage+fixOrientation.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
+ import UIKit
+@@ -78,3 +79,4 @@ extension UIImage {
+     return UIImage(cgImage: resultCgImage)
+   }
+ }
++#endif
+diff --git a/ios/UIImagePickerControllerExtentsion.swift b/ios/UIImagePickerControllerExtentsion.swift
+index 865a59d..9b3ee35 100644
+--- a/ios/UIImagePickerControllerExtentsion.swift
++++ b/ios/UIImagePickerControllerExtentsion.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2016-present 650 Industries. All rights reserved.
+ 
+ extension UIImagePickerController {
+@@ -55,3 +56,4 @@ extension UIImagePickerController {
+     return nil
+   }
+ }
++#endif
+diff --git a/ios/VideoUtils.swift b/ios/VideoUtils.swift
+index f78c50d..2b88d16 100644
+--- a/ios/VideoUtils.swift
++++ b/ios/VideoUtils.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ // Copyright 2024-present 650 Industries. All rights reserved.
+ 
+ import AVFoundation
+@@ -97,3 +98,4 @@ internal struct VideoUtils {
+     }
+   }
+ }
++#endif

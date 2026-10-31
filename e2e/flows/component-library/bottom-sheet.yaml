@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@gorhom/bottom-sheet on macOS"
+intent: >
+  The Bottom sheet screen snaps its sheet from the first snap point to the second; onChange reports index 1.
+checks: [COMP-SHEET-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/bottom-sheet" }
+- extendedWaitUntil: { visible: { id: component-library-bottom-sheet-index-1 }, timeout: 10s }

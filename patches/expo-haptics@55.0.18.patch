@@ -1,0 +1,54 @@
+diff --git a/ios/ExpoHaptics.podspec b/ios/ExpoHaptics.podspec
+index a7f5bc7..93bb683 100644
+--- a/ios/ExpoHaptics.podspec
++++ b/ios/ExpoHaptics.podspec
+@@ -11,7 +11,8 @@ Pod::Spec.new do |s|
+   s.author         = package['author']
+   s.homepage       = package['homepage']
+   s.platforms      = {
+-    :ios => '15.1'
++    :ios => '15.1',
++    :osx => '14.0'
+   }
+   s.swift_version  = '5.9'
+   s.source         = { git: 'https://github.com/expo/expo.git' }
+diff --git a/ios/HapticsModule.swift b/ios/HapticsModule.swift
+index 41659a0..e07500b 100644
+--- a/ios/HapticsModule.swift
++++ b/ios/HapticsModule.swift
+@@ -1,5 +1,30 @@
+ import ExpoModulesCore
+ 
++#if os(macOS)
++import AppKit
++
++// Macs give haptic feedback through Force Touch trackpads, while the user's finger rests on one.
++public class HapticsModule: Module {
++  public func definition() -> ModuleDefinition {
++    Name("ExpoHaptics")
++
++    AsyncFunction("notificationAsync") { (_: String) in
++      NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
++    }
++    .runOnQueue(.main)
++
++    AsyncFunction("impactAsync") { (_: String) in
++      NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
++    }
++    .runOnQueue(.main)
++
++    AsyncFunction("selectionAsync") {
++      NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
++    }
++    .runOnQueue(.main)
++  }
++}
++#else
+ public class HapticsModule: Module {
+   public func definition() -> ModuleDefinition {
+     Name("ExpoHaptics")
+@@ -66,3 +91,4 @@ public class HapticsModule: Module {
+     }
+   }
+ }
++#endif

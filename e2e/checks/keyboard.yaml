@@ -6,3 +6,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
+  KEY-CONTROLLER-01:
+    title: react-native-keyboard-controller's provider, keyboard-aware scroll view and toolbar render on macOS with the keyboard reported hidden
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-keyboard-controller.md"

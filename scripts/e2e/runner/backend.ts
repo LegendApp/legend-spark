@@ -42,8 +42,8 @@ export type CommandContext = {
   outputDir: string;
   /** Waits until a selector matches exactly one element of this backend, then returns it. */
   resolve(selector: unknown): Promise<Target>;
-  /** `resolve` for the command's own selector keys (tapOn, assertFocused, …). */
-  target(): Promise<Target>;
+  /** `resolve` for the command's own selector keys (tapOn, assertFocused, …), waiting up to `timeoutMs` (default: the step's). */
+  target(timeoutMs?: number): Promise<Target>;
   /** Waits until a window selector (`key`, `main`, `{ title, index, type, id }`) matches exactly one window of this backend. */
   window(selector: unknown): Promise<WindowInfo>;
   /** Runs `check` until it stops throwing a retryable Failure ("assertion", "not-found", "ambiguous"), or the timeout passes. Never use it for actions. */

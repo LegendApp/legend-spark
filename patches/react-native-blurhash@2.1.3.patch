@@ -1,0 +1,318 @@
+diff --git a/ios/BlurhashModule.mm b/ios/BlurhashModule.mm
+index 189b790..a5b24bd 100644
+--- a/ios/BlurhashModule.mm
++++ b/ios/BlurhashModule.mm
+@@ -1,7 +1,9 @@
+ #import "BlurhashModule.h"
+ 
+ #import <React/RCTUtils.h>
++#if !TARGET_OS_OSX
+ #import <UIKit/UIKit.h>
++#endif
+ #ifdef RCT_NEW_ARCH_ENABLED
+ #import <blurhash_codegen/blurhash_codegen.h>
+ #endif
+diff --git a/ios/BlurhashModuleImpl.swift b/ios/BlurhashModuleImpl.swift
+index dc5f62e..ca0f795 100644
+--- a/ios/BlurhashModuleImpl.swift
++++ b/ios/BlurhashModuleImpl.swift
+@@ -7,7 +7,11 @@
+ //
+ 
+ import Foundation
++#if canImport(UIKit)
+ import UIKit
++#else
++import AppKit
++#endif
+ 
+ @objc
+ public final class BlurhashModuleImpl: NSObject {
+diff --git a/ios/BlurhashPlatform.swift b/ios/BlurhashPlatform.swift
+new file mode 100644
+index 0000000..b9a3e49
+--- /dev/null
++++ b/ios/BlurhashPlatform.swift
+@@ -0,0 +1,6 @@
++#if os(macOS)
++import AppKit
++
++// The decoder and encoder extend UIImage; on macOS that is NSImage.
++public typealias UIImage = NSImage
++#endif
+diff --git a/ios/BlurhashView.swift b/ios/BlurhashView.swift
+index 795e58e..45a3ace 100644
+--- a/ios/BlurhashView.swift
++++ b/ios/BlurhashView.swift
+@@ -7,7 +7,13 @@
+ //
+ 
+ import Foundation
++#if os(macOS)
++import AppKit
++public typealias BlurhashPlatformView = NSView
++#else
+ import UIKit
++public typealias BlurhashPlatformView = UIView
++#endif
+ 
+ @objc
+ public protocol BlurhashViewDelegate {
+@@ -16,12 +22,17 @@ public protocol BlurhashViewDelegate {
+     func blurhashViewLoadDidError(_ message: String?)
+ }
+ 
+-public final class BlurhashView: UIView {
++public final class BlurhashView: BlurhashPlatformView {
+     @objc public var blurhash: String?
+     @objc public var decodeWidth: Int = 32
+     @objc public var decodeHeight: Int = 32
+     @objc public var decodePunch: Float = 1
+     @objc public var decodeAsync: Bool = false
++#if os(macOS)
++    @objc public var contentsGravity: CALayerContentsGravity = .resizeAspectFill {
++        didSet { layer?.contentsGravity = contentsGravity }
++    }
++#else
+     @objc override public var contentMode: ContentMode {
+         get {
+             imageContainer.contentMode
+@@ -30,10 +41,19 @@ public final class BlurhashView: UIView {
+             imageContainer.contentMode = newValue
+         }
+     }
++#endif
+ 
+     @objc public weak var delegate: BlurhashViewDelegate?
+ 
+     private var lastState: BlurhashCache?
++#if os(macOS)
++    override public init(frame: CGRect) {
++        super.init(frame: frame)
++        wantsLayer = true
++        layer?.masksToBounds = true
++        layer?.contentsGravity = contentsGravity
++    }
++#else
+     private let imageContainer: UIImageView
+ 
+     override public init(frame: CGRect) {
+@@ -44,6 +64,7 @@ public final class BlurhashView: UIView {
+         super.init(frame: frame)
+         addSubview(imageContainer)
+     }
++#endif
+ 
+     @available(*, unavailable)
+     required init?(coder _: NSCoder) {
+@@ -119,12 +140,15 @@ public final class BlurhashView: UIView {
+     }
+ 
+     private final func setImageContainerImage(image: UIImage?) {
++#if os(macOS)
++        let show: () -> Void = { self.layer?.contents = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) }
++#else
++        let show: () -> Void = { self.imageContainer.image = image }
++#endif
+         if Thread.isMainThread {
+-            imageContainer.image = image
++            show()
+         } else {
+-            DispatchQueue.main.async {
+-                self.imageContainer.image = image
+-            }
++            DispatchQueue.main.async(execute: show)
+         }
+     }
+ 
+diff --git a/ios/BlurhashViewComponentView.h b/ios/BlurhashViewComponentView.h
+index 51c9a3a..93a78eb 100644
+--- a/ios/BlurhashViewComponentView.h
++++ b/ios/BlurhashViewComponentView.h
+@@ -1,6 +1,8 @@
+ #ifdef RCT_NEW_ARCH_ENABLED
+ 
++#if !TARGET_OS_OSX
+ #import <UIKit/UIKit.h>
++#endif
+ 
+ #import <React/RCTViewComponentView.h>
+ 
+diff --git a/ios/BlurhashViewComponentView.mm b/ios/BlurhashViewComponentView.mm
+index e483bfb..ccc38ab 100644
+--- a/ios/BlurhashViewComponentView.mm
++++ b/ios/BlurhashViewComponentView.mm
+@@ -18,6 +18,21 @@
+ 
+ using namespace facebook::react;
+ 
++#if TARGET_OS_OSX
++static CALayerContentsGravity convertResizeMode(const BlurhashViewResizeMode &resizeMode)
++{
++  switch (resizeMode) {
++    case BlurhashViewResizeMode::Contain:
++      return kCAGravityResizeAspect;
++    case BlurhashViewResizeMode::Cover:
++      return kCAGravityResizeAspectFill;
++    case BlurhashViewResizeMode::Stretch:
++      return kCAGravityResize;
++    case BlurhashViewResizeMode::Center:
++      return kCAGravityCenter;
++  }
++}
++#else
+ static UIViewContentMode convertResizeMode(const BlurhashViewResizeMode &resizeMode)
+ {
+   switch (resizeMode) {
+@@ -31,6 +46,7 @@ static UIViewContentMode convertResizeMode(const BlurhashViewResizeMode &resizeM
+       return UIViewContentMode::UIViewContentModeCenter;
+   }
+ }
++#endif
+ 
+ @interface BlurhashViewComponentView () <RCTBlurhashViewViewProtocol, BlurhashViewDelegate>
+ @end
+@@ -81,7 +97,11 @@ - (void)updateProps:(const Props::Shared &)props oldProps:(const Props::Shared &
+     _blurhashView.decodeAsync = newViewProps.decodeAsync;
+   }
+   if (oldViewProps.resizeMode != newViewProps.resizeMode) {
++#if TARGET_OS_OSX
++    _blurhashView.contentsGravity = convertResizeMode(newViewProps.resizeMode);
++#else
+     _blurhashView.contentMode = convertResizeMode(newViewProps.resizeMode);
++#endif
+   }
+ 
+   [super updateProps:props oldProps:oldProps];
+diff --git a/ios/BlurhashViewManager.m b/ios/BlurhashViewManager.m
+index 318c955..16292b7 100644
+--- a/ios/BlurhashViewManager.m
++++ b/ios/BlurhashViewManager.m
+@@ -1,3 +1,5 @@
++#include <TargetConditionals.h>
++#if !TARGET_OS_OSX
+ #import "BlurhashBridge.h"
+ #import <React/RCTViewManager.h>
+ 
+@@ -17,3 +19,4 @@ @interface RCT_EXTERN_REMAP_MODULE (BlurhashView, BlurhashViewManager,
+ RCT_EXPORT_VIEW_PROPERTY(onLoadError, RCTDirectEventBlock);
+ 
+ @end
++#endif
+diff --git a/ios/BlurhashViewManager.swift b/ios/BlurhashViewManager.swift
+index c1abb62..6b5c6b1 100644
+--- a/ios/BlurhashViewManager.swift
++++ b/ios/BlurhashViewManager.swift
+@@ -6,6 +6,7 @@
+ //  Copyright © 2020 Facebook. All rights reserved.
+ //
+ 
++#if !os(macOS)
+ import Foundation
+ import UIKit
+ 
+@@ -151,3 +152,5 @@ final class BlurhashViewManager: RCTViewManager {
+         return true
+     }
+ }
++
++#endif
+diff --git a/ios/UIImage+BlurhashDecode.swift b/ios/UIImage+BlurhashDecode.swift
+index 7076215..a79516c 100644
+--- a/ios/UIImage+BlurhashDecode.swift
++++ b/ios/UIImage+BlurhashDecode.swift
+@@ -7,7 +7,11 @@
+ //
+ 
+ import Foundation
++#if canImport(UIKit)
+ import UIKit
++#else
++import AppKit
++#endif
+ 
+ public extension UIImage {
+     convenience init?(blurHash: String, size: CGSize, punch: Float = 1) {
+@@ -95,6 +99,10 @@ public extension UIImage {
+                                     shouldInterpolate: true,
+                                     intent: .defaultIntent) else { return nil }
+ 
++#if os(macOS)
++        self.init(cgImage: cgImage, size: NSSize(width: width, height: height))
++#else
+         self.init(cgImage: cgImage)
++#endif
+     }
+ }
+diff --git a/ios/UIImage+BlurhashEncode.swift b/ios/UIImage+BlurhashEncode.swift
+index bc68c95..c32c4af 100644
+--- a/ios/UIImage+BlurhashEncode.swift
++++ b/ios/UIImage+BlurhashEncode.swift
+@@ -7,12 +7,22 @@
+ //
+ 
+ import Foundation
++#if canImport(UIKit)
+ import UIKit
++#else
++import AppKit
++#endif
+ 
+ extension UIImage {
+     public func encodeBlurhash(numberOfComponents components: (Int, Int)) -> String? {
++#if os(macOS)
++        guard let source = cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
++        let pixelWidth = source.width
++        let pixelHeight = source.height
++#else
+         let pixelWidth = Int(round(size.width * scale))
+         let pixelHeight = Int(round(size.height * scale))
++#endif
+ 
+         let context = CGContext(
+             data: nil,
+@@ -23,12 +33,16 @@ extension UIImage {
+             space: CGColorSpace(name: CGColorSpace.sRGB)!,
+             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+         )!
++#if os(macOS)
++        context.draw(source, in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
++#else
+         context.scaleBy(x: scale, y: -scale)
+         context.translateBy(x: 0, y: -size.height)
+ 
+         UIGraphicsPushContext(context)
+         draw(at: .zero)
+         UIGraphicsPopContext()
++#endif
+ 
+         guard let cgImage = context.makeImage(),
+               let dataProvider = cgImage.dataProvider,
+diff --git a/package.json b/package.json
+index dcc1bf5..6edaa33 100644
+--- a/package.json
++++ b/package.json
+@@ -108,6 +108,11 @@
+     "name": "blurhash_codegen",
+     "type": "all",
+     "jsSrcsDir": "./src/specs",
++    "ios": {
++      "componentProvider": {
++        "BlurhashView": "BlurhashViewComponentView"
++      }
++    },
+     "android": {
+       "javaPackageName": "com.mrousavy.blurhash"
+     }
+diff --git a/react-native-blurhash.podspec b/react-native-blurhash.podspec
+index bb6ea68..ae7198c 100644
+--- a/react-native-blurhash.podspec
++++ b/react-native-blurhash.podspec
+@@ -17,6 +17,7 @@ Pod::Spec.new do |s|
+   s.authors      = { "Marc Rousavy" => "marcrousavy@hotmail.com" }
+   s.ios.deployment_target = '9.0'
+   s.tvos.deployment_target = '9.0'
++  s.osx.deployment_target = '14.0'
+   s.source       = { :git => "https://github.com/mrousavy/react-native-blurhash.git", :tag => "#{s.version}" }
+ 
+   s.source_files = "ios/**/*.{h,c,m,mm,swift}"

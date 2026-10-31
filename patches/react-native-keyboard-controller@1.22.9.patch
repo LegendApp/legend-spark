@@ -1,0 +1,16 @@
+diff --git a/src/bindings.macos.ts b/src/bindings.macos.ts
+new file mode 100644
+index 0000000..30108ce
+--- /dev/null
++++ b/src/bindings.macos.ts
+@@ -0,0 +1,2 @@
++// macOS has no software keyboard: use the no-op bindings that web uses instead of the native module.
++export * from "./bindings.ts";
+diff --git a/src/reanimated.macos.ts b/src/reanimated.macos.ts
+new file mode 100644
+index 0000000..fd25177
+--- /dev/null
++++ b/src/reanimated.macos.ts
+@@ -0,0 +1,2 @@
++// macOS has no software keyboard: keyboard handlers are no-ops, as on web.
++export * from "./reanimated.ts";

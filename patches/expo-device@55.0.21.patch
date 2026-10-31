@@ -1,0 +1,149 @@
+diff --git a/ios/DeviceModule.swift b/ios/DeviceModule.swift
+index 899b214..c5a3d45 100644
+--- a/ios/DeviceModule.swift
++++ b/ios/DeviceModule.swift
+@@ -1,5 +1,9 @@
+ import ExpoModulesCore
++#if canImport(UIKit)
+ import UIKit
++#else
++import SystemConfiguration
++#endif
+ import MachO
+ 
+ public class DeviceModule: Module {
+@@ -19,15 +23,27 @@ public class DeviceModule: Module {
+     }
+ 
+     Constant("modelId") {
++#if os(macOS)
++      sysctlString("hw.model")
++#else
+       UIDevice.modelIdentifier
++#endif
+     }
+ 
+     Constant("modelName") {
++#if os(macOS)
++      nil as String?
++#else
+       UIDevice.DeviceMap.modelName
++#endif
+     }
+ 
+     Constant("deviceYearClass") {
++#if os(macOS)
++      nil as Int?
++#else
+       UIDevice.DeviceMap.deviceYearClass
++#endif
+     }
+ 
+     Constant("totalMemory") {
+@@ -35,11 +51,19 @@ public class DeviceModule: Module {
+     }
+ 
+     Constant("osName") {
++#if os(macOS)
++      "macOS"
++#else
+       UIDevice.current.systemName
++#endif
+     }
+ 
+     Constant("osVersion") {
++#if os(macOS)
++      ProcessInfo.processInfo.operatingSystemVersion.versionString
++#else
+       UIDevice.current.systemVersion
++#endif
+     }
+ 
+     Constant("osBuildId") {
+@@ -51,7 +75,11 @@ public class DeviceModule: Module {
+     }
+ 
+     Constant("deviceName") {
++#if os(macOS)
++      SCDynamicStoreCopyComputerName(nil, nil) as String?
++#else
+       UIDevice.current.name
++#endif
+     }
+ 
+     Constant("deviceType") {
+@@ -72,12 +100,19 @@ public class DeviceModule: Module {
+     }
+ 
+     AsyncFunction("isRootedExperimentalAsync") { () -> Bool in
++#if os(macOS)
++      return false
++#else
+       return UIDevice.current.isJailbroken
++#endif
+     }
+   }
+ }
+ 
+ func getDeviceType() -> Int {
++  #if os(macOS)
++  return DeviceType.desktop.rawValue
++  #else
+   // if it's a macOS Catalyst app
+   if ProcessInfo.processInfo.isMacCatalystApp {
+     return DeviceType.desktop.rawValue
+@@ -100,6 +135,7 @@ func getDeviceType() -> Int {
+   default:
+     return DeviceType.unknown.rawValue
+   }
++  #endif
+ }
+ 
+ func isDevice() -> Bool {
+@@ -141,6 +177,20 @@ func cpuArchitectures() -> [String]? {
+   return [String(cString: archRaw)]
+ }
+ 
++#if os(macOS)
++func sysctlString(_ name: String) -> String? {
++  var size = 0
++  guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
++  var buffer = [CChar](repeating: 0, count: size)
++  guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
++  return String(cString: buffer)
++}
++
++extension OperatingSystemVersion {
++  var versionString: String { "\(majorVersion).\(minorVersion).\(patchVersion)" }
++}
++#endif
++
+ enum DeviceType: Int {
+   case unknown = 0
+   case phone = 1
+diff --git a/ios/ExpoDevice.podspec b/ios/ExpoDevice.podspec
+index 1b0c81f..0283bf0 100644
+--- a/ios/ExpoDevice.podspec
++++ b/ios/ExpoDevice.podspec
+@@ -12,6 +12,7 @@ Pod::Spec.new do |s|
+   s.homepage       = package['homepage']
+   s.platforms      = {
+     :ios => '15.1',
++    :osx => '14.0',
+     :tvos => '15.1'
+   }
+   s.swift_version  = '5.9'
+diff --git a/ios/UIDevice.swift b/ios/UIDevice.swift
+index 336c648..709c496 100644
+--- a/ios/UIDevice.swift
++++ b/ios/UIDevice.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ import UIKit
+ 
+ struct ExpoDeviceType {
+@@ -305,3 +306,4 @@ private struct JailbreakHelper {
+     ]
+   }
+ }
++#endif

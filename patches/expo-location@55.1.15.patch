@@ -1,0 +1,190 @@
+diff --git a/ios/EXLocation.h b/ios/EXLocation.h
+index 6e6c661..4954506 100644
+--- a/ios/EXLocation.h
++++ b/ios/EXLocation.h
+@@ -17,6 +17,8 @@ typedef NS_ENUM(NSUInteger, EXLocationAccuracy) {
+ 
+ + (NSDictionary *)exportLocation:(CLLocation *)location;
+ + (CLLocationAccuracy)CLLocationAccuracyFromOption:(EXLocationAccuracy)accuracy;
++#if !TARGET_OS_OSX
+ + (CLActivityType)CLActivityTypeFromOption:(NSInteger)activityType;
++#endif
+ 
+ @end
+diff --git a/ios/EXLocation.m b/ios/EXLocation.m
+index 0442c37..ac375c6 100644
+--- a/ios/EXLocation.m
++++ b/ios/EXLocation.m
+@@ -42,6 +42,7 @@ + (CLLocationAccuracy)CLLocationAccuracyFromOption:(EXLocationAccuracy)accuracy
+   }
+ }
+ 
++#if !TARGET_OS_OSX
+ + (CLActivityType)CLActivityTypeFromOption:(NSInteger)activityType
+ {
+   if (activityType >= CLActivityTypeOther && activityType <= CLActivityTypeOtherNavigation) {
+@@ -52,6 +53,7 @@ + (CLActivityType)CLActivityTypeFromOption:(NSInteger)activityType
+   }
+   return CLActivityTypeOther;
+ }
++#endif
+ 
+ @end
+ 
+diff --git a/ios/ExpoLocation.podspec b/ios/ExpoLocation.podspec
+index df166fe..2214d91 100644
+--- a/ios/ExpoLocation.podspec
++++ b/ios/ExpoLocation.podspec
+@@ -11,7 +11,8 @@ Pod::Spec.new do |s|
+   s.author         = package['author']
+   s.homepage       = package['homepage']
+   s.platforms      = {
+-    :ios => '15.1'
++    :ios => '15.1',
++    :osx => '14.0'
+   }
+   s.source         = { git: 'https://github.com/expo/expo.git' }
+   s.static_framework = true
+diff --git a/ios/Providers/BaseLocationProvider.swift b/ios/Providers/BaseLocationProvider.swift
+index ae9135a..98dcce1 100644
+--- a/ios/Providers/BaseLocationProvider.swift
++++ b/ios/Providers/BaseLocationProvider.swift
+@@ -9,7 +9,9 @@ internal class BaseLocationProvider: NSObject, CLLocationManagerDelegate {
+   @MainActor
+   init(options: LocationOptions) {
+     super.init()
++    #if !os(macOS)
+     manager.allowsBackgroundLocationUpdates = false
++    #endif
+     manager.distanceFilter = options.distanceInterval
+     manager.desiredAccuracy = options.accuracy.toCLLocationAccuracy()
+     manager.delegate = self
+diff --git a/ios/Providers/DeviceHeadingStreamer.swift b/ios/Providers/DeviceHeadingStreamer.swift
+index 802bf57..47d89a3 100644
+--- a/ios/Providers/DeviceHeadingStreamer.swift
++++ b/ios/Providers/DeviceHeadingStreamer.swift
+@@ -25,14 +25,19 @@ internal class DeviceHeadingStreamer: BaseStreamer {
+     }
+     let stream = DeviceHeadingStream { continuation in
+       self.continuation = continuation
++      // Macs have no compass; headingAvailable() is false there, so this is never reached.
++      #if !os(macOS)
+       manager.startUpdatingHeading()
++      #endif
+     }
+     headingStream = stream
+     return stream
+   }
+ 
+   override func stopStreaming() {
++    #if !os(macOS)
+     manager.stopUpdatingHeading()
++    #endif
+     continuation?.finish()
+ 
+     headingStream = nil
+diff --git a/ios/Requesters/EXBackgroundLocationPermissionRequester.m b/ios/Requesters/EXBackgroundLocationPermissionRequester.m
+index aa54f8c..a2e4918 100644
+--- a/ios/Requesters/EXBackgroundLocationPermissionRequester.m
++++ b/ios/Requesters/EXBackgroundLocationPermissionRequester.m
+@@ -14,6 +14,12 @@ @interface EXBackgroundLocationPermissionRequester ()
+ 
+ @end
+ 
++#if TARGET_OS_OSX
++#import <AppKit/AppKit.h>
++#define UIApplicationWillResignActiveNotification NSApplicationWillResignActiveNotification
++#define UIApplicationDidBecomeActiveNotification NSApplicationDidBecomeActiveNotification
++#endif
++
+ @implementation EXBackgroundLocationPermissionRequester
+ 
+ - (instancetype)init
+diff --git a/ios/Requesters/EXBaseLocationRequester.h b/ios/Requesters/EXBaseLocationRequester.h
+index ae63560..d29a8be 100644
+--- a/ios/Requesters/EXBaseLocationRequester.h
++++ b/ios/Requesters/EXBaseLocationRequester.h
+@@ -5,6 +5,11 @@
+ #import <ExpoModulesCore/EXPermissionsInterface.h>
+ #import <CoreLocation/CLLocationManagerDelegate.h>
+ 
++#if TARGET_OS_OSX
++// macOS has no when-in-use authorization and never reports it; keep the shared status switches compiling.
++#define kCLAuthorizationStatusAuthorizedWhenInUse ((CLAuthorizationStatus)4)
++#endif
++
+ @interface EXBaseLocationRequester : NSObject<EXPermissionsRequester, CLLocationManagerDelegate>
+ 
+ @property (nonatomic, strong) CLLocationManager *locationManager;
+diff --git a/ios/Requesters/EXBaseLocationRequester.m b/ios/Requesters/EXBaseLocationRequester.m
+index 350eb5f..c8f6d82 100644
+--- a/ios/Requesters/EXBaseLocationRequester.m
++++ b/ios/Requesters/EXBaseLocationRequester.m
+@@ -37,7 +37,12 @@ - (NSDictionary *)getPermissions {
+ 
+   CLAuthorizationStatus systemStatus;
+   if (![EXBaseLocationRequester isConfiguredForAlwaysAuthorization] && ![EXBaseLocationRequester isConfiguredForWhenInUseAuthorization]) {
++#if TARGET_OS_OSX
++    // RCTFatal throws in Release; on macOS the missing key reports denied, as it does in Debug.
++    RCTLogError(@"This app is missing NSLocationWhenInUseUsageDescription in its macOS Info.plist, so location services will fail.");
++#else
+     RCTFatal(RCTErrorWithMessage(@"This app is missing usage descriptions, so location services will fail. Add one of the `NSLocation*UsageDescription` keys to your bundle's Info.plist. See https://bit.ly/3iLqy6S (https://docs.expo.dev/distribution/app-stores/#system-permissions-dialogs-on-ios) for more information."));
++#endif
+     systemStatus = kCLAuthorizationStatusDenied;
+   } else {
+     systemStatus = [CLLocationManager authorizationStatus];
+diff --git a/ios/TaskConsumers/EXGeofencingTaskConsumer.m b/ios/TaskConsumers/EXGeofencingTaskConsumer.m
+index 7e6482e..c94f09e 100644
+--- a/ios/TaskConsumers/EXGeofencingTaskConsumer.m
++++ b/ios/TaskConsumers/EXGeofencingTaskConsumer.m
+@@ -71,8 +71,10 @@ - (void)startMonitoringRegionsForTask:(id<EXTaskInterface>)task
+     self->_regionStates = regionStates;
+ 
+     locationManager.delegate = self;
++#if !TARGET_OS_OSX
+     locationManager.allowsBackgroundLocationUpdates = YES;
+     locationManager.pausesLocationUpdatesAutomatically = NO;
++#endif
+ 
+     for (NSDictionary *regionDict in regions) {
+       NSString *identifier = regionDict[@"identifier"] ?: [[NSUUID UUID] UUIDString];
+diff --git a/ios/TaskConsumers/EXLocationTaskConsumer.m b/ios/TaskConsumers/EXLocationTaskConsumer.m
+index fe1d9dd..75df305 100644
+--- a/ios/TaskConsumers/EXLocationTaskConsumer.m
++++ b/ios/TaskConsumers/EXLocationTaskConsumer.m
+@@ -49,7 +49,9 @@ - (void)didRegisterTask:(id<EXTaskInterface>)task
+     self->_locationManager = locationManager;
+ 
+     locationManager.delegate = self;
++#if !TARGET_OS_OSX
+     locationManager.allowsBackgroundLocationUpdates = YES;
++#endif
+ 
+     // Set options-specific things in location manager.
+     [self setOptions:task.options];
+@@ -69,9 +71,11 @@ - (void)setOptions:(NSDictionary *)options
+ 
+     locationManager.desiredAccuracy = [EXLocation CLLocationAccuracyFromOption:accuracy];
+     locationManager.distanceFilter = [self numberToDouble:options[@"distanceInterval"] defaultValue:kCLDistanceFilterNone];
++#if !TARGET_OS_OSX
+     locationManager.activityType = [EXLocation CLActivityTypeFromOption:[self numberToInteger:options[@"activityType"] defaultValue:CLActivityTypeOther]];
+     locationManager.pausesLocationUpdatesAutomatically = [self numberToBool:options[@"pausesUpdatesAutomatically"] defaultValue:true];
+     locationManager.showsBackgroundLocationIndicator = [self numberToBool:options[@"showsBackgroundLocationIndicator"] defaultValue:false];
++#endif
+ 
+     [locationManager startUpdatingLocation];
+     [locationManager startMonitoringSignificantLocationChanges];
+@@ -145,9 +149,13 @@ - (BOOL)shouldReportDeferredLocations
+   if (_deferredLocations.count <= 0) {
+     return NO;
+   }
++#if TARGET_OS_OSX
++  if (NSApp.isActive) {
++#else
+   UIApplicationState appState = [[UIApplication sharedApplication] applicationState];
+ 
+   if (appState == UIApplicationStateActive) {
++#endif
+     // Don't defer location updates when app is in foreground state.
+     return YES;
+   }

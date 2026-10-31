@@ -1,0 +1,203 @@
+diff --git a/Unistyles.podspec b/Unistyles.podspec
+index adf83bf..ba3ba7f 100644
+--- a/Unistyles.podspec
++++ b/Unistyles.podspec
+@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => min_ios_version_supported }
++  s.platforms    = { :ios => min_ios_version_supported, :osx => "14.0" }
+   s.source       = { :git => package["repository"], :tag => "#{s.version}" }
+ 
+   s.source_files = [
+diff --git a/ios/Extensions.swift b/ios/Extensions.swift
+index 9b38a32..a707de7 100644
+--- a/ios/Extensions.swift
++++ b/ios/Extensions.swift
+@@ -1,5 +1,7 @@
+ import Foundation
+ 
++#if os(iOS)
++
+ extension UIColor {
+     // int is universal way of color representation
+     // iOS API expects UIColor, so we need to translate it
+@@ -11,3 +13,4 @@ extension UIColor {
+         return UIColor(red: red, green: green, blue: blue, alpha: 1.0)
+     }
+ }
++#endif
+diff --git a/ios/NativePlatform+keyboard.swift b/ios/NativePlatform+keyboard.swift
+index 0237e76..b95f651 100644
+--- a/ios/NativePlatform+keyboard.swift
++++ b/ios/NativePlatform+keyboard.swift
+@@ -1,3 +1,4 @@
++#if os(iOS)
+ import Foundation
+ 
+ struct KeyboardAnimation {
+@@ -103,3 +104,5 @@ extension NativeIOSPlatform {
+         }
+     }
+ }
++
++#endif
+diff --git a/ios/NativePlatform+macos.swift b/ios/NativePlatform+macos.swift
+new file mode 100644
+index 0000000..ac219cf
+--- /dev/null
++++ b/ios/NativePlatform+macos.swift
+@@ -0,0 +1,124 @@
++#if os(macOS)
++
++import AppKit
++import NitroModules
++
++// AppKit counterpart of NativeIOSPlatform: a desktop window has no safe-area, status bar,
++// navigation bar or software keyboard, so those report zero; the window is the "screen".
++class NativeMacOSPlatform: HybridNativePlatformSpec {
++    var miniRuntime: UnistylesNativeMiniRuntime?
++    var dependencyListeners: Array<(Array<UnistyleDependency>, UnistylesNativeMiniRuntime) -> Void> = []
++    var observers: [NSObjectProtocol] = []
++    var appearanceObservation: NSKeyValueObservation?
++
++    override init() {
++        super.init()
++        self.miniRuntime = onMain { self.buildMiniRuntime() }
++        let center = NotificationCenter.default
++        for name in [NSWindow.didResizeNotification, NSWindow.didBecomeMainNotification, NSWindow.didChangeBackingPropertiesNotification] {
++            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.onNativePlatformChange() })
++        }
++        appearanceObservation = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in
++            DispatchQueue.main.async { self?.onNativePlatformChange() }
++        }
++    }
++
++    deinit {
++        observers.forEach { NotificationCenter.default.removeObserver($0) }
++    }
++
++    func onMain<T>(_ body: () -> T) -> T {
++        Thread.isMainThread ? body() : DispatchQueue.main.sync(execute: body)
++    }
++
++    var mainWindow: NSWindow? { NSApplication.shared.mainWindow ?? NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first { $0.isVisible } }
++
++    func buildMiniRuntime() -> UnistylesNativeMiniRuntime {
++        let screen = getScreenDimensions()
++        return UnistylesNativeMiniRuntime(
++            colorScheme: getColorScheme(),
++            screen: screen,
++            contentSizeCategory: getContentSizeCategory(),
++            insets: getInsets(),
++            pixelRatio: getPixelRatio(),
++            fontScale: getFontScale(),
++            rtl: getPrefersRtlDirection(),
++            statusBar: getStatusBarDimensions(),
++            navigationBar: getNavigationBarDimensions(),
++            isPortrait: screen.height >= screen.width,
++            isLandscape: screen.width > screen.height
++        )
++    }
++
++    func getMiniRuntime() -> UnistylesNativeMiniRuntime { miniRuntime! }
++
++    func getColorScheme() -> ColorScheme {
++        onMain { NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light }
++    }
++
++    func getFontScale() -> Double { 1 }
++
++    func getContentSizeCategory() -> String { "unspecified" }
++
++    func getScreenDimensions() -> Dimensions {
++        onMain {
++            let size = mainWindow?.contentView?.bounds.size ?? NSScreen.main?.frame.size ?? .zero
++            return Dimensions(width: size.width, height: size.height)
++        }
++    }
++
++    func getOrientation() -> Orientation {
++        let screen = getScreenDimensions()
++        return screen.width > screen.height ? .landscape : .portrait
++    }
++
++    func getInsets() -> Insets { Insets(top: 0, bottom: 0, left: 0, right: 0, ime: 0) }
++
++    func getPrefersRtlDirection() -> Bool {
++        onMain { UserDefaults.standard.bool(forKey: "RCTI18nUtil_forceRTL") || NSApplication.shared.userInterfaceLayoutDirection == .rightToLeft }
++    }
++
++    func getStatusBarDimensions() -> Dimensions { Dimensions(width: 0, height: 0) }
++
++    func getNavigationBarDimensions() -> Dimensions { Dimensions(width: 0, height: 0) }
++
++    func getPixelRatio() -> Double {
++        onMain { Double(mainWindow?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1) }
++    }
++
++    func setRootViewBackgroundColor(color: Double) throws {
++        let value = Int(color)
++        DispatchQueue.main.async {
++            self.mainWindow?.backgroundColor = NSColor(red: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255, blue: CGFloat(value & 0xFF) / 255, alpha: 1)
++        }
++    }
++
++    func setStatusBarHidden(isHidden: Bool) throws {}
++
++    func setNavigationBarHidden(isHidden: Bool) throws {}
++
++    func setImmersiveMode(isEnabled: Bool) throws {}
++
++    func registerPlatformListener(callback: @escaping (Array<UnistyleDependency>, UnistylesNativeMiniRuntime) -> Void) throws {
++        dependencyListeners.append(callback)
++    }
++
++    // Desktop windows have no software keyboard, so the IME inset never changes.
++    func registerImeListener(callback: @escaping (UnistylesNativeMiniRuntime) -> Void) throws {}
++
++    func unregisterPlatformListeners() throws {
++        dependencyListeners.removeAll()
++    }
++
++    func onNativePlatformChange() {
++        guard let current = miniRuntime else { return }
++        let next = buildMiniRuntime()
++        let changed = UnistylesNativeMiniRuntime.diff(lhs: current, rhs: next)
++        if !changed.isEmpty {
++            miniRuntime = next
++            dependencyListeners.forEach { $0(changed, next) }
++        }
++    }
++}
++
++#endif
+diff --git a/ios/NativePlatform.swift b/ios/NativePlatform.swift
+index d8b86a1..90288a2 100644
+--- a/ios/NativePlatform.swift
++++ b/ios/NativePlatform.swift
+@@ -8,6 +8,8 @@ public class NativePlatform {
+     public static func create() -> HybridNativePlatformSpec_cxx {
+         #if os(iOS)
+         let nativePlatform = NativeIOSPlatform()
++        #elseif os(macOS)
++        let nativePlatform = NativeMacOSPlatform()
+         #else
+         throw PlatformError.UnsupportedPlatform
+         #endif
+diff --git a/ios/NativePlatformListener+ios.swift b/ios/NativePlatformListener+ios.swift
+index ac7db8f..8968117 100644
+--- a/ios/NativePlatformListener+ios.swift
++++ b/ios/NativePlatformListener+ios.swift
+@@ -1,3 +1,4 @@
++#if os(iOS)
+ import Foundation
+ import Combine
+ 
+@@ -65,3 +66,5 @@ extension NativeIOSPlatform {
+         }
+     }
+ }
++
++#endif

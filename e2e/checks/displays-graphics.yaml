@@ -1,0 +1,73 @@
+area: displays-graphics
+prefix: DISP
+checks:
+  DISP-BLUR-01:
+    title: "@react-native-community/blur registers native BlurView and VibrancyView components on macOS and lays out blur materials over content, with VibrancyView children inside the material"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-community-blur.md"
+  DISP-FASTIMAGE-01:
+    title: react-native-fast-image renders through Spark's macOS stand-in, reports onLoad with the image size, reloads through its ref and preloads with the size
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-fast-image.md"
+  DISP-SKIA-01:
+    title: "@shopify/react-native-skia draws a declarative Canvas in its macOS native view and an offscreen raster surface, both read back with the expected pixels"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/shopify-react-native-skia.md"
+  DISP-BLURHASH-01:
+    title: react-native-blurhash decodes a Blurhash in its native view on macOS and encodes a local image to a valid Blurhash with the image's color
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-blurhash.md"
+  DISP-CORNER-01:
+    title: react-native-screen-corner-radius imports on macOS without its iOS-only native module and reports a 0 radius and square corners
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-screen-corner-radius.md"
+  DISP-GRADIENT-01:
+    title: expo-linear-gradient's native module is linked on macOS and its gradient view lays out
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-linear-gradient.md"
+  DISP-SVG-01:
+    title: react-native-svg's native components are registered on macOS and an SVG with shapes, a path, a gradient and text lays out
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-svg.md"
+  DISP-ICONS-01:
+    title: "@expo/vector-icons loads its icon fonts through expo-font on macOS and draws the glyphs"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-vector-icons.md"
+  DISP-EXPOBLUR-01:
+    title: expo-blur's native module is linked on macOS and its BlurViews lay out as visual-effect materials
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-blur.md"
+  DISP-EXPOIMAGE-01:
+    title: expo-image renders on macOS through Spark's stand-in, with load events, reloadAsync and prefetch
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-image.md"
+  DISP-SYMBOLS-01:
+    title: expo-symbols draws SF Symbols natively on macOS in monochrome, hierarchical, palette and multicolor styles
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-symbols.md"
+  DISP-MASKED-01:
+    title: "@react-native-masked-view/masked-view masks its children by the mask element's alpha on macOS"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/masked-view.md"
+  DISP-EXPOGLASS-01:
+    title: expo-glass-effect hosts GlassView and GlassContainer children in AppKit glass on macOS 26
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-glass-effect.md"
+  DISP-GRAPH-01:
+    title: react-native-graph renders static and animated line graphs on macOS with Skia 2
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-graph.md"

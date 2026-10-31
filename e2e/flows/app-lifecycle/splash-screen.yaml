@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-splash-screen on macOS
+intent: >
+  The Splash screen screen calls setOptions, preventAutoHideAsync, hide and hideAsync; with no native splash on
+  macOS they resolve without throwing, so the screen shows passed.
+checks: [LIFE-SPLASH-01]
+tags: [app-lifecycle]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://app-lifecycle/splash-screen" }
+- extendedWaitUntil: { visible: { id: app-lifecycle-splash-screen-passed }, timeout: 10s }

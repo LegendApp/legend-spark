@@ -95,7 +95,8 @@ Every mapping form also takes:
   Every key in `when.matrix` must be a dimension and value from the header's `matrix`.
   `assertPaused` uses its own `when` argument (the paused state). To make it
   conditional, wrap it: `runFlow: { when: {…}, commands: [ … ] }`.
-- `timeout`: overrides the implicit wait for the target (default 5s).
+- `timeout`: overrides the implicit wait for the target (default 5s). A pointer `tapOn` also waits
+  within it for the screen to stop mounting, and taps anyway once it is spent.
 
 Some commands contain other commands: `repeat.commands`, `runFlow.commands`,
 `measure.run`, `assertNoLeaks.run`, `interruptAt.with`, and `during` in
@@ -323,6 +324,14 @@ A development build loads JavaScript over HTTP, so the backend bundles the curre
 source once per run (`expo export:embed`, no Metro) and serves it to each launch; a release
 build runs its embedded bundle. A flow whose `appId` is not the app's bundle identifier
 fails with `invalid`.
+
+Add `--pointer` to `e2e:run --backend driver` to attach the macOS OS pointer backend for
+`tapOn`. This opts into showing and activating target windows and requires Accessibility access.
+It uses driver testIDs for lookup and real Quartz mouse events for input; it does not provide
+an AX tree or other gestures. With `--pointer`, visibility checks use the pointer backend's
+driver queries, with the same white-box testID semantics. The release gate does not accept
+`--pointer`, so flows that need it live in `e2e/pointer/flows/`, outside the gate's `include`.
+`bun run gate:pointer` runs them with `--backend driver --pointer` before a release. See [real pointer input](test-driver.md#real-pointer-input-macos).
 
 | Flow | Driver |
 |---|---|

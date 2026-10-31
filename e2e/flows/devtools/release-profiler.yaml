@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-release-profiler on macOS
+intent: >
+  The Release profiler screen samples 300 ms of busy JavaScript, stops the profiler and reads the
+  .cpuprofile trace it wrote; the trace has events and sits in the app's Caches folder, so the screen shows
+  passed.
+checks: [DEVT-PROFILER-01]
+tags: [devtools]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://devtools/release-profiler" }
+- extendedWaitUntil: { visible: { id: devtools-release-profiler-passed }, timeout: 15s }

@@ -1,0 +1,18 @@
+area: media
+prefix: MEDIA
+checks:
+  MEDIA-ZXING-01:
+    title: react-native-nitro-zxing scans a QR code in a still Nitro Image on macOS and returns its format and value
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-nitro-zxing.md"
+  MEDIA-IMAGEPICKER-01:
+    title: expo-image-picker links on macOS, grants file picking without a library permission and reports the camera picker unavailable
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-image-picker.md"
+  MEDIA-IMAGEMANIP-01:
+    title: expo-image-manipulator rotates, flips, resizes and crops images on macOS with correct pixels
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-image-manipulator.md"

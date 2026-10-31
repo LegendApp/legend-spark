@@ -24,6 +24,7 @@
     "e2e:run": "bun scripts/e2e/cli.ts run",
     "e2e:golden": "bun scripts/e2e/cli.ts golden",
     "gate": "bun scripts/e2e/cli.ts gate",
+    "gate:pointer": "bun scripts/e2e/cli.ts run e2e/pointer --backend driver --pointer",
     "test:native": "bun scripts/test-native.ts",
     "test:all": "bun run typecheck && bun run test && bun run test:sparkle && bun run test:updates && bun run test:integrations && bun run test:native && bun run test:expansion && bun run test:runtimes:all",
     "test:sparkle": "bun tests/sparkle.integration.ts",

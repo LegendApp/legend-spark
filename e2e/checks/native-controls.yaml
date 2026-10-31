@@ -19,3 +19,8 @@ checks:
       - ./ui/symbol#SFSymbol
       - ./ui/search#TextInputSearch
       - ./ui/glass#GlassView
+  CTRL-DATETIMEPICKER-01:
+    title: "@react-native-community/datetimepicker renders date, time and inline calendar pickers in NSDatePicker on macOS"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/datetimepicker.md"

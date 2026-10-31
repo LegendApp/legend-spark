@@ -1,0 +1,7 @@
+import { defineScreens, lazyScreen } from "../../shell/registry";
+
+export default defineScreens("devtools", [
+  { id: "release-profiler", title: "Release profiler", titles: { ar: "محلل الإصدار" }, summary: "react-native-release-profiler on desktop: Hermes sampling profiler start and stop, writing a .cpuprofile trace to the app's own Caches folder.", summaries: { ar: "‏react-native-release-profiler على سطح المكتب: بدء محلل العينات في Hermes وإيقافه، مع كتابة ملف ‎.cpuprofile في مجلد Caches الخاص بالتطبيق." }, component: lazyScreen(() => require("./ReleaseProfilerDemo").ReleaseProfilerDemo) },
+  { id: "app-logs", title: "App logs", titles: { ar: "سجلات التطبيق" }, summary: "react-native-app-logs on desktop: the app's own unified-log entries from OSLogStore, filtered and delivered to JavaScript.", summaries: { ar: "‏react-native-app-logs على سطح المكتب: إدخالات السجل الموحد الخاصة بالتطبيق من OSLogStore، مُرشَّحة ومُسلَّمة إلى JavaScript." }, component: lazyScreen(() => require("./AppLogsDemo").AppLogsDemo) },
+  { id: "sentry", title: "Sentry", titles: { ar: "رصد الأخطاء عبر Sentry" }, summary: "@sentry/react-native on desktop: capturing an error with its stack trace and the native macOS context, without sending it.", summaries: { ar: "‏@sentry/react-native على سطح المكتب: التقاط خطأ مع تتبع المكدس وسياق macOS الأصلي دون إرساله." }, component: lazyScreen(() => require("./SentryDemo").SentryDemo) },
+]);

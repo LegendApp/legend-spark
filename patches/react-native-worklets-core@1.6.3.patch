@@ -1,0 +1,13 @@
+diff --git a/react-native-worklets-core.podspec b/react-native-worklets-core.podspec
+index f5b58d7..c9bcfea 100644
+--- a/react-native-worklets-core.podspec
++++ b/react-native-worklets-core.podspec
+@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => "11.0" }
++  s.platforms    = { :ios => "11.0", :osx => "14.0" }
+   s.source       = { :git => "https://github.com/margelo/react-native-worklets-core.git", :tag => "#{s.version}" }
+ 
+   s.source_files = "ios/**/*.{h,m,mm}", "cpp/**/*.{h,cpp}"

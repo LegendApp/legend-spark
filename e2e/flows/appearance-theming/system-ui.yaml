@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-system-ui on macOS
+intent: >
+  The System UI screen sets the main window background to #336699, reads the same color back, then resets it
+  to the default, so the screen shows passed.
+checks: [APPR-SYSTEMUI-01]
+tags: [appearance-theming]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://appearance-theming/system-ui" }
+- extendedWaitUntil: { visible: { id: appearance-theming-system-ui-passed }, timeout: 10s }

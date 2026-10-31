@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-image on macOS
+intent: >
+  The Expo Image screen writes a 4×2 PNG to the app's data folder and shows it with expo-image. onLoad reports
+  4×2, reloadAsync through the ref loads it again, and Image.prefetch resolves true. An unsupported blurhash
+  reports start/error/end exactly once. A bundled 160×80 asset fills a styled box and contentFit none crops
+  its natural size at the center, with both samples captured for visual inspection.
+checks: [DISP-EXPOIMAGE-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/expo-image" }
+- extendedWaitUntil: { visible: { id: displays-graphics-expo-image-passed }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: displays-graphics-expo-image-asset-loaded }, timeout: 10s }
+- assertVisible: { id: displays-graphics-expo-image-unsupported-passed }
+- assertNotVisible: { id: displays-graphics-expo-image-unsupported-failed }
+- takeScreenshot: expo-image

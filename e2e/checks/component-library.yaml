@@ -1,0 +1,53 @@
+area: component-library
+prefix: COMP
+checks:
+  COMP-SCREENS-01:
+    title: react-native-screens' Screen, ScreenContainer and ScreenStack render on macOS as plain views; an inactive screen stays hidden until it becomes active
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-screens.md"
+  COMP-REANIMATED-01:
+    title: react-native-reanimated runs a timing animation and frame callbacks on the UI thread on macOS and reports back to JavaScript
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-reanimated.md"
+  COMP-GESTURE-01:
+    title: react-native-gesture-handler's native module and button component are registered on macOS and a GestureDetector handles a tap in a GestureHandlerRootView
+    platforms: [macos]
+    blocking: false
+    spec: "vault tasks/spark/desktop-libs/react-native-gesture-handler.md"
+  COMP-NAVIGATION-01:
+    title: React Navigation's native stack shows a header and navigates forward and back on macOS, and bottom tabs switch tabs
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-navigation.md"
+  COMP-DRAWER-01:
+    title: react-native-drawer-layout opens and closes a drawer on macOS, reporting onOpen and onClose
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-drawer-layout.md"
+  COMP-SHEET-01:
+    title: "@gorhom/bottom-sheet snaps to its second point on macOS and reports the index"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/gorhom-bottom-sheet.md"
+  COMP-PRESSABLE-01:
+    title: react-native-pressable-opacity's PressableOpacity and NativePressableOpacity render on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/react-native-pressable-opacity.md"
+  COMP-STATUSBAR-01:
+    title: expo-status-bar's component renders and its setters return on macOS, where there is no status bar
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-status-bar.md"
+  COMP-EXPOROUTER-01:
+    title: expo-router renders file-based routes on macOS and pushes a dynamic route with search params
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/desktop-libs/expo-router.md"
+  COMP-POINTER-01:
+    title: React Native Pressable handles successive OS mouse clicks on macOS, pairing each down and up
+    platforms: [macos]
+    blocking: false
+    spec: "docs/test-driver.md#real-pointer-input-macos"

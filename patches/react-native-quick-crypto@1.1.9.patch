@@ -1,0 +1,31 @@
+diff --git a/QuickCrypto.podspec b/QuickCrypto.podspec
+index 8e026e5..0c45a92 100644
+--- a/QuickCrypto.podspec
++++ b/QuickCrypto.podspec
+@@ -198,7 +198,10 @@ Pod::Spec.new do |s|
+     # Disable x86 SIMD intrinsics on iOS simulator — the .c implementation files are already
+     # excluded above, but blake3_dispatch.c still references the symbols unless these macros
+     # are defined. Mirrors the Android CMakeLists.txt approach (line 18-22).
+-    "GCC_PREPROCESSOR_DEFINITIONS[sdk=iphonesimulator*][arch=x86_64]" => "$(inherited) BLAKE3_NO_AVX512 BLAKE3_NO_AVX2 BLAKE3_NO_SSE41 BLAKE3_NO_SSE2 NCRYPTO_EVP_ONLY=1"
++    "GCC_PREPROCESSOR_DEFINITIONS[sdk=iphonesimulator*][arch=x86_64]" => "$(inherited) BLAKE3_NO_AVX512 BLAKE3_NO_AVX2 BLAKE3_NO_SSE41 BLAKE3_NO_SSE2 NCRYPTO_EVP_ONLY=1",
++    # Intel Macs need the same: no NEON source and no x86 SIMD symbols.
++    "EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*][arch=x86_64]" => "deps/blake3/c/blake3_neon.c",
++    "GCC_PREPROCESSOR_DEFINITIONS[sdk=macosx*][arch=x86_64]" => "$(inherited) BLAKE3_NO_AVX512 BLAKE3_NO_AVX2 BLAKE3_NO_SSE41 BLAKE3_NO_SSE2 NCRYPTO_EVP_ONLY=1"
+   }
+ 
+   # Every translation unit calls the renamed OpenSSL symbols. Missing a rename
+diff --git a/deps/fastpbkdf2/fastpbkdf2.c b/deps/fastpbkdf2/fastpbkdf2.c
+index ee2d2f0..b04ec59 100644
+--- a/deps/fastpbkdf2/fastpbkdf2.c
++++ b/deps/fastpbkdf2/fastpbkdf2.c
+@@ -17,8 +17,8 @@
+ #include <assert.h>
+ #include <string.h>
+ #if defined(__GNUC__)
+-  #if TARGET_OS_MACCATALYST
+-    #include <machine/endian.h>  // Mac Catalyst
++  #if TARGET_OS_MACCATALYST || TARGET_OS_OSX
++    #include <machine/endian.h>  // Mac Catalyst, macOS
+   #else  
+     #include <endian.h>          // iOS
+   #endif
