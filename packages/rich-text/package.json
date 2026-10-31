@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-rich-text",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "license": "MIT",
   "main": "src/index.ts",
@@ -13,6 +13,6 @@
     "react-native": "0.83.10"
   },
   "dependencies": {
-    "@legendapp/spark-desktop-shortcuts": "0.0.1"
+    "@legendapp/spark-desktop-shortcuts": "0.0.2"
   }
 }

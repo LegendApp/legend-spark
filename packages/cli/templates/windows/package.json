@@ -1,6 +1,6 @@
 {
   "name": "spark-template-windows",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -28,7 +28,7 @@
     "react-native-windows": "0.83.2",
     "expo-desktop-modules-core": "55.0.2",
     "expo-desktop-stubs": "55.0.2",
-    "@legendapp/spark": "0.0.1"
+    "@legendapp/spark": "0.0.2"
   },
   "overrides": {
     "expo": "55.0.32",

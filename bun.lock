@@ -7,34 +7,34 @@
       "devDependencies": {
         "@expo/ui": "55.0.17",
         "@legendapp/list": "3.4.0",
-        "@legendapp/spark": "0.0.1",
-        "@legendapp/spark-audio": "0.0.1",
-        "@legendapp/spark-auth-session": "0.0.1",
-        "@legendapp/spark-clipboard": "0.0.1",
-        "@legendapp/spark-context-menu": "0.0.1",
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-desktop-config": "0.0.1",
-        "@legendapp/spark-desktop-links": "0.0.1",
-        "@legendapp/spark-desktop-shortcuts": "0.0.1",
-        "@legendapp/spark-desktop-windows": "0.0.1",
-        "@legendapp/spark-drag-drop": "0.0.1",
-        "@legendapp/spark-file-dialog": "0.0.1",
-        "@legendapp/spark-file-system": "0.0.1",
-        "@legendapp/spark-global-shortcuts": "0.0.1",
-        "@legendapp/spark-html": "0.0.1",
-        "@legendapp/spark-markdown": "0.0.1",
-        "@legendapp/spark-message-dialog": "0.0.1",
-        "@legendapp/spark-native-menu": "0.0.1",
-        "@legendapp/spark-notifications": "0.0.1",
-        "@legendapp/spark-processes": "0.0.1",
-        "@legendapp/spark-secure-storage": "0.0.1",
-        "@legendapp/spark-settings": "0.0.1",
-        "@legendapp/spark-sqlite": "0.0.1",
-        "@legendapp/spark-system": "0.0.1",
-        "@legendapp/spark-tray": "0.0.1",
-        "@legendapp/spark-ui": "0.0.1",
-        "@legendapp/spark-webview": "0.0.1",
-        "@legendapp/spark-window-options": "0.0.1",
+        "@legendapp/spark": "0.0.2",
+        "@legendapp/spark-audio": "0.0.2",
+        "@legendapp/spark-auth-session": "0.0.2",
+        "@legendapp/spark-clipboard": "0.0.2",
+        "@legendapp/spark-context-menu": "0.0.2",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-desktop-config": "0.0.2",
+        "@legendapp/spark-desktop-links": "0.0.2",
+        "@legendapp/spark-desktop-shortcuts": "0.0.2",
+        "@legendapp/spark-desktop-windows": "0.0.2",
+        "@legendapp/spark-drag-drop": "0.0.2",
+        "@legendapp/spark-file-dialog": "0.0.2",
+        "@legendapp/spark-file-system": "0.0.2",
+        "@legendapp/spark-global-shortcuts": "0.0.2",
+        "@legendapp/spark-html": "0.0.2",
+        "@legendapp/spark-markdown": "0.0.2",
+        "@legendapp/spark-message-dialog": "0.0.2",
+        "@legendapp/spark-native-menu": "0.0.2",
+        "@legendapp/spark-notifications": "0.0.2",
+        "@legendapp/spark-processes": "0.0.2",
+        "@legendapp/spark-secure-storage": "0.0.2",
+        "@legendapp/spark-settings": "0.0.2",
+        "@legendapp/spark-sqlite": "0.0.2",
+        "@legendapp/spark-system": "0.0.2",
+        "@legendapp/spark-tray": "0.0.2",
+        "@legendapp/spark-ui": "0.0.2",
+        "@legendapp/spark-webview": "0.0.2",
+        "@legendapp/spark-window-options": "0.0.2",
         "@op-engineering/op-sqlite": "18.2.1",
         "@react-native-async-storage/async-storage": "2.2.0",
         "@react-native-runtimes/core": "0.1.0-alpha.2",
@@ -80,7 +80,7 @@
         "@babel/parser": "7.28.5",
         "@babel/traverse": "7.28.5",
         "@expo/ui": "55.0.17",
-        "@legendapp/spark": "0.0.1",
+        "@legendapp/spark": "0.0.2",
         "@op-engineering/op-sqlite": "18.2.1",
         "@react-native-async-storage/async-storage": "2.2.0",
         "@react-native-community/cli": "20.1.3",
@@ -115,7 +115,7 @@
     },
     "fixtures/native-greeting": {
       "name": "@legendapp/spark-native-greeting",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "peerDependencies": {
         "react": "^19.2.0",
         "react-native": "0.83.10",
@@ -127,9 +127,9 @@
     },
     "fixtures/sdk-test-driver": {
       "name": "@legendapp/spark-sdk-test-driver",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark": "0.0.1",
+        "@legendapp/spark": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -138,10 +138,10 @@
     },
     "packages/ai": {
       "name": "@legendapp/spark-ai",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-processes": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-processes": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -150,9 +150,9 @@
     },
     "packages/audio": {
       "name": "@legendapp/spark-audio",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "expo-audio": "55.0.18",
@@ -165,10 +165,10 @@
     },
     "packages/auth-session": {
       "name": "@legendapp/spark-auth-session",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-desktop-links": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-desktop-links": "0.0.2",
         "base64-js": "1.5.1",
       },
       "peerDependencies": {
@@ -183,10 +183,10 @@
     },
     "packages/cli": {
       "name": "@legendapp/spark-cli",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-config": "0.0.1",
-        "@legendapp/spark-window-options": "0.0.1",
+        "@legendapp/spark-desktop-config": "0.0.2",
+        "@legendapp/spark-window-options": "0.0.2",
         "cross-spawn": "7.0.6",
         "diff": "8.0.4",
         "expo-desktop": "1.0.6",
@@ -198,9 +198,9 @@
     },
     "packages/clipboard": {
       "name": "@legendapp/spark-clipboard",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "expo-clipboard": "~55.0.17",
@@ -213,9 +213,9 @@
     },
     "packages/codex": {
       "name": "@legendapp/spark-codex",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
         "react-native-nitro-modules": "0.37.0",
       },
       "peerDependencies": {
@@ -225,12 +225,12 @@
     },
     "packages/commands": {
       "name": "@legendapp/spark-commands",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-desktop-shortcuts": "0.0.1",
-        "@legendapp/spark-settings": "0.0.1",
-        "@legendapp/spark-ui": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-desktop-shortcuts": "0.0.2",
+        "@legendapp/spark-settings": "0.0.2",
+        "@legendapp/spark-ui": "0.0.2",
         "@legendapp/state": "^3.0.0-beta.42",
       },
       "peerDependencies": {
@@ -240,11 +240,11 @@
     },
     "packages/config-plugin": {
       "name": "@legendapp/spark-desktop-config",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@expo/config-plugins": "55.0.12",
-        "@legendapp/spark-desktop-host": "0.0.1",
-        "@legendapp/spark-window-options": "0.0.1",
+        "@legendapp/spark-desktop-host": "0.0.2",
+        "@legendapp/spark-window-options": "0.0.2",
         "diff": "8.0.4",
         "expo-desktop-config-plugins": "1.3.2",
       },
@@ -254,9 +254,9 @@
     },
     "packages/context-menu": {
       "name": "@legendapp/spark-context-menu",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -265,7 +265,7 @@
     },
     "packages/create-spark": {
       "name": "@legendapp/create-spark",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "bin": {
         "create-spark": "dist/index.js",
       },
@@ -278,46 +278,46 @@
     },
     "packages/desktop": {
       "name": "@legendapp/spark",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "bin": {
         "spark": "bin/spark.cjs",
       },
       "dependencies": {
-        "@legendapp/spark-ai": "0.0.1",
-        "@legendapp/spark-audio": "0.0.1",
-        "@legendapp/spark-auth-session": "0.0.1",
-        "@legendapp/spark-cli": "0.0.1",
-        "@legendapp/spark-clipboard": "0.0.1",
-        "@legendapp/spark-codex": "0.0.1",
-        "@legendapp/spark-commands": "0.0.1",
-        "@legendapp/spark-context-menu": "0.0.1",
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-desktop-config": "0.0.1",
-        "@legendapp/spark-desktop-host": "0.0.1",
-        "@legendapp/spark-desktop-links": "0.0.1",
-        "@legendapp/spark-desktop-shortcuts": "0.0.1",
-        "@legendapp/spark-desktop-windows": "0.0.1",
-        "@legendapp/spark-documents": "0.0.1",
-        "@legendapp/spark-drag-drop": "0.0.1",
-        "@legendapp/spark-file-dialog": "0.0.1",
-        "@legendapp/spark-file-system": "0.0.1",
-        "@legendapp/spark-global-shortcuts": "0.0.1",
-        "@legendapp/spark-html": "0.0.1",
-        "@legendapp/spark-markdown": "0.0.1",
-        "@legendapp/spark-message-dialog": "0.0.1",
-        "@legendapp/spark-native-menu": "0.0.1",
-        "@legendapp/spark-notifications": "0.0.1",
-        "@legendapp/spark-processes": "0.0.1",
-        "@legendapp/spark-secure-storage": "0.0.1",
-        "@legendapp/spark-settings": "0.0.1",
-        "@legendapp/spark-settings-ui": "0.0.1",
-        "@legendapp/spark-sqlite": "0.0.1",
-        "@legendapp/spark-system": "0.0.1",
-        "@legendapp/spark-tray": "0.0.1",
-        "@legendapp/spark-ui": "0.0.1",
-        "@legendapp/spark-updates": "0.0.1",
-        "@legendapp/spark-webview": "0.0.1",
-        "@legendapp/spark-window-options": "0.0.1",
+        "@legendapp/spark-ai": "0.0.2",
+        "@legendapp/spark-audio": "0.0.2",
+        "@legendapp/spark-auth-session": "0.0.2",
+        "@legendapp/spark-cli": "0.0.2",
+        "@legendapp/spark-clipboard": "0.0.2",
+        "@legendapp/spark-codex": "0.0.2",
+        "@legendapp/spark-commands": "0.0.2",
+        "@legendapp/spark-context-menu": "0.0.2",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-desktop-config": "0.0.2",
+        "@legendapp/spark-desktop-host": "0.0.2",
+        "@legendapp/spark-desktop-links": "0.0.2",
+        "@legendapp/spark-desktop-shortcuts": "0.0.2",
+        "@legendapp/spark-desktop-windows": "0.0.2",
+        "@legendapp/spark-documents": "0.0.2",
+        "@legendapp/spark-drag-drop": "0.0.2",
+        "@legendapp/spark-file-dialog": "0.0.2",
+        "@legendapp/spark-file-system": "0.0.2",
+        "@legendapp/spark-global-shortcuts": "0.0.2",
+        "@legendapp/spark-html": "0.0.2",
+        "@legendapp/spark-markdown": "0.0.2",
+        "@legendapp/spark-message-dialog": "0.0.2",
+        "@legendapp/spark-native-menu": "0.0.2",
+        "@legendapp/spark-notifications": "0.0.2",
+        "@legendapp/spark-processes": "0.0.2",
+        "@legendapp/spark-secure-storage": "0.0.2",
+        "@legendapp/spark-settings": "0.0.2",
+        "@legendapp/spark-settings-ui": "0.0.2",
+        "@legendapp/spark-sqlite": "0.0.2",
+        "@legendapp/spark-system": "0.0.2",
+        "@legendapp/spark-tray": "0.0.2",
+        "@legendapp/spark-ui": "0.0.2",
+        "@legendapp/spark-updates": "0.0.2",
+        "@legendapp/spark-webview": "0.0.2",
+        "@legendapp/spark-window-options": "0.0.2",
         "@react-native-runtimes/core": "0.1.0-alpha.2",
         "@react-native-windows/find-dotnet-tools": "0.0.0-canary.3",
         "react-native-nitro-modules": "0.37.0",
@@ -338,7 +338,7 @@
     },
     "packages/desktop-app": {
       "name": "@legendapp/spark-desktop-app",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "peerDependencies": {
         "react": "^19.2.0",
         "react-native": "0.83.10",
@@ -346,16 +346,16 @@
     },
     "packages/desktop-host": {
       "name": "@legendapp/spark-desktop-host",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
     },
     "packages/desktop-links": {
       "name": "@legendapp/spark-desktop-links",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "expo-linking": "~55.0.17",
@@ -368,9 +368,9 @@
     },
     "packages/desktop-shortcuts": {
       "name": "@legendapp/spark-desktop-shortcuts",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -379,10 +379,10 @@
     },
     "packages/desktop-windows": {
       "name": "@legendapp/spark-desktop-windows",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-window-options": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-window-options": "0.0.2",
         "@legendapp/state": "^3.0.0-beta.42",
       },
       "peerDependencies": {
@@ -392,14 +392,14 @@
     },
     "packages/documents": {
       "name": "@legendapp/spark-documents",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-desktop-links": "0.0.1",
-        "@legendapp/spark-desktop-windows": "0.0.1",
-        "@legendapp/spark-file-dialog": "0.0.1",
-        "@legendapp/spark-file-system": "0.0.1",
-        "@legendapp/spark-native-menu": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-desktop-links": "0.0.2",
+        "@legendapp/spark-desktop-windows": "0.0.2",
+        "@legendapp/spark-file-dialog": "0.0.2",
+        "@legendapp/spark-file-system": "0.0.2",
+        "@legendapp/spark-native-menu": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -408,9 +408,9 @@
     },
     "packages/drag-drop": {
       "name": "@legendapp/spark-drag-drop",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -419,9 +419,9 @@
     },
     "packages/file-dialog": {
       "name": "@legendapp/spark-file-dialog",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -430,9 +430,9 @@
     },
     "packages/file-system": {
       "name": "@legendapp/spark-file-system",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -441,9 +441,9 @@
     },
     "packages/global-shortcuts": {
       "name": "@legendapp/spark-global-shortcuts",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -452,9 +452,9 @@
     },
     "packages/html": {
       "name": "@legendapp/spark-html",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-rich-text": "0.0.1",
+        "@legendapp/spark-rich-text": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -467,9 +467,9 @@
     },
     "packages/markdown": {
       "name": "@legendapp/spark-markdown",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-rich-text": "0.0.1",
+        "@legendapp/spark-rich-text": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -482,9 +482,9 @@
     },
     "packages/message-dialog": {
       "name": "@legendapp/spark-message-dialog",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -493,9 +493,9 @@
     },
     "packages/native-menu": {
       "name": "@legendapp/spark-native-menu",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -504,9 +504,9 @@
     },
     "packages/notifications": {
       "name": "@legendapp/spark-notifications",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -515,9 +515,9 @@
     },
     "packages/processes": {
       "name": "@legendapp/spark-processes",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -526,9 +526,9 @@
     },
     "packages/rich-text": {
       "name": "@legendapp/spark-rich-text",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-shortcuts": "0.0.1",
+        "@legendapp/spark-desktop-shortcuts": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -537,9 +537,9 @@
     },
     "packages/secure-storage": {
       "name": "@legendapp/spark-secure-storage",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "expo-secure-store": "~55.0.18",
@@ -552,20 +552,20 @@
     },
     "packages/settings": {
       "name": "@legendapp/spark-settings",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-file-system": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-file-system": "0.0.2",
         "@legendapp/state": "^3.0.0-beta.42",
       },
     },
     "packages/settings-ui": {
       "name": "@legendapp/spark-settings-ui",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-desktop-windows": "0.0.1",
-        "@legendapp/spark-ui": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-desktop-windows": "0.0.2",
+        "@legendapp/spark-ui": "0.0.2",
       },
       "peerDependencies": {
         "@legendapp/list": ">=3.3.0",
@@ -575,10 +575,10 @@
     },
     "packages/sqlite": {
       "name": "@legendapp/spark-sqlite",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
-        "@legendapp/spark-file-system": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
+        "@legendapp/spark-file-system": "0.0.2",
       },
       "peerDependencies": {
         "@op-engineering/op-sqlite": "18.2.1",
@@ -589,9 +589,9 @@
     },
     "packages/system": {
       "name": "@legendapp/spark-system",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -600,9 +600,9 @@
     },
     "packages/tray": {
       "name": "@legendapp/spark-tray",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -611,9 +611,9 @@
     },
     "packages/ui": {
       "name": "@legendapp/spark-ui",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
         "clsx": "^2.1.1",
         "tailwind-merge": "^3.4.0",
       },
@@ -632,9 +632,9 @@
     },
     "packages/updates": {
       "name": "@legendapp/spark-updates",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -643,9 +643,9 @@
     },
     "packages/webview": {
       "name": "@legendapp/spark-webview",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
-        "@legendapp/spark-desktop-app": "0.0.1",
+        "@legendapp/spark-desktop-app": "0.0.2",
       },
       "peerDependencies": {
         "react-native-webview": "16.0.0",
@@ -656,7 +656,7 @@
     },
     "packages/window-options": {
       "name": "@legendapp/spark-window-options",
-      "version": "0.0.1",
+      "version": "0.0.2",
     },
   },
   "overrides": {
