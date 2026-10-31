@@ -106,7 +106,9 @@ try {
   const archiveName = path.basename(archive);
   const archiveHash = createHash("sha256").update(readFileSync(archive)).digest("hex");
   const consumer = path.join(root, "consumer"); mkdirSync(consumer);
-  writeFileSync(path.join(consumer, "package.json"), JSON.stringify(manifest(archive, "19.2.0"), null, 2) + "\n");
+  // Since #524 enriched-html is an app-owned optional backend; install it to exercise web pin repair.
+  const consumerManifest = manifest(archive, "19.2.0");
+  writeFileSync(path.join(consumer, "package.json"), JSON.stringify({ ...consumerManifest, dependencies: { ...consumerManifest.dependencies, "react-native-enriched-html": "1.1.1" } }, null, 2) + "\n");
   const install = await runNpm(consumer, managerInstallArgs("npm"));
   if (install.status !== 0) throw new Error(`Compatible packed consumer install failed (${install.status}):\n${install.output}`);
 
