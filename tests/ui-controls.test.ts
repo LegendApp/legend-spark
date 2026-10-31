@@ -9,10 +9,12 @@ vi.mock("../packages/ui/src/SparkTextInputNativeComponent", () => ({ default: "S
 vi.mock("../packages/ui/src/SparkSelectNativeComponent", () => ({ default: "SparkSelect" }));
 vi.mock("../packages/ui/src/native-select/NativeSelectNativeComponent", () => ({ default: "NativeSelect" }));
 vi.mock("../packages/ui/src/native-select/NativeSegmentedControlNativeComponent", () => ({ default: "NativeSegmentedControl" }));
+vi.mock("expo-modules-core", () => ({ requireOptionalNativeModule: () => ({}) }));
 import { Button, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index.macos";
 import { TextInput as MobileTextInput } from "../packages/ui/src/mobile-input";
 import { Button as WebButton, TextInput as WebTextInput, Select as WebSelect } from "../packages/ui/src/index.web";
 import { selectionIndex } from "../packages/ui/src/select";
+import { Select as AndroidSelect } from "../packages/ui/src/index.android";
 let rendered: any;
 const event = (text: string, eventCount: number) => ({ nativeEvent: { text, eventCount } });
 const options = [{ label: "One", value: "one" }, { label: "Two", value: "two" }];
@@ -88,4 +90,13 @@ test("web controls retain controlled values and real disabled attributes", async
 test("invalid select values and option fields use shared errors", () => {
   for (const options of [[], [null], [{ label: "", value: "a" }], [{ label: "A", value: 1 }]]) expect(() => selectionIndex(options as never, "a")).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
   expect(() => selectionIndex([{ label: "A", value: "a", enabled: false }] as never, "a")).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+});
+test("Android Select segments expose radio semantics with their checked state", async () => {
+  const require = createRequire(import.meta.url), stub = (id: string, exports: object) => { require.cache[require.resolve(id)] = { exports } as any; };
+  stub("@expo/ui/jetpack-compose", { Host: "Host", Text: "ComposeText", SingleChoiceSegmentedButtonRow: "SegmentedRow", SegmentedButton: Object.assign(function SegmentedButton(props: any) { return props.children; }, { Label: "SegmentedLabel" }) });
+  stub("@expo/ui/jetpack-compose/modifiers", { selectable: (selected: boolean, handler: () => void, role: string) => ({ selected, handler, role }) });
+  const onValueChange = vi.fn(); await mount(React.createElement(AndroidSelect, { options, value: "two", onValueChange }));
+  const semantics = rendered.root.findAll((node: any) => node.type.name === "SegmentedButton").map((segment: any) => segment.props.modifiers[0]);
+  expect(semantics.map(({ role, selected }: any) => ({ role, selected }))).toEqual([{ role: "radioButton", selected: false }, { role: "radioButton", selected: true }]);
+  await act(async () => semantics[0].handler()); expect(onValueChange).toHaveBeenCalledWith("one");
 });
