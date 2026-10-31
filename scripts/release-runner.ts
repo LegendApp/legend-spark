@@ -13,6 +13,8 @@ await releaseCommand(root, async () => {
   if (process.platform !== "darwin") throw new Error("Build the release Runner on macOS.");
   if ((await run(root, ["git", "status", "--porcelain"], { capture: true })).trim()) throw new Error("Commit the release version and source before building Runner.");
   const revision = (await run(root, ["git", "rev-parse", "HEAD"], { capture: true })).trim();
+  // Packaging rebuilds the mirrored Runner when its fingerprint differs; that build must record the revision too.
+  process.env.SPARK_RELEASE_REVISION = revision;
   await run(root, [process.execPath, "scripts/pack.ts"]);
   const project = path.join(sparkHome(), "sdk-builds", VERSION, "SparkRunner");
   // A resumed signing run reuses its original build; a fresh invocation forces a
