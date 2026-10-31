@@ -9,5 +9,5 @@ checks:
   I18N-EXPOLOCALIZATION-01:
     title: expo-localization returns the user's preferred locale and calendar with a time zone on macOS
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-localization.md"

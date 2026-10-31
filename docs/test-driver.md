@@ -123,7 +123,9 @@ still ordered on screen, without activation.
 
 ### Real pointer input (macOS)
 
-Run `bun run e2e:run <flow> --backend driver --pointer` to enable `tapOn`. This explicitly
+Run `bun run e2e:run <flow> --backend driver --pointer` to enable `tapOn`. Pointer flows
+live in `e2e/pointer/flows/`, outside the release gate; `bun run gate:pointer` runs them all
+before a release. This explicitly
 allows the driver to show the target window, change the activation policy from Prohibited
 to Regular, and activate the app for foreground clicks. At flow end (including failure),
 `restorePointer` hides windows the driver showed, restores their animation behavior and the
