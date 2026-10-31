@@ -69,8 +69,10 @@ test("unrecorded and older apps migrate once with one shared version across plat
   expect(migrateProject(root, version)).toEqual([]);
   expect(statSync(path.join(root, ".spark/version")).mtimeMs).toBe(time);
   expect(existsSync(path.join(root, ".spark/platforms"))).toBe(false);
-  stamp(root, "0.0.1-next.3");
-  expect(migrateProject(root, version)).toEqual(["0.0.1-next.4"]);
+  // Below 0.0.2, whose breaking migration needs spark upgrade.
+  const older = app("0.0.1");
+  stamp(older, "0.0.1-next.3");
+  expect(migrateProject(older, "0.0.1")).toEqual(["0.0.1-next.4"]);
 });
 
 test("automatic migration stops before any writes when a pending step is unsafe", () => {
@@ -89,16 +91,17 @@ test("automatic migration stops before any writes when a pending step is unsafe"
 });
 
 test("failed idempotent migrations retain the old stamp and can retry", () => {
-  const root = app();
+  const target = "0.0.1";
+  const root = app(target);
   stamp(root, "0.0.1-next.3");
   let fail = true;
   migrations.push({ version: "0.0.1-next.4", automatic: true, apply: () => { if (fail) throw new Error("migration failed"); } });
   try {
-    expect(() => migrateProject(root, version)).toThrow("migration failed");
+    expect(() => migrateProject(root, target)).toThrow("migration failed");
     expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe("0.0.1-next.3\n");
     fail = false;
-    migrateProject(root, version);
-    expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(version + "\n");
+    migrateProject(root, target);
+    expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(target + "\n");
   } finally { migrations.pop(); }
 });
 
