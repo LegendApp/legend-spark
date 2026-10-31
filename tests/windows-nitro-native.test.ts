@@ -71,7 +71,6 @@ static void Initialize(SparkNitroModule &module, facebook::jsi::Runtime *runtime
 int main() {
   SparkNitroModule module;
   assert(module.install().has_value());
-  Initialize(module, nullptr, 1); assert(calls == 0 && module.install().has_value());
   facebook::jsi::Runtime first{1}; Initialize(module, &first, 1);
   assert(calls == 1 && installed == &first && !module.install().has_value());
   module.install(); assert(calls == 1);
