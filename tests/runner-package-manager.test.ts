@@ -54,7 +54,7 @@ for (const existing of [false, true]) {
       await import("../packages/cli/src/index.ts");
       expect(state.build).toHaveBeenCalledWith(root, "go", false);
       if (existing) expect(state.create).not.toHaveBeenCalled();
-      else expect(state.create).toHaveBeenCalledWith(root, state.manifest, "macos", false, undefined, "bun");
+      else expect(state.create).toHaveBeenCalledWith(root, state.manifest, "macos", false, undefined, "bun", "so.legend.spark.prototype.sparkrunner");
       expect(state.run).toHaveBeenCalledTimes(existing ? 2 : 1);
       for (const call of state.run.mock.calls) expect(call).toEqual([root, ["bun", "install"]]);
     } finally {
