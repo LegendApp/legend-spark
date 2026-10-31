@@ -58,25 +58,25 @@ checks:
   SYS-KEEPAWAKE-01:
     title: expo-keep-awake holds a display-sleep power assertion on macOS while activated and releases it on deactivate
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-keep-awake.md"
   SYS-EXPOAPP-01:
     title: expo-application reports the bundle identifier, version and an installation time from the app bundle on macOS, and Mac answers (no vendor ID, unknown release type) for iOS-only queries
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-application.md"
   SYS-EXPODEVICE-01:
     title: expo-device reports the Mac's model identifier, macOS version and build, memory, CPU architecture, desktop device type, name and uptime
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-device.md"
   SYS-EXPOHAPTICS-01:
     title: expo-haptics notification, impact and selection calls resolve on macOS through NSHapticFeedbackManager instead of rejecting as unavailable
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-haptics.md"
   SYS-EXPOLOCATION-01:
     title: expo-location reports permission, Location Services and provider status from CoreLocation on macOS, and no compass heading
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-location.md"

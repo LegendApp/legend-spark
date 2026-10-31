@@ -330,7 +330,8 @@ Add `--pointer` to `e2e:run --backend driver` to attach the macOS OS pointer bac
 It uses driver testIDs for lookup and real Quartz mouse events for input; it does not provide
 an AX tree or other gestures. With `--pointer`, visibility checks use the pointer backend's
 driver queries, with the same white-box testID semantics. The release gate does not accept
-`--pointer`; use `e2e:run` for pointer flows. See [real pointer input](test-driver.md#real-pointer-input-macos).
+`--pointer`, so flows that need it live in `e2e/pointer/flows/`, outside the gate's `include`.
+`bun run gate:pointer` runs them with `--backend driver --pointer` before a release. See [real pointer input](test-driver.md#real-pointer-input-macos).
 
 | Flow | Driver |
 |---|---|

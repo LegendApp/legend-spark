@@ -4,15 +4,15 @@ checks:
   DATA-MMKV-01:
     title: react-native-mmkv round-trips strings, numbers, booleans and buffers, lists and removes keys, and notifies value-change listeners on macOS
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-mmkv.md"
   DATA-MMKV-02:
     title: MMKV data persists across launches in the app's namespaced Application Support folder, so clearState removes it
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-mmkv.md"
   DATA-NITROSQLITE-01:
     title: react-native-nitro-sqlite runs parameterized, batched and async queries on macOS alongside Spark's OP-SQLite
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-nitro-sqlite.md"

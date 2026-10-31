@@ -49,5 +49,5 @@ checks:
   LIFE-SPLASH-01:
     title: expo-splash-screen's API resolves without effect on macOS, which has no launch splash
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-splash-screen.md"
