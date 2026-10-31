@@ -95,7 +95,8 @@ Every mapping form also takes:
   Every key in `when.matrix` must be a dimension and value from the header's `matrix`.
   `assertPaused` uses its own `when` argument (the paused state). To make it
   conditional, wrap it: `runFlow: { when: {…}, commands: [ … ] }`.
-- `timeout`: overrides the implicit wait for the target (default 5s).
+- `timeout`: overrides the implicit wait for the target (default 5s). A pointer `tapOn` also waits
+  within it for the screen to stop mounting, and taps anyway once it is spent.
 
 Some commands contain other commands: `repeat.commands`, `runFlow.commands`,
 `measure.run`, `assertNoLeaks.run`, `interruptAt.with`, and `during` in

@@ -74,40 +74,50 @@ test.skipIf(process.platform !== "darwin")("pointer state is restored after a ta
   expect(app.log.slice(-4)).toEqual(["restorePointer", "quit", "close", "app close"]);
 });
 
-/** An app whose UI keeps mounting for its first `unsettled` pointer requests, which wait out their timeout. */
-function mountingApp(unsettled: number) {
-  const app = new FakeApp({ target: 1 }), timeouts: number[] = [], launched = app.launch.bind(app);
+/** An app whose UI keeps mounting for its first `unsettled` pointer requests, which wait out their timeout on a fake Date. */
+function mountingApp(unsettled: number, onUnsettled = () => {}) {
+  const views = { target: 1 }, app = new FakeApp(views), timeouts: number[] = [], launched = app.launch.bind(app);
   app.launch = async options => {
     const driver = await launched(options), pointerEvents = driver.pointerEvents.bind(driver);
     driver.pointerEvents = async (window, point, timeoutMs) => {
       timeouts.push(timeoutMs!);
       if (timeouts.length > unsettled || !timeoutMs) return pointerEvents(window, point);
-      await new Promise(resolve => setTimeout(resolve, Math.min(timeoutMs, 100)));
+      vi.advanceTimersByTime(timeoutMs);
+      onUnsettled();
       throw new DriverError("E_NOT_SETTLED", "The UI kept mounting changes until the timeout");
     };
     return driver;
   };
-  return { app, timeouts };
+  return { app, timeouts, views };
 }
 
 test.skipIf(process.platform !== "darwin")("a screen that keeps mounting is tapped once the tap's timeout is spent", async () => {
   native.denied = false;
   const { app, timeouts } = mountingApp(Infinity);
-  const { result } = await run("- tapOn: { id: target, timeout: 300ms }", 1, app);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { result } = await run("- tapOn: { id: target, timeout: 300ms }", 1, app).finally(() => vi.useRealTimers());
   expect(result.status, JSON.stringify(result.failure)).toBe("passed");
-  expect(timeouts[0]).toBeGreaterThan(200);
-  expect(timeouts.at(-1)).toBe(0);
+  expect(timeouts).toEqual([300, 0]);
   expect(native.calls.slice(1).map(call => call.slice(1))).toEqual([["check"], ["123", "down-event", "up-event"]]);
 });
 
 test.skipIf(process.platform !== "darwin")("long tap timeouts wait in slices under the driver's reply limit and re-resolve the target", async () => {
   native.denied = false;
   const { app, timeouts } = mountingApp(1);
-  const { result } = await run("- tapOn: { id: target, timeout: 60s }", 1, app);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { result } = await run("- tapOn: { id: target, timeout: 60s }", 1, app).finally(() => vi.useRealTimers());
   expect(result.status, JSON.stringify(result.failure)).toBe("passed");
-  expect(timeouts).toEqual([5000, expect.any(Number)]);
-  expect(timeouts[1]).toBeGreaterThan(4000);
+  expect(timeouts).toEqual([5000, 5000]);
   expect(app.log.filter(line => line.startsWith("waitFor target"))).toHaveLength(2);
+});
+
+test.skipIf(process.platform !== "darwin")("re-resolving a tap target spends only what is left of the step's timeout", async () => {
+  native.denied = false;
+  const { app, views } = mountingApp(Infinity, () => { views.target = Infinity; });
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { result } = await run("- tapOn: { id: target, timeout: 1s }", 1, app).finally(() => vi.useRealTimers());
+  expect(result.failure?.kind).toBe("not-found");
+  expect(result.steps.find(step => step.command === "tapOn")!.durationMs).toBeLessThan(500);
 });
 
 test("--pointer requires a driver session rather than starting a second app", async () => {

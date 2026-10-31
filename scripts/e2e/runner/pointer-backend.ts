@@ -22,9 +22,10 @@ export class PointerBackend implements Backend {
       if ((args.modifiers as string[] | undefined)?.length) throw new Failure("unsupported", "pointer tapOn does not support modifiers");
       // Gesture recognizers attach after their views mount, so a tap waits for mounts to settle. A screen that keeps
       // mounting (a spinner) is waited on in slices that re-resolve the target, then tapped once the timeout is spent.
+      // Every wait shares the step's timeout.
       const until = Date.now() + context.timeoutMs;
       for (;;) {
-        const target = await context.target(), settleMs = Math.max(0, Math.min(until - Date.now(), SETTLE_SLICE_MS));
+        const target = await context.target(Math.max(0, until - Date.now())), settleMs = Math.max(0, Math.min(until - Date.now(), SETTLE_SLICE_MS));
         try {
           const { pid, down, up } = await this.driver.pointerEvents(`id:${target.element.window}`, target.point, settleMs);
           return await this.post([String(pid), down, up]);

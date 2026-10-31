@@ -250,7 +250,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
     const context: CommandContext = {
       command: { ...command, args }, timeoutMs, platform, matrix, outputDir,
       resolve: async value => (await find(backend, value, "one", timeoutMs))!,
-      target: () => context.resolve(selectorArgs(args)),
+      target: async (wait = timeoutMs) => (await find(backend, selectorArgs(args), "one", wait))!,
       window: value => eventually(async () => {
         const windows = await finderFor(backend).windows(), found = pickWindows(parseWindow(value, platform), windows);
         if (found.length === 1) return found[0]!;
