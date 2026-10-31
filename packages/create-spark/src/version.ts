@@ -74,7 +74,7 @@ export async function rerunNewerCreator(requested: string | undefined, args: str
   const argv = rerunCommand(`@legendapp/create-spark@${newer}`, args, env);
   console.log(`Running @legendapp/create-spark@${newer}; this creator is ${VERSION}.`);
   try {
-    return await spawnProcess(argv, { stdin: "inherit", stdout: "inherit", stderr: "inherit", env: { ...env, SPARK_CREATOR_RERUN: "1", pnpm_config_minimum_release_age: "0", npm_config_minimum_release_age: "0" } }).exited;
+    return await spawnProcess(argv, { stdin: "inherit", stdout: "inherit", stderr: "inherit", env: { ...process.env, ...env, SPARK_CREATOR_RERUN: "1", pnpm_config_minimum_release_age: "0", npm_config_minimum_release_age: "0" } }).exited;
   } catch {
     throw new Error(`Run the current creator instead:\nnpx @legendapp/create-spark@${newer} ${shellArguments(args)}`);
   }
