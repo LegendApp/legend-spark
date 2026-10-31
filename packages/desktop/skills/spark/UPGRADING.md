@@ -211,7 +211,7 @@ After (for this release):
 ```
 
 Camera and enriched Markdown native dependency patches are applied by the SDK.
-Use public `/camera` (removed in 0.0.2-next.0 — import `react-native-vision-camera`
+Use public `/camera` (removed in 0.0.2 — import `react-native-vision-camera`
 directly) and `/markdown` imports; stop manually patching their bundled dependencies.
 Existing custom runtimes must rebuild to include changed native code. Native
 production builds fail when app source imports an excluded module:
@@ -322,11 +322,48 @@ desktop app by itself, such as with `--no-open`.
 No changes are needed in existing apps. Update `@legendapp/spark` to `0.0.1`
 and reinstall.
 
-## 0.0.2-next.0
+## 0.0.2
 
-Next version (provisional version number).
+Breaking: yes. Spark moves from Expo SDK 54 / React Native 0.81 to **Expo SDK 55
+and React Native 0.83**, and `@legendapp/spark/camera` was removed.
 
-Breaking: yes. `@legendapp/spark/camera` was removed. Install
+### Expo SDK 55 and React Native 0.83
+
+The SDK now pins Expo 55.0.32, React Native 0.83.10, React 19.2.0, React Native
+macOS 0.83.0 and React Native Windows 0.83.2, with the Expo Desktop SDK 55
+packages (`expo-desktop-metro-config` 55.83.3, `expo-desktop-template-bare-minimum`
+55.83.10, `expo-desktop-modules-core` and `expo-desktop-stubs` 55.0.2). Expo
+Desktop CLI, prebuild-config and config-plugins stay on their 1.x releases.
+React peer ranges are now `^19.2.0`.
+
+`spark upgrade` updates the SDK-pinned dependencies and overrides in
+`package.json`. For example:
+
+Before:
+```json
+{ "dependencies": { "expo": "54.0.37", "react": "19.1.4", "react-native": "0.81.6", "react-native-macos": "0.81.7" } }
+```
+After:
+```json
+{ "dependencies": { "expo": "55.0.32", "react": "19.2.0", "react-native": "0.83.10", "react-native-macos": "0.83.0" } }
+```
+
+It does not move Expo modules that only your app depends on (for example
+`expo-image` or `expo-camera`). Move those to their Expo SDK 55 versions, then
+review the Expo SDK 55 and React Native
+0.83 changelogs for APIs your app code and custom native modules use. Run
+`spark doctor`, your typecheck and tests, rebuild custom runtimes
+(`spark build --dev`), and exercise your app's desktop flows.
+
+On Android, `@legendapp/spark/ui` `Select` segments now expose radio-button
+accessibility semantics, so screen readers announce the selected option.
+
+The `--universal` hint printed by the creator now names an exact
+`npx @legendapp/create-spark@<version>` command.
+
+### Camera and optional backends
+
+`@legendapp/spark/camera` was removed. Install
 `react-native-vision-camera@5.2.3` and `react-native-nitro-image@0.15.2` in your
 app, with `react-native-nitro-modules@0.37.0`. Import camera APIs directly from
 `react-native-vision-camera`, and `NitroImage` / `Image` from

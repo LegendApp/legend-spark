@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.2
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- [Breaking] Upgrade to Expo SDK 55 and React Native 0.83 (React 19.2, React Native macOS 0.83, React Native Windows 0.83, Expo Desktop SDK 55 packages). See UPGRADING.md.
+- [Breaking] Remove `@legendapp/spark/camera`; `/markdown`, `/html`, `/webview` and `/sqlite` backends are now optional app dependencies (#524).
+- create: New apps default to `com.example.<app-name>` bundle IDs; choose one with `--bundle-id`.
+- create: The creator's `--universal` hint names an exact `npx @legendapp/create-spark@<version>` command, and pnpm's release-age gate no longer selects an older creator.
+- dev: Start Metro without Watchman when Watchman stops responding; keep `spark dev --localhost` reachable on 127.0.0.1.
+- ui: Keep radio semantics on Android `Select`; lay out split-view panes at their AppKit origins (#512).
+- files: Watch recursive directories before they exist; report missing recursive watch directories as `E_NOT_FOUND`.
+- windows: Find the main window before it is registered on macOS (#516); keep unchanged macOS toolbar items on update (#517); route macOS main window options to the host setter.
+- processes: Run children on a pseudo-terminal (#511).
+- Preserve macOS page scrolling over markdown blocks (#520); keep the Spark version out of created apps' `allowScripts` (#519); resolve migration dependencies through the app's installed Spark (#513).
+
 ## 0.0.1
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified

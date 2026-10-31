@@ -123,7 +123,7 @@ test.each(["dev", "build", "doctor"])("spark %s refuses downgraded project state
 });
 
 test("camera removal requires manual upgrade steps and records them once", () => {
-  const target = "0.0.2-next.0";
+  const target = "0.0.2";
   const root = app(target);
   stamp(root, "0.0.1");
   writeFileSync(path.join(root, "App.tsx"), "import { Camera } from '@legendapp/spark/camera';\n");
@@ -136,7 +136,8 @@ test("camera removal requires manual upgrade steps and records them once", () =>
   expect(notes).toContain("Apps importing @legendapp/spark/markdown, /html, /webview or /sqlite must add");
   expect(notes).toContain("see the linked upgrade notes for exact version pins");
   expect(notes).toContain("Rebuild custom runtimes");
-  expect(notes).toContain("UPGRADING.md#002-next0");
+  expect(notes).toContain("Spark now targets Expo SDK 55");
+  expect(notes).toContain("UPGRADING.md#002");
   expect(readFileSync(path.join(root, "App.tsx"), "utf8")).toContain("@legendapp/spark/camera");
   expect(migrateProject(root, target, false)).toEqual([]);
   expect(readFileSync(path.join(root, ".spark/upgrade-notes.md"), "utf8")).toBe(notes);

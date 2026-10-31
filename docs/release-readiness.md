@@ -9,7 +9,7 @@ reports missing app declarations/installations; native patching and discovery on
 activate installed dependencies. Keep the SDK's patched WebView/SQLite overrides.
 Nitro Modules, Runtimes, runtime utilities, and CLI/config engines remain hard;
 type-only tooling is development-only. See [library policy](external-libraries.md#optional-backend-dependencies)
-and the shipped [upgrade notes](../packages/desktop/skills/spark/UPGRADING.md#002-next0).
+and the shipped [upgrade notes](../packages/desktop/skills/spark/UPGRADING.md#002).
 
 ## Current decision
 

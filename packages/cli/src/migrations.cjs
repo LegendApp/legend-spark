@@ -95,8 +95,8 @@ const migrations = [
     planPointers(context);
     context.manualStep('If the app uses a custom runtime, rebuild it for next.4 native dependency patches; review production module selection and affected SidebarSplitView/Windows native flows.');
   } },
-  // At release, align this version, UPGRADING.md, and migrations.test.ts with the first release without ./camera.
-  { version: '0.0.2-next.0', automatic: false, breaking: true, apply(context) {
+  { version: '0.0.2', automatic: false, breaking: true, apply(context) {
+    context.manualStep('Spark now targets Expo SDK 55 and React Native 0.83 (React 19.2). spark upgrade moves the SDK-pinned Expo, React and React Native versions; align any other Expo modules your app depends on with SDK 55, review Expo SDK 55 and React Native 0.83 changes your app code relies on, then run spark doctor and rebuild custom runtimes.');
     context.manualStep('Apps importing @legendapp/spark/markdown, /html, /webview or /sqlite must add the corresponding optional backend to app dependencies. See the linked upgrade notes for library names and version pins; run spark doctor and rebuild custom runtimes.');
     context.manualStep('@legendapp/spark/camera was removed. Install the camera libraries in your app; see the linked upgrade notes for exact version pins. Import camera APIs directly from react-native-vision-camera, and NitroImage / Image from react-native-nitro-image. Spark still applies its version-pinned native patches automatically when your app depends on these libraries. Rebuild custom runtimes.');
   } },
