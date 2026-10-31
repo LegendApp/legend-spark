@@ -4,5 +4,5 @@ checks:
   PROC-WORKLETS-01:
     title: react-native-worklets-core runs a worklet in a separate Hermes context on macOS, shares a value with it and calls back into the main runtime
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-worklets-core.md"

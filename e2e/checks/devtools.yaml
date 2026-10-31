@@ -4,15 +4,15 @@ checks:
   DEVT-PROFILER-01:
     title: react-native-release-profiler starts and stops the Hermes sampling profiler on macOS and writes a trace with events to the app's namespaced Caches folder
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-release-profiler.md"
   DEVT-APPLOGS-01:
     title: react-native-app-logs reads the app's own unified-log entries on macOS and delivers ones matching a filter to JavaScript
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-app-logs.md"
   DEVT-SENTRY-01:
     title: "@sentry/react-native captures an error with a stack trace and native macOS context on macOS"
     platforms: [macos]
-    blocking: false
+    blocking: true
     spec: "vault tasks/spark/desktop-libs/sentry-react-native.md"
