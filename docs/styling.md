@@ -23,7 +23,7 @@ module.exports = withUniwindConfig(metroConfig(__dirname), {
 
 Wrap your final Metro configuration with `withUniwindConfig`. Existing Expo projects should keep their own configuration and apply this wrapper after any spark composition. Uniwind supplies the CSS transformer and React Native component mapping; spark still delegates platform defaults to Expo or Expo Desktop. spark adds the missing `react-native` package export conditions for macOS/Windows to the pinned Metro defaults, preventing desktop imports from selecting a web runtime. No additional Babel preset or custom styling runtime is needed.
 
-Import `./global.css` once, before application imports in the root entry. Begin that file with:
+Import `./global.css` once, as the first import of the root component (`App.tsx`), not in the entry file that calls `registerRootComponent`. Fast Refresh cannot hot-update a stylesheet imported by the entry, so every edit would reload the app. Begin that file with:
 
 ```css
 @layer theme, base, components, utilities;
