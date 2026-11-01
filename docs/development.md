@@ -150,7 +150,7 @@ Apps must declare exact `react`, `react-native`, `react-native-macos`, and `expo
 
 ### Upgrade an app
 
-Run the app's installed `spark upgrade --dry-run` to preview the newest release on the installed version's channel: `next` for `-next` previews, `latest` for stable releases. Dry-run queries the registry and verifies the target package in a temporary directory; it changes no app files and runs no install or migrations.
+Run the app's installed `spark upgrade --dry-run` to preview the newest release on the installed version's channel: `next` for `-next` previews, `latest` for stable releases. A preview moves to the `latest` release when that stable version is newer than the `next` tag. Dry-run queries the registry and verifies the target package in a temporary directory; it changes no app files and runs no install or migrations.
 
 `spark upgrade` reads that release's own starter compatibility matrix, updates `@legendapp/spark` and existing tested dependency/override specs, adds missing required direct pins, materializes verified patched release inputs in `spark-packages/`, and runs the detected package manager's `install`. Detection uses `packageManager`, existing lockfiles, the invoking manager, then available tools; ambiguous lockfiles require a `packageManager` declaration. After a successful install, the installed release's idempotent migrations run and refresh AI instruction pointers. Existing package key order/formatting and unrelated dependencies are preserved. Both commands support `--project <directory>` and require no native tooling.
 

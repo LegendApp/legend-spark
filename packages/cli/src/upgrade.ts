@@ -26,16 +26,24 @@ export async function upgrade(root: string, dryRun = false) {
   const { prerelease, valid, lt } = tooling("semver");
   const preview = prerelease(current);
   if (!valid(current) || (preview && preview[0] !== "next")) throw new Error(`Unsupported Spark release channel: ${current}. Use a next or stable release.`);
-  const channel = preview ? "next" : "latest";
+  let channel = preview ? "next" : "latest";
   const manager = packageManager(root);
   const temporary = mkdtempSync(path.join(os.tmpdir(), "spark-upgrade-"));
   try {
     // npm's shipped registry client verifies tarball integrity independently of
     // the app's installer. Use its public registry unless explicitly configured.
     const options = { cache: path.join(temporary, "cache"), registry: process.env.npm_config_registry };
-    const release = await pacote.manifest(`@legendapp/spark@${channel}`, options);
+    let release = await pacote.manifest(`@legendapp/spark@${channel}`, options);
+    if (!valid(release.version) || lt(release.version, current) || (prerelease(release.version)?.[0] ?? "latest") !== channel) throw new Error(`The ${channel} tag does not identify a compatible Spark update (${release.version}).`);
+    // A stable release moves only the latest tag, so it can overtake the next tag.
+    if (preview) {
+      const stable = await pacote.manifest("@legendapp/spark@latest", options);
+      if (valid(stable.version) && !prerelease(stable.version) && lt(release.version, stable.version)) {
+        release = stable;
+        channel = "latest";
+      }
+    }
     const version = release.version;
-    if (!valid(version) || lt(version, current) || (prerelease(version)?.[0] ?? "latest") !== channel) throw new Error(`The ${channel} tag does not identify a compatible Spark update (${version}).`);
     const target = path.join(temporary, "spark");
     await pacote.extract(`@legendapp/spark@${version}`, target, { ...options, integrity: release.dist.integrity });
     if (readJson(path.join(target, "package.json")).version !== version) throw new Error("Downloaded Spark version does not match the registry.");

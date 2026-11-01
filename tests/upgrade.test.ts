@@ -130,6 +130,15 @@ test("a downloaded release without its own node_modules plans migrations with de
   expect(console.log).toHaveBeenCalledWith("No app files changed.");
 });
 
+test("next installs move to a newer stable release when the next tag is behind", async () => {
+  next = "0.0.2";
+  vi.mocked(pacote.manifest).mockImplementation(async spec => ({ version: spec.endsWith("@next") ? "0.0.1-next.4" : next, dist: { integrity: "sha512-fixture" } }));
+  await upgrade(root, true);
+  expect(pacote.manifest).toHaveBeenCalledWith("@legendapp/spark@latest", expect.any(Object));
+  expect(pacote.extract).toHaveBeenCalledWith("@legendapp/spark@0.0.2", expect.any(String), expect.any(Object));
+  expect(console.log).toHaveBeenCalledWith(`Spark ${current} → 0.0.2 (latest) — dry run`);
+});
+
 test("stable installs stay on latest", async () => {
   current = "1.0.0";
   next = "1.1.0";
