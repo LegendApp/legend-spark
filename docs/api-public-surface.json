@@ -554,10 +554,12 @@
   "./ui/split-view": [
     "SidebarSplitView",
     "SidebarSplitViewAppearance",
+    "SidebarSplitViewContentLayout",
     "SidebarSplitViewPaneMetrics",
     "SidebarSplitViewPaneOrigins",
     "SidebarSplitViewProps",
     "SidebarSplitViewResizeEvent",
+    "SidebarSplitViewScrollEdgeEffect",
     "SidebarSplitViewTitlebarMaterial",
     "SplitViewTitleBarOptions",
     "SplitViewTitleBarOverlay",
