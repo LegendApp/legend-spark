@@ -1,4 +1,5 @@
 import { installedRelease } from "./release.ts";
+import { createRuntimeInputCache } from "./runtime-input-cache.ts";
 import { acquireRunner } from "./runner-install.ts";
 import { spawnProcess } from "./process.ts";
 import { windowsMetroPort, stopWindowsMetro } from "./windows-metro.ts";
@@ -103,6 +104,7 @@ export async function dev(
   let restartPending = false;
   let reopenPending = false;
   let closing = false;
+  const runtimeInputs = createRuntimeInputCache(root);
   // Without --no-open the session opens the desktop app itself, so a missing Runner downloads without a keypress.
   let autoOpen = !noOpen;
   let metro: ReturnType<typeof spawnProcess> | undefined;
@@ -183,7 +185,8 @@ export async function dev(
     }
   }
   async function inspectRuntime(report: boolean) {
-    const native = nativePackages(root);
+    const inputs = runtimeInputs.read();
+    const native = inputs.native;
     current = undefined;
     if (target === "go") {
       if (explicitGo) {
@@ -202,7 +205,7 @@ export async function dev(
     const issues = current ? incompatible(current.runtime, native, platform) : [];
     if (
       current && target === "dev" &&
-      current.runtime.fingerprint !== runtimeFor(root, native, "dev").fingerprint
+      current.runtime.fingerprint !== (inputs.development ??= runtimeFor(root, native, "dev")).fingerprint
     ) issues.push("Native configuration or host changed.");
     if (target === "go") {
       for (let i = 0; i < issues.length; i++) {
@@ -308,6 +311,7 @@ export async function dev(
   function close() {
     if (closing) return;
     closing = true;
+    runtimeInputs.close();
     clearInterval(timer);
     clearTimeout(debounce);
     watcher.close();
@@ -353,6 +357,7 @@ export async function dev(
     try {
       const next = dependencyStamp(root);
       if (next !== stamp) {
+        runtimeInputs.invalidate();
         restartPending = true;
         stamp = next;
       }
