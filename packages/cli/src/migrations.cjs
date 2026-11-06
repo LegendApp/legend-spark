@@ -100,6 +100,9 @@ const migrations = [
     context.manualStep('Apps importing @legendapp/spark/markdown, /html, /webview or /sqlite must add the corresponding optional backend to app dependencies. See the linked upgrade notes for library names and version pins; run spark doctor and rebuild custom runtimes.');
     context.manualStep('@legendapp/spark/camera was removed. Install the camera libraries in your app; see the linked upgrade notes for exact version pins. Import camera APIs directly from react-native-vision-camera, and NitroImage / Image from react-native-nitro-image. Spark still applies its version-pinned native patches automatically when your app depends on these libraries. Rebuild custom runtimes.');
   } },
+  { version: '0.0.3', automatic: false, breaking: true, apply(context) {
+    context.manualStep('Apps using the default macOS react-native-mmkv@4.3.2 store must plan data migration from ~/Documents/mmkv to ~/Library/Application Support/<Spark namespace>/mmkv before deployment. Existing files are not moved automatically and the old folder can contain other apps\' data. Back up the store, preserve IDs and encryption keys, and validate values and relaunch persistence; see the linked upgrade notes.');
+  } },
 ];
 
 /** @param {string} root */

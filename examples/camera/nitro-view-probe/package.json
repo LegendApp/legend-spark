@@ -1,5 +1,5 @@
 {
-  "name": "@legendapp/spark-nitro-view-probe", "version": "0.0.2", "main": "src/index.ts", "react-native": "src/index.ts",
+  "name": "@legendapp/spark-nitro-view-probe", "version": "0.0.3", "main": "src/index.ts", "react-native": "src/index.ts",
   "files": ["src", "macos", "nitrogen", "nitro.json", "*.podspec", "react-native.config.js"],
   "peerDependencies": {"react": "*", "react-native": "*", "react-native-nitro-modules": "*"}
 }

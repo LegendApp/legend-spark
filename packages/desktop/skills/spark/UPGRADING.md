@@ -405,3 +405,37 @@ starts with `com.example.`. Existing apps keep their ID.
 Watchman stops responding. After 10 seconds it starts Metro without Watchman
 for that session and suggests `watchman watch-del-all && watchman shutdown-server`
 to fix it.
+
+## 0.0.3
+
+Breaking: yes. Spark's macOS patch for app-installed `react-native-mmkv@4.3.2`
+changes its default storage location. Other MMKV versions are not patched.
+
+Before: `~/Documents/mmkv` (shared by apps using the upstream default).
+After: `~/Library/Application Support/<Spark namespace>/mmkv` (scoped to the app).
+An explicit custom MMKV path is unaffected. Existing default-store files are not
+moved automatically, so an upgraded app can appear to have empty storage.
+
+Before deploying to existing users, back up their store and design an app-owned
+data migration or retain an explicit legacy path until migration is ready. The
+old folder may contain other apps' data: do not blindly move or delete it. Preserve
+store IDs, encryption keys and MMKV companion files, and migrate while the store
+is closed. Validate existing values, writes, relaunch persistence and recovery
+from an interrupted migration on a copy of real data.
+
+New version-pinned macOS integrations include MMKV, Unistyles, Quick Crypto,
+Nitro Fetch, Blur, Worklets Core, image libraries, Expo modules, date pickers,
+React Navigation and Expo Router. Declare libraries imported by the app directly
+in its dependencies; Spark applies compatibility patches only at the tested
+versions. Read `docs/external-libraries.md` in the matching release for exact pins,
+setup and limitations. Some integrations use JavaScript stand-ins and do not
+implement every upstream native feature. Location requires
+`NSLocationWhenInUseUsageDescription` in the macOS Info.plist before requesting
+permission. Windows support remains preview and is not yet verified; exclude
+macOS-only dependencies from Windows autolinking as needed.
+
+Run `spark upgrade`, `spark doctor`, and the app's typecheck and tests. Rebuild
+custom runtimes with `spark build --dev`, then exercise installed desktop-library
+flows, permissions and storage persistence on each app target. The CLI now caches
+native compatibility inputs between dev refreshes to reduce idle CPU work
+(#535); no app source change is required for that cache.

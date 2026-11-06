@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.3
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- [Breaking] Move the default macOS `react-native-mmkv@4.3.2` store from `~/Documents/mmkv` to the app's namespaced Application Support folder. Existing data is not moved automatically; see UPGRADING.md before deploying.
+- Add version-pinned macOS integrations for desktop libraries, including MMKV, Unistyles, Quick Crypto, Nitro Fetch, Blur, Expo modules, image and date pickers, React Navigation and Expo Router. Keep app-owned dependencies and review platform limitations in `docs/external-libraries.md`; rebuild custom runtimes.
+- Fix native image sizing/backgrounds, optional dependency patch discovery, macOS codegen paths and macOS 14 pod targets; expand Kitchen Sink library and pointer checks.
+- Cache native compatibility inputs between CLI dev refreshes to reduce idle CPU work (#535).
+
 ## 0.0.2
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
