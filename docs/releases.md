@@ -249,7 +249,8 @@ Authentication failures or changed archive bytes still stop the release.
 
 The workflow checks disk space immediately before heavy steps (dependency
 installation, tests, native builds and packed-consumer installs). It preserves a
-30 GB reserve and requires an additional 10 GB of build headroom. It does not run
+15 GB reserve and requires an additional 10 GB of headroom before heavy steps
+(more than 25 GB free). It does not run
 a disk monitor that can terminate signing, notarization or npm authentication.
 If a space check fails, review cleanup and rerun with `--resume`.
 

@@ -3,10 +3,31 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { runInNewContext } from "node:vm";
 import { CommandError, errorPresentation, releaseCommand, reportError } from "../packages/cli/src/errors.ts";
 import { commandRedactor } from "../packages/cli/src/commands.ts";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+
+test.each([0, 10_000_000_000])("release disk space preserves 15 GB plus %s headroom on every destination", headroom => {
+  const source = readFileSync(new URL("../scripts/release.ts", import.meta.url), "utf8");
+  // Exercise the CLI's check without starting a release or touching its checkpoint.
+  const check = source.slice(source.indexOf("    function checkSpace("), source.indexOf("    mkdirSync("));
+  expect(source).toContain("if (heavy) checkSpace(10_000_000_000)");
+  const destinations = ["/System/Volumes/Data", "/release", "/temporary", "/spark"];
+  for (const destination of destinations) {
+    for (const delta of [1, 0, -1]) {
+      const statfsSync = vi.fn((file: string) => ({ bavail: file === destination ? 15_000_000_000 + headroom + delta : 100_000_000_000, bsize: 1 }));
+      const run = () => runInNewContext(`${check}\ncheckSpace(headroom);`, {
+        statfsSync, headroom, args: [], root: "/release", process: { env: { TMPDIR: "/temporary" } }, sparkHome: () => "/spark/home", path,
+      });
+      if (delta > 0) {
+        expect(run).not.toThrow();
+        expect(statfsSync.mock.calls.map(([file]) => file)).toEqual(destinations);
+      } else expect(run).toThrow(`Insufficient disk space on ${destination}: ${((15_000_000_000 + headroom + delta) / 1e9).toFixed(1)} GB available. Preserve the 15 GB reserve`);
+    }
+  }
+});
 
 test("authentication, network and failed checks show actionable messages", () => {
   expect(errorPresentation(new CommandError(["npm", "whoami"], 1, "npm error E401 Unauthorized"))).toEqual({
