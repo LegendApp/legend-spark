@@ -55,6 +55,22 @@ test("split views preserve zero metrics and expose explicit readiness without na
   const panes = rendered.root.findAllByType("View"); expect(panes[0].props.style.width).toBe(0); expect(panes[0].props.style.height).toBe(0); expect(onResize.mock.calls[1][0].phase).toBe("ready");
   native.props.onSplitViewDidResize({ nativeEvent: { ...data, contentWidth: NaN } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onResize).toHaveBeenCalledTimes(2);
 });
+test("split views expose opt-in underlay render metrics without changing visible pane sizing", async () => {
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content" }));
+  expect(rendered.root.findByType("SidebarSplitView").props.contentLayout).toBe("pane");
+  await act(async () => { rendered.unmount(); rendered = undefined; });
+  const onResize = vi.fn();
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", list: "List", content: "Content", contentLayout: "underlay", contentMinWidth: 420, onResize }));
+  const native = rendered.root.findByType("SidebarSplitView");
+  expect(native.props.contentLayout).toBe("underlay");
+  expect(native.props.contentMinWidth).toBe(420);
+  expect(native.findAllByType("View").map((pane: any) => pane.props.collapsable)).toEqual([false, false, false]);
+  await act(async () => native.props.onSplitViewDidResize({ nativeEvent: { contentHeight: 600, contentWidth: 1200, sidebarHeight: 600, sidebarWidth: 220, listHeight: 600, listWidth: 300, sidebarX: 0, sidebarY: 0, contentX: 0, contentY: 0, listX: 221, listY: 0, height: 600, isLayoutReady: true, isVertical: true } }));
+  const content = native.findAllByType("View")[1];
+  expect(content.props.style).toMatchObject({ left: 0, top: 0, width: 1200, height: 600 });
+  expect(onResize.mock.calls[0][0]).toMatchObject({ contentX: 0, contentWidth: 1200, sidebarWidth: 220, listWidth: 300, phase: "ready" });
+  await expect(mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", contentLayout: "stretch" as never }))).rejects.toThrow("Invalid split-view content layout");
+});
 test("split views report native sidebar collapse and validate the callback", async () => {
   const onSidebarCollapsedChange = vi.fn(), onError = vi.fn();
   await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", onSidebarCollapsedChange, onError }));

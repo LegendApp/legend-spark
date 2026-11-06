@@ -26,6 +26,8 @@ export type SidebarSplitViewCollapsedChangeEvent = Readonly<{
 
 export interface NativeProps extends ViewProps {
   appearance?: string;
+  contentLayout?: string;
+  contentScrollEdgeEffect?: string;
   contentTitlebarHeight?: Double;
   contentTitlebarMaterial?: string;
   contentTitlebarOverlayColor?: string;
