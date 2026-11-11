@@ -109,8 +109,11 @@ native module installed. Native bridge reload removes its status items.
 For an app that starts in the menu bar with no Dock icon or visible main window:
 
 ```json
-{ "expo": { "extra": { "spark": { "menuBarOnly": true } } } }
+{ "menuBarOnly": true }
 ```
+
+That is a top-level `desktop.config.json` field; a direct `app.json` project sets
+`expo.extra.spark.menuBarOnly` instead.
 
 This requires a custom build. Create the tray from the mounted React root and use
 `showWindow("main", { activate: true })` when the user chooses to open the UI. The hidden root remains

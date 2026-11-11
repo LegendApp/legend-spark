@@ -100,23 +100,30 @@ recycling resets retained drag state.
 
 ```ts
 import { spawn, runCommand } from "@legendapp/spark/processes";
-const result = await runCommand({ executable: "/usr/bin/uname", args: ["-a"] });
-const child = await spawn({ executable: "helper:indexer", args: ["--watch"] }, chunk => {
-  // chunk.stream is stdout/stderr; chunk.base64 preserves arbitrary bytes.
+const result = await runCommand({ target: { type: "executable", path: "/usr/bin/uname" }, args: ["-a"] });
+if (result.exit.type === "exited" && result.exit.code === 0) console.log(new TextDecoder().decode(result.stdout));
+const child = await spawn({
+  target: { type: "helper", name: "indexer" },
+  args: ["--watch"],
+  onOutput: ({ stream, bytes }) => {
+    // stream is stdout/stderr; bytes is a Uint8Array.
+  },
 });
 await child.write("input\n");
 await child.closeInput();
 await child.terminate();
-const exit = await child.exited;
+const exited = await child.exited;
 ```
 
-Options include cwd, env, initial text input and timeoutMs. Arguments are passed
+Targets are an absolute `executable` path, a declared `helper`, or a `command`
+resolved on PATH. Options include cwd, env, initial input, timeoutMs, an
+AbortSignal, captureLimitBytes and pty (macOS). Arguments are passed
 directly without shell interpolation. Request a shell explicitly when needed.
-Exit results contain exitCode, signal, timedOut, stdout/stderr text and base64,
-and outputTruncated. Buffered results are capped at 8 MiB per stream; streaming
-chunks remain available. Consume streams promptly. Termination sends SIGTERM,
-then SIGKILL after two seconds if necessary. This manages direct children;
-it is not a terminal/PTY or a process-tree supervisor.
+Results contain `exit` (`{ type: "exited", code }` or `{ type: "terminated", signal }`),
+`stdout`/`stderr` bytes, timedOut, aborted and outputTruncated. Buffered results are
+capped at 8 MiB per stream; streaming output remains complete. Consume streams
+promptly. Termination sends SIGTERM, then SIGKILL after two seconds if necessary.
+This manages direct children; it is not a process-tree supervisor.
 
 Declare `"helpers": { "indexer": "bin/indexer" }` in desktop.config.json. The CLI
 copies project-local regular files to Contents/Helpers, marks them executable,

@@ -7,6 +7,25 @@ description: Create, develop, build, package, diagnose, or upgrade a Legend Spar
 
 Spark adds native macOS/Windows capabilities and desktop build orchestration to React Native and Expo Desktop. This skill covers desktop development. Universal starters also declare mobile/web targets, but Expo owns their runtime and distribution workflows. Do not assume every desktop API works on mobile/web. Windows currently supports development builds; production packaging and native acceptance remain pending. macOS ARM64 is the published preview target; Intel acceptance is pending.
 
+## Using Spark's APIs
+
+Before writing code against a `@legendapp/spark/*` import, read the reference for that area:
+
+| Task | Read |
+| --- | --- |
+| Open, show, focus or close windows; close guards; macOS title bar/toolbar | [windows.md](windows.md) |
+| Quit/relaunch, single instance, opening files and URLs, recent documents | [app-and-documents.md](app-and-documents.md) |
+| App menu, context menu, tray / menu-bar item, Dock or taskbar menu | [menus-tray-dock.md](menus-tray-dock.md) |
+| Keyboard shortcuts, commands, global hotkeys | [keyboard.md](keyboard.md) |
+| Reading/writing files, where app data goes, open/save panels, drag and drop | [files.md](files.md) |
+| Preferences, secure storage, SQLite, settings window | [storage-settings.md](storage-settings.md) |
+| Notifications, clipboard, badges/power/system info, app updates, child processes, auth, audio | [integrations.md](integrations.md) |
+| Native controls, macOS sidebar/search/glass views, WebView, Markdown/HTML | [ui.md](ui.md) |
+| Third-party libraries (camera, images, storage…), Spark errors and availability | [library-compat.md](library-compat.md) |
+| Running Claude/Codex CLIs, in-app customization | [ai-customize.md](ai-customize.md) |
+
+macOS is the shipped target; Windows is development-only; Spark's desktop APIs do not cover mobile/web beyond the Expo-shaped adapters.
+
 ## Create and develop
 
 - Require Node 24.19.0 or newer. Create with `npm create @legendapp/spark@next MyApp` (stable releases use `@latest`). Names must be alphanumeric. `npx @legendapp/create-spark@next MyApp` is equivalent; an installed CLI also supports `spark create MyApp`.
