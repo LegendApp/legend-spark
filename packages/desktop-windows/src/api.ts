@@ -7,6 +7,7 @@ import { createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapt
 import { bounds, keys, number, object, text, validateOptions, windowId } from "./validation";
 import { getNativeDisplays, isBounds, isInfo, record, subscribeToWindowInstance, windowCall, windowCommand, type NativeWindowInfo } from "./transport";
 import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowUpdateOptions } from "./types";
+declare const __DEV__: boolean | undefined;
 export type * from "./types";
 
 export function getWindowAvailability(): Availability {
