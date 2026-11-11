@@ -39,7 +39,7 @@ Validation includes mounted React tests for disabled controls, controlled input/
 
 ## Setup and native verification
 
-Mobile applications using Button/Select install optional peer `@expo/ui@0.2.0-beta.9` for Expo 54. Compose requires a development build; the [shared Settings starter](universal-settings.md) includes `expo-dev-client`. Desktop and web do not load Expo UI. See [styling setup](styling.md) for optional Uniwind classes and theme configuration.
+Mobile applications using Button/Select install optional peer `@expo/ui@55.0.17` for Expo SDK 55. Compose requires a development build; the [shared Settings starter](universal-settings.md) includes `expo-dev-client`. Desktop and web do not load Expo UI. See [styling setup](styling.md) for optional Uniwind classes and theme configuration.
 
 On Windows, the package supplies React Native's Appearance native module. Use `Appearance.setColorScheme('dark')`, `'light'`, or `null` to follow the system. Native theme notifications update mounted WinUI controls without recreating their editors. Native theme acceptance remains pending; see [Windows issues](windows-issues.md#foundation-work--2026-09-15).
 
