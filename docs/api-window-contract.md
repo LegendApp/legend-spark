@@ -87,7 +87,7 @@ getWindow(id: WindowId): Promise<WindowInfo>;
 listWindows(): Promise<WindowInfo[]>;
 setWindowOptions(id: WindowId, options: WindowUpdateOptions): Promise<void>;
 setWindowBounds(id: WindowId, bounds: WindowBounds, options?: { macos?: { durationMs?: number } }): Promise<void>;
-showWindow(id: WindowId, options?: { focus?: boolean }): Promise<void>;
+showWindow(id: WindowId, options?: { focus?: boolean; activate?: boolean }): Promise<void>;
 hideWindow(id: WindowId): Promise<void>;
 closeWindow(id: WindowId): Promise<CloseResult>;
 minimizeWindow(id: WindowId): Promise<void>;
@@ -101,7 +101,7 @@ centerWindow(id: WindowId, options?: { displayId?: DisplayId }): Promise<void>;
 
 `setWindowOptions` validates all requested fields before applying them. No transactional promise across native setters is implied: native failure may leave partial changes; refresh `getWindow` to inspect state. Identity, parent/modal relationships, component, and initial props are immutable in this initial contract. Dynamic application data belongs to application state, not an implicit props-patching mechanism.
 
-`closeWindow` waits for the actual close/veto decision. Missing windows reject `E_NOT_FOUND`; repeated calls while closing join the same decision. `showWindow` defaults to focusing. Other state commands resolve when the requested state is reached or reject if the native operation fails. No successful return merely because a message was queued.
+`closeWindow` waits for the actual close/veto decision. Missing windows reject `E_NOT_FOUND`; repeated calls while closing join the same decision. `showWindow` defaults to focusing the window within the app; it does not bring an inactive app forward. `activate: true` activates the app first (for tray, popover, menu-bar and dock-menu clicks) and requires focus; `activate: true` with `focus: false` rejects `E_INVALID_ARGUMENT`. Other state commands resolve when the requested state is reached or reject if the native operation fails. No successful return merely because a message was queued.
 
 ### Coordinates and display changes
 

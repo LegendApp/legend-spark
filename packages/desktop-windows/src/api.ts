@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
@@ -72,9 +72,13 @@ export async function setWindowBounds(id: string, value: WindowBounds, options: 
   await windowCommand("bounds", { id, bounds: value });
 }
 export async function showWindow(id: string, options: ShowWindowOptions = {}): Promise<void> {
-  windowId(id); object(options, "show options"); keys(options, ["focus"]);
+  windowId(id); object(options, "show options"); keys(options, ["focus", "activate"]);
   if (options.focus !== undefined && typeof options.focus !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "focus must be boolean");
-  await windowCommand("show", { id, focus: options.focus ?? true });
+  if (options.activate !== undefined && typeof options.activate !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "activate must be boolean");
+  const focus = options.focus ?? true, activate = options.activate ?? false;
+  if (activate && !focus) throw new SparkError("E_INVALID_ARGUMENT", "activate requires focus");
+  if (Platform.OS === "macos" && focus && !activate && typeof __DEV__ !== "undefined" && __DEV__ && AppState.currentState !== "active") console.warn(`showWindow("${id}") while the app is inactive keeps the window behind other apps; pass { activate: true } when showing it from a tray, popover, menu bar or dock-menu click.`);
+  await windowCommand("show", { id, focus, activate });
 }
 export async function centerWindow(id: string, options: CenterWindowOptions = {}): Promise<void> {
   windowId(id); object(options, "center options"); keys(options, ["displayId"]);

@@ -292,6 +292,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
         else [delegate finishClose:NO];
       }
     } else if ([method isEqual:@"show"]) {
+      if ([args[@"activate"] boolValue]) { if (@available(macOS 14.0, *)) [NSApp activate]; else [NSApp activateIgnoringOtherApps:YES]; }
       [window deminiaturize:nil]; NSDictionary *opening = objc_getAssociatedObject(window, @selector(call:args:resolve:reject:));
       if ([opening[@"modal"] boolValue] && !window.sheetParent) {
         NSWindow *parent = Window(opening[@"parentId"]);
