@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
-const { call, platform, listeners, managed } = vi.hoisted(() => ({ call: vi.fn(), platform: { OS: "windows" }, listeners: new Set<(event: any) => void>(), managed: { getConstantsJson: () => JSON.stringify({ WINDOW_LEVEL_STATUS: 25, WINDOW_LEVEL_FLOATING: 3 }), openWindow: vi.fn(async (_options: string) => '{"success":true}'), setMainWindowOptions: vi.fn(async (_options: string) => '{"success":true}'), setWindowOptions: vi.fn(async (_id: string, _options: string) => '{"success":true}') } }));
-vi.mock("react-native", () => ({ Platform: platform }));
+const { call, platform, appState, listeners, managed } = vi.hoisted(() => ({ call: vi.fn(), platform: { OS: "windows" }, appState: { currentState: "active" }, listeners: new Set<(event: any) => void>(), managed: { getConstantsJson: () => JSON.stringify({ WINDOW_LEVEL_STATUS: 25, WINDOW_LEVEL_FLOATING: 3 }), openWindow: vi.fn(async (_options: string) => '{"success":true}'), setMainWindowOptions: vi.fn(async (_options: string) => '{"success":true}'), setWindowOptions: vi.fn(async (_id: string, _options: string) => '{"success":true}') } }));
+vi.mock("react-native", () => ({ Platform: platform, AppState: appState }));
 vi.mock("../packages/desktop-windows/src/NativeDesktopWindowManager", () => ({ default: { call } }));
 vi.mock("../packages/desktop-windows/src/window-manager/NativeWindowManager", () => ({ default: managed }));
 vi.mock("@legendapp/spark-desktop-app/src/events", () => ({ onDesktopEvent: (fn: (event: any) => void) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } }));
@@ -35,6 +35,24 @@ test("invalid arguments reject asynchronously before native calls", async () => 
   await expect(windows.setWindowBounds("editor", { ...info.bounds }, { durationMs: 200 } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   await expect(windows.showWindow(undefined as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   expect(call).not.toHaveBeenCalled();
+});
+test("show activation is validated, requires focus and reaches the native command", async () => {
+  for (const options of [{ activate: "yes" }, { activate: true, focus: false }]) await expect(windows.showWindow("editor", options as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(call).not.toHaveBeenCalled();
+  await windows.showWindow("editor", { activate: true });
+  expect(JSON.parse(call.mock.calls.at(-1)![1])).toEqual({ id: "editor", focus: true, activate: true });
+  await windows.showWindow("editor");
+  expect(JSON.parse(call.mock.calls.at(-1)![1])).toEqual({ id: "editor", focus: true, activate: false });
+});
+test("macOS dev builds warn when focusing a window of an inactive app without activation", async () => {
+  platform.OS = "macos"; vi.stubGlobal("__DEV__", true); appState.currentState = "inactive";
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    await windows.showWindow("editor", { activate: true }); await windows.showWindow("editor", { focus: false });
+    expect(warn).not.toHaveBeenCalled();
+    await windows.showWindow("editor");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("activate: true"));
+  } finally { vi.unstubAllGlobals(); appState.currentState = "active"; }
 });
 test("bounds animation options are macOS-only and reach the native command", async () => {
   platform.OS = "macos";

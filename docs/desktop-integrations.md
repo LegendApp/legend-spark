@@ -81,7 +81,7 @@ const tray = await createTray({
     { type: "checkbox", id: "sync", label: "Sync enabled", checked: true },
   ],
   onAction(event) {
-    if (event.type === "action" && event.itemId === "open") void showWindow();
+    if (event.type === "action" && event.itemId === "open") void showWindow("main", { activate: true });
   },
 });
 await tray.update({ title: "3" });
@@ -94,6 +94,10 @@ application icon identifies the item and title supplies the tooltip fallback;
 macOS-only options reject. Menus use the [shared item model](menus.md), supporting
 actions, checkboxes, separators and submenus up to five levels. An empty menu emits
 `{ type: "click" }`; choosing an item emits `{ type: "action", itemId }`.
+
+Tray, menu-bar, popover and dock-menu clicks don't activate the app, so a plain
+`showWindow(id)` focuses the window inside the app but leaves it behind the
+frontmost app. Pass `{ activate: true }` to bring the app forward first.
 
 Updates snapshot inputs, serialize, and merge with the last successful state.
 Arrays replace in full. Removal immediately stops callbacks, waits for accepted
@@ -109,7 +113,7 @@ For an app that starts in the menu bar with no Dock icon or visible main window:
 ```
 
 This requires a custom build. Create the tray from the mounted React root and use
-`showWindow()` when the user chooses to open the UI. The hidden root remains
+`showWindow("main", { activate: true })` when the user chooses to open the UI. The hidden root remains
 mounted. Avoid configuring menu-bar-only mode without creating a tray or another
 way to reopen the app.
 

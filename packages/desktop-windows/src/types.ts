@@ -60,7 +60,15 @@ export interface WindowInfo {
   bounds: WindowBounds;
 }
 export type CloseResult = { closed: true } | { closed: false; reason: "vetoed" };
-export interface ShowWindowOptions { focus?: boolean }
+export interface ShowWindowOptions {
+  /** Makes the window key within the app (default true). Does not bring an inactive app in front of other apps. */
+  focus?: boolean;
+  /**
+   * Activates the app first so the window comes in front of other apps (default false). Use it when showing a window
+   * in response to a tray, popover, menu bar or dock-menu click, since non-activating panels don't activate the app.
+   */
+  activate?: boolean;
+}
 export interface CenterWindowOptions { displayId?: DisplayId }
 export interface WindowEventMap {
   focusChanged: { windowId: WindowId; focused: boolean };
