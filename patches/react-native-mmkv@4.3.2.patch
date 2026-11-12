@@ -26,9 +26,9 @@ index 0d19d4a..0644cbc 100644
    
 +#if os(macOS)
 +  private static var namespace: String {
-+    // Spark's host exports SparkNamespace(); look it up at runtime so MMKV keeps no link dependency on Spark.
++    // Spark's host exports SparkStorageNamespace(); look it up at runtime so MMKV keeps no link dependency on Spark.
 +    typealias Namespace = @convention(c) () -> Unmanaged<NSString>
-+    if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "SparkNamespace") {
++    if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "SparkStorageNamespace") {
 +      return unsafeBitCast(symbol, to: Namespace.self)().takeUnretainedValue() as String
 +    }
 +    return Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName

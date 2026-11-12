@@ -2,6 +2,7 @@
 #import "SparkDesktopError.h"
 #import "SparkQuitCoordinator.h"
 #import "SparkInstance.h"
+#import "SparkStorage.h"
 #import "SparkTestDriver.h"
 #import <sys/wait.h>
 #import <CommonCrypto/CommonDigest.h>
@@ -25,6 +26,14 @@ NSDictionary *SparkArgs(NSString *json) {
 void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
 void SparkReject(RCTPromiseRejectBlock reject, NSError *error) {
   reject(SparkDesktopErrorCode(error), error.localizedDescription ?: @"Native operation failed", error);
+}
+static NSString *SparkHashedNamespace(NSString *identifier) {
+  NSData *data = [identifier dataUsingEncoding:NSUTF8StringEncoding];
+  unsigned char hash[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(data.bytes, (CC_LONG)data.length, hash);
+  NSMutableString *result = [NSMutableString stringWithString:@"spark.desktop."];
+  for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) [result appendFormat:@"%02x", hash[i]];
+  return result;
 }
 NSDictionary *SparkContext(void) {
   static NSDictionary *context;
@@ -57,14 +66,29 @@ NSDictionary *SparkContext(void) {
   });
   return context;
 }
-NSString *SparkNamespace(void) {
-  NSString *project = SparkContext()[@"projectId"];
-  NSData *data = [project dataUsingEncoding:NSUTF8StringEncoding];
-  unsigned char hash[CC_SHA256_DIGEST_LENGTH];
-  CC_SHA256(data.bytes, (CC_LONG)data.length, hash);
-  NSMutableString *result = [NSMutableString stringWithString:@"spark.desktop."];
-  for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) [result appendFormat:@"%02x", hash[i]];
-  return result;
+NSString *SparkNamespace(void) { return SparkHashedNamespace(SparkContext()[@"projectId"]); }
+static NSString *SparkBundleIdentifier(void) {
+  NSString *identifier = NSBundle.mainBundle.bundleIdentifier;
+  if (!identifier.length || [identifier containsString:@"/"] || [identifier isEqual:@"."] || [identifier isEqual:@".."]) {
+    [NSException raise:NSInvalidArgumentException format:@"Spark requires a valid CFBundleIdentifier"];
+  }
+  return identifier;
+}
+static NSString *SparkConfiguredBundleIdentifier(void) {
+#if DEBUG
+  if ([SparkContext()[@"runtime"][@"mode"] isEqual:@"go"]) return NSProcessInfo.processInfo.environment[@"SPARK_PROJECT_BUNDLE_IDENTIFIER"];
+#endif
+  return [NSBundle.mainBundle objectForInfoDictionaryKey:@"SparkDefaultBundleIdentifier"];
+}
+NSString *SparkStorageNamespace(void) {
+  NSString *value = [SparkBundleIdentifier() stringByAppendingPathComponent:@"Spark"];
+  if ([SparkContext()[@"runtime"][@"mode"] isEqual:@"go"]) value = [value stringByAppendingPathComponent:SparkNamespace()];
+  return value;
+}
+static NSString *SparkInstanceNamespace(void) {
+  NSString *identifier = SparkBundleIdentifier();
+  if ([SparkContext()[@"runtime"][@"mode"] isEqual:@"go"]) identifier = [identifier stringByAppendingFormat:@":%@", SparkContext()[@"projectId"]];
+  return SparkHashedNamespace(identifier);
 }
 NSDictionary *SparkInitialProps(NSString *windowID, NSDictionary *props) {
   NSMutableDictionary *result = [SparkContext() mutableCopy];
@@ -153,7 +177,7 @@ static void SparkForwardLaunch(void) {
     for (NSURL *url in forwardedURLs) { if (url.isFileURL) [files addObject:url.path]; else [urls addObject:url.absoluteString]; }
     NSDictionary *launch = @{ @"arguments": NSProcessInfo.processInfo.arguments, @"workingDirectory": NSFileManager.defaultManager.currentDirectoryPath ?: @"/", @"files": files, @"urls": urls };
     NSError *error;
-    if (!SparkInstanceForward(NSTemporaryDirectory(), SparkNamespace(), launch, 10, &error)) SparkLaunchFailed(@"The running app did not accept this launch", error);
+    if (!SparkInstanceForward(NSTemporaryDirectory(), SparkInstanceNamespace(), launch, 10, &error)) SparkLaunchFailed(@"The running app did not accept this launch", error);
     exit(0);
   }];
 }
@@ -172,6 +196,23 @@ NSDictionary *SparkLaunchState(void) {
   return @{ @"safeMode": SparkSafeMode() ? safeModeTrigger : NSNull.null, @"relaunched": @(relaunched),
     @"instance": instanceOwner ? @"primary" : @"test-driver" };
 }
+void SparkPrepareStorage(void) {
+  NSError *error = nil;
+  NSFileManager *fm = NSFileManager.defaultManager;
+  NSURL *base = [fm URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
+  if (!base) SparkLaunchFailed(@"Unable to locate the app storage directory", error);
+  NSMutableOrderedSet<NSURL *> *legacy = [NSMutableOrderedSet orderedSetWithObject:[base URLByAppendingPathComponent:SparkNamespace() isDirectory:YES]];
+  if (![SparkContext()[@"runtime"][@"mode"] isEqual:@"go"]) {
+    NSString *name = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"] ?: [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"];
+    if ([name containsString:@"/"] || [name isEqual:@"."] || [name isEqual:@".."]) {
+      SparkLaunchFailed(@"Unable to migrate legacy app storage", [NSError errorWithDomain:@"SparkStorage" code:1 userInfo:@{ NSLocalizedDescriptionKey: @"The legacy display name must be a single directory name. Migrate its data explicitly." }]);
+    }
+    if (name.length) [legacy addObject:[base URLByAppendingPathComponent:name isDirectory:YES]];
+  }
+  SparkMigrateStorage([base URLByAppendingPathComponent:SparkStorageNamespace() isDirectory:YES], legacy.array,
+    SparkBundleIdentifier(), SparkConfiguredBundleIdentifier(), &error);
+  if (error) SparkLaunchFailed(@"Unable to prepare the app's storage", error);
+}
 BOOL SparkAcquireInstance(void) {
   SparkSafeMode();
   NSString *parent = NSProcessInfo.processInfo.environment[@"SPARK_RELAUNCH_PARENT"];
@@ -182,7 +223,7 @@ BOOL SparkAcquireInstance(void) {
     // The previous instance holds the lock until it exits; it kills this process if its quit is vetoed.
     if (!SparkInstanceWaitForExit(parent.intValue, &error)) SparkLaunchFailed(@"Unable to relaunch", error);
   }
-  instanceOwner = SparkInstanceAcquire(NSTemporaryDirectory(), SparkNamespace(), ^(NSDictionary *launch) { SparkReceiveLaunch(launch); }, &error);
+  instanceOwner = SparkInstanceAcquire(NSTemporaryDirectory(), SparkInstanceNamespace(), ^(NSDictionary *launch) { SparkReceiveLaunch(launch); }, &error);
   if (error) SparkLaunchFailed(@"Unable to establish the app instance lock", error);
   if (!instanceOwner) SparkForwardLaunch();
   return instanceOwner;

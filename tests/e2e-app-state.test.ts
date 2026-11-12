@@ -10,6 +10,7 @@ vi.mock("node:child_process", () => ({ spawnSync: vi.fn() }));
 
 const BUNDLE_ID = "so.legend.spark.examples.kitchensink";
 const KITCHEN_SINK: AppIdentity = { bundleId: BUNDLE_ID, projectId: "c0bdf12f-0f35-4b71-8363-b83097388d7b", sandboxed: false };
+const INSTANCE = sparkNamespace(BUNDLE_ID);
 const NS = "spark.desktop.f24fabcdca7ee623a41d0258b883fdc21422e5c283c01f3ece499645ed451090";
 
 function host(overrides: Partial<StateHost> = {}) {
@@ -29,12 +30,12 @@ describe("statePaths", () => {
   test("names the Spark namespace and bundle identifier locations, nothing else", () => {
     expect(sparkNamespace(KITCHEN_SINK.projectId)).toBe(NS);
     expect(statePaths(KITCHEN_SINK, { home: "/Users/a", temp: "/var/T" })).toEqual([
-      `/Users/a/Library/Application Support/${NS}`, `/Users/a/Library/Application Support/${BUNDLE_ID}`,
+      `/Users/a/Library/Application Support/${BUNDLE_ID}`,
       `/Users/a/Library/Caches/${NS}`, `/Users/a/Library/Caches/${BUNDLE_ID}`,
       `/Users/a/Library/HTTPStorages/${BUNDLE_ID}`, `/Users/a/Library/HTTPStorages/${BUNDLE_ID}.binarycookies`,
       `/Users/a/Library/Cookies/${BUNDLE_ID}.binarycookies`, `/Users/a/Library/WebKit/${BUNDLE_ID}`,
       `/Users/a/Library/Saved Application State/${BUNDLE_ID}.savedState`,
-      `/var/T/${NS}`, `/var/T/${NS}.setup`, `/var/T/${NS}.lock`, `/var/T/${NS}.sock`,
+      `/var/T/${BUNDLE_ID}/Spark`, `/var/T/${INSTANCE}.setup`, `/var/T/${INSTANCE}.lock`, `/var/T/${INSTANCE}.sock`,
       `/var/T/legend-codex-workspace/codex-home-${BUNDLE_ID}`,
     ]);
   });
@@ -44,9 +45,11 @@ describe("clearAppState", () => {
   test("deletes the defaults domain and every state path that exists, leaving neighbours and link targets alone", () => {
     const { host: fake, calls, root } = host();
     const lib = path.join(fake.home, "Library");
-    touch(path.join(lib, "Application Support", NS, "settings", "infra-launch-state.json"));
+    touch(path.join(lib, "Application Support", BUNDLE_ID, "Spark", "settings", "infra-launch-state.json"));
+    const legacy = path.join(lib, "Application Support", NS, "settings.json");
+    touch(legacy, "legacy data belonging to the original bundle");
     touch(path.join(lib, "Saved Application State", `${BUNDLE_ID}.savedState`, "windows.plist"));
-    touch(path.join(fake.temp, `${NS}.lock`));
+    touch(path.join(fake.temp, `${INSTANCE}.lock`));
     const outside = path.join(root, "outside");
     touch(path.join(outside, "keep.txt"));
     mkdirSync(path.join(lib, "Caches"), { recursive: true });
@@ -55,9 +58,10 @@ describe("clearAppState", () => {
     neighbours.forEach(file => touch(file));
 
     expect(clearAppState(KITCHEN_SINK, BUNDLE_ID, fake)).toEqual([
-      `defaults:${BUNDLE_ID}`, path.join(lib, "Application Support", NS), path.join(lib, "Caches", BUNDLE_ID),
-      path.join(lib, "Saved Application State", `${BUNDLE_ID}.savedState`), path.join(fake.temp, `${NS}.lock`),
+      `defaults:${BUNDLE_ID}`, path.join(lib, "Application Support", BUNDLE_ID), path.join(lib, "Caches", BUNDLE_ID),
+      path.join(lib, "Saved Application State", `${BUNDLE_ID}.savedState`), path.join(fake.temp, `${INSTANCE}.lock`),
     ]);
+    expect(readFileSync(legacy, "utf8")).toBe("legacy data belonging to the original bundle");
     expect(calls).toEqual([`running ${BUNDLE_ID}`, `defaults delete ${BUNDLE_ID}`]);
     expect(statePaths(KITCHEN_SINK, fake).filter(file => existsSync(file))).toEqual([]);
     expect(readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("state");

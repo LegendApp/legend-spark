@@ -12,7 +12,7 @@ Exports: `@legendapp/spark/settings`, `/settings/observable`, `/settings/window`
 | Relational / large data | `openDatabase('name.sqlite')` from `/sqlite` |
 | App files | `/files` with `getDirectory('data')` ([files.md](files.md)) |
 
-All of these live in the app's own data directory (macOS: `~/Library/Application Support/<namespace>`), scoped per project.
+On macOS settings, Spark SQLite, files and patched MMKV use `~/Library/Application Support/<bundle id>/Spark` (the Spark Runner adds the hosted project hash). Re-signed clones with a changed `CFBundleIdentifier` get separate file stores and launch locks. Rebuild the host; startup migrates an absent store only from a marker-owned legacy folder, or an unmarked folder for the configured default bundle ID. It atomically renames owned data, never overwrites an existing store, and rejects ambiguous or unreadable migration state. Keep `SparkDefaultBundleIdentifier` generated from `macos.bundleIdentifier`; changing only `CFBundleIdentifier` must not claim the original app's legacy data. The Runner uses the hosted project's configured bundle ID for migration eligibility, so it cannot claim the app's unmarked legacy store. Keychain services retain project identity.
 
 ## Rules
 

@@ -408,11 +408,13 @@ to fix it.
 
 ## 0.0.3
 
+macOS clones with a changed `CFBundleIdentifier` have independent launch locks and Spark file/MMKV stores under `~/Library/Application Support/<bundle id>/Spark`. Rebuild custom hosts to embed the configured default ID in `SparkDefaultBundleIdentifier`. When the new store is absent, startup atomically renames a legacy project-hash or display-name folder only when its owner marker matches the running bundle, or it is unmarked and the running ID equals the configured default. Foreign folders remain untouched; ambiguous sources and IO errors stop startup. Existing destinations are never overwritten. Quit older builds and back up data before upgrading.
+
 Breaking: yes. Spark's macOS patch for app-installed `react-native-mmkv@4.3.2`
 changes its default storage location. Other MMKV versions are not patched.
 
 Before: `~/Documents/mmkv` (shared by apps using the upstream default).
-After: `~/Library/Application Support/<Spark namespace>/mmkv` (scoped to the app).
+After: `~/Library/Application Support/<bundle id>/Spark/mmkv` (scoped to the app).
 An explicit custom MMKV path is unaffected. Existing default-store files are not
 moved automatically, so an upgraded app can appear to have empty storage.
 

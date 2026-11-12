@@ -356,13 +356,12 @@ of `SparkProjectIdentifier` (the bundle identifier when that is absent). `$TMPDI
 | Deleted | What lives there |
 |---|---|
 | `defaults delete <bundle id>` | Everything in `NSUserDefaults`: main and child window frames (`NSWindow Frame <namespace>.main`, `<namespace>.bounds.<id>`), the Spark recent-documents list, window-manager options, Sparkle's skipped versions and settings, React Native dev settings |
-| `~/Library/Application Support/<namespace>` | `settings`, file-system `data`, SQLite databases |
-| `~/Library/Application Support/<bundle id>` | React Native AsyncStorage |
+| `~/Library/Application Support/<bundle id>` | Spark `settings`, file-system `data`, SQLite, MMKV (under `Spark/`); React Native AsyncStorage and Nitro SQLite |
 | `~/Library/Caches/<namespace>`, `~/Library/Caches/<bundle id>` | file-system `cache`; `NSURLCache`, Sparkle downloads, WebKit caches |
 | `~/Library/HTTPStorages/<bundle id>`, `<bundle id>.binarycookies` there and in `~/Library/Cookies` | `NSURLSession` cookies and HSTS |
 | `~/Library/WebKit/<bundle id>` | WebView website data (`WKWebsiteDataStore.defaultDataStore`) |
 | `~/Library/Saved Application State/<bundle id>.savedState` | AppKit window restoration |
-| `$TMPDIR/<namespace>`, `$TMPDIR/<namespace>.setup`, `.lock`, `.sock` | file-system `temp`; the single-instance lock and socket |
+| `$TMPDIR/<bundle id>/Spark`, `$TMPDIR/<instance>.setup`, `.lock`, `.sock` | file-system `temp`; the single-instance lock and socket (`<instance>` hashes the bundle ID) |
 | `$TMPDIR/legend-codex-workspace/codex-home-<bundle id>` | the codex package's `CODEX_HOME` (a linked `auth.json` is unlinked, never followed) |
 
 Each run writes what existed to `clear-state-<launch>.log` in the flow's backend directory.

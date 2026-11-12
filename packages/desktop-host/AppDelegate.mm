@@ -27,6 +27,7 @@
   self.sparkPrimaryInstance = SparkTestDriverStart() || SparkAcquireInstance();
   // A second process forwards its launch to the owner and exits (SparkAcquireInstance).
   if (!self.sparkPrimaryInstance) return;
+  SparkPrepareStorage();
   facebook::react::ReactMarker::logMarkerDone(facebook::react::ReactMarker::APP_STARTUP_START, CACurrentMediaTime() * 1000);
   [self sparkPrepareMainMenu];
   SparkPrepareApplication();

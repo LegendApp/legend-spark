@@ -467,6 +467,7 @@ export function projectEnvironment(root: string): Record<string, string> {
   return {
     SPARK_WINDOW_CONFIG: JSON.stringify(nativeWindowOptions(config.extra?.spark?.window ?? {})),
     SPARK_PROJECT_ID: projectId,
+    ...(typeof config.macos?.bundleIdentifier === "string" ? { SPARK_PROJECT_BUNDLE_IDENTIFIER: config.macos.bundleIdentifier } : {}),
     SPARK_PROJECT_NAME: typeof config.name === "string" ? config.name : path.basename(root),
     SPARK_PROJECT_VERSION: typeof config.version === "string" ? config.version : "0.0.0",
   };

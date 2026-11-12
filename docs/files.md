@@ -23,6 +23,16 @@ Whole-file writes replace atomically on supported desktop backends. Conditional 
 
 `watch(path, listener, { recursive })` resolves when native registration succeeds and returns an asynchronous `remove()`. Notifications invalidate cached data; they are not an exact change log. On macOS, recursive watches can target a missing path; an existing file at the target or an ancestor rejects with `E_NOT_FOUND` because the directory cannot be found. Windows requires an existing directory. Removal stops JS callbacks immediately, joins concurrent calls, and permits retry if native cleanup fails. File handles use `close()` with the same cleanup guarantees; new work rejects after closing starts, even if cleanup needs retry.
 
+## macOS clone isolation and migration
+
+`getDirectory('data')` uses `~/Library/Application Support/<bundle id>/Spark`; patched MMKV uses its `mmkv` child. AsyncStorage and Nitro SQLite retain their existing bundle-ID locations. File-system cache and temporary directories also include the bundle ID. The shared Spark Runner adds the hosted project hash to its directories and uses the project's configured bundle ID for migration eligibility, so it cannot claim the app's unmarked legacy store.
+
+Rebuild custom runtimes for this change. Generated Info.plist metadata records `macos.bundleIdentifier` as `SparkDefaultBundleIdentifier`, separate from the runtime `CFBundleIdentifier`. A clone re-signed after changing only `CFBundleIdentifier` gets fresh Spark file storage and its own launch lock.
+
+When the new Spark directory is absent, startup adopts a legacy project-hash or display-name directory only if its `.spark-bundle-identifier` marker matches this bundle, or it is unmarked and the running bundle ID equals the configured default. Spark records the owner and atomically renames the owned directory before storage opens. A different owner is never moved or adopted. Existing destination data is never overwritten. Ambiguous sources, unreadable ownership, missing default identity for unmarked data, and migration IO errors stop startup with an error. Resolve those explicitly rather than deleting data. Quit older app builds before upgrading and retain a backup.
+
+The shared `~/Documents/mmkv` location predating Spark's namespaced MMKV patch is not migrated automatically; see the packaged upgrade guide. `SparkProjectIdentifier` remains the public project identity and continues to name Keychain services and default keys.
+
 ## Scanning
 
 `scanFiles(paths, { extensions, batchSize, includeHidden, includeStats, skip, onBatch, onProgress, signal })` currently supports macOS. Check `getFileScanAvailability()` when offering this capability. Callbacks belong to that invocation; concurrent scans do not share events. The result contains `totalFiles`, `totalRoots`, and traversal `errors` (partial failures); an invalid native response or failed native operation rejects.

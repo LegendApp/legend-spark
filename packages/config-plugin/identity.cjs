@@ -16,6 +16,7 @@ function identity(config) {
     LSUIElement: config.extra?.spark?.menuBarOnly === true,
     SparkMenuBarOnly: config.extra?.spark?.menuBarOnly === true,
     SparkProjectIdentifier: projectId,
+    SparkDefaultBundleIdentifier: config.macos?.bundleIdentifier,
     SparkLifecycleConfiguration: require("./lifecycle.cjs").validateLifecycle(config.macos?.lifecycle),
     SparkWindowConfiguration: nativeWindowOptions(config.extra?.spark?.window ?? {}),
     ...updatePlist(config),

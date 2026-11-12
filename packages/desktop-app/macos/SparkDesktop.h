@@ -3,7 +3,7 @@
 #import <React/RCTBridgeModule.h>
 
 FOUNDATION_EXPORT NSString * const SparkDesktopEvent;
-// Call in applicationWillFinishLaunching:. YES: this process owns the project's
+// Call in applicationWillFinishLaunching:. YES: this process owns the app's
 // instance. NO: another process does; this one forwards its launch and exits.
 FOUNDATION_EXPORT BOOL SparkAcquireInstance(void);
 // Latched on first call during launch: --spark-safe-mode, or Shift held at launch.
@@ -15,6 +15,8 @@ FOUNDATION_EXPORT void SparkRelaunch(NSArray<NSString *> *arguments, void (^comp
 FOUNDATION_EXPORT NSDictionary *SparkContext(void);
 FOUNDATION_EXPORT NSDictionary *SparkInitialProps(NSString *windowID, NSDictionary *props);
 FOUNDATION_EXPORT NSString *SparkNamespace(void);
+FOUNDATION_EXPORT NSString *SparkStorageNamespace(void);
+FOUNDATION_EXPORT void SparkPrepareStorage(void);
 FOUNDATION_EXPORT void SparkEmit(NSDictionary *event);
 FOUNDATION_EXPORT void SparkOpenURLs(NSArray<NSURL *> *urls);
 FOUNDATION_EXPORT NSArray *SparkPendingURLs(void);
