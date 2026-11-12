@@ -105,6 +105,12 @@ See [known Windows limits](windows-issues.md). Optional OP-SQLite SQLCipher, lib
 Turso, and vector builds are not enabled. WebView follows upstream Windows prop
 coverage and does not promise macOS-only WebKit features.
 
+## App patches
+
+Spark applies its version-pinned patch to a library first, then the app's own `patches/<lib>@<version>.patch` (scoped names use `+` for `/`), for any library. `spark patch <lib>` copies the Spark-patched library to a temporary folder for editing; `spark patch <lib> --done` saves the diff against it. Each patched package's `spark.dependencyPatch` receipt records `patchHash` (Spark) and `appPatchHash` (app), and native preflight checks the app hash against the current file. An app patch pinned to another version stops native preparation and names the patch to redo; all files are verified before any is written.
+
+patch-package `patches/<lib>+<version>.patch` files and Bun/pnpm `patchedDependencies` are installed by the package manager. Spark leaves them alone unless it also patches that library; then it undoes the package-manager patch, applies its own, reapplies the app's and warns. `"spark": { "patches": { "<lib>": false } }` in the app's `package.json` skips Spark's patch for that library, with a warning that desktop support isn't guaranteed. Fixes every Spark app needs belong in Spark's own patch.
+
 ## Optional backend dependencies
 
 Apps using `/markdown`, `/html`, `/webview`, or `/sqlite` must install the matching
