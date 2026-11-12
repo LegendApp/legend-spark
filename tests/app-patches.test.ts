@@ -166,3 +166,14 @@ test("spark patch finds libraries whose exports hide package.json", () => {
   expect(patchLibrary(root, "plain-lib", { done: true })).toBe(path.join(root, "patches/plain-lib@1.0.0.patch"));
   expect(podspec(root, "plain-lib")).toBe(both);
 });
+
+test("Spark's own repository doesn't read its patches folder as app patches", () => {
+  const root = fixture();
+  const spark = path.join(root, "node_modules/@legendapp/spark/patches");
+  for (const [from, to] of [["dependencies.json", "dependencies.json"], ["native-lib.patch", "native-lib@1.0.0.patch"]]) {
+    writeFileSync(path.join(root, "patches", to), readFileSync(path.join(spark, from)));
+  }
+  prepareNativePatches(root);
+  expect(podspec(root, "native-lib")).toBe(sparkPatched);
+  expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
+});

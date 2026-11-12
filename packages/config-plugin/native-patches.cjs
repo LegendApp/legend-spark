@@ -45,7 +45,9 @@ function appPatches(root, app) {
   }
   const files = new Set(Object.values(listed).map(file => path.normalize(file)));
   const directory = path.join(root, "patches");
-  for (const entry of fs.existsSync(directory) ? fs.readdirSync(directory).sort() : []) {
+  // Spark's own repository keeps Spark's patches there, under the same names.
+  const appFolder = fs.existsSync(directory) && !fs.existsSync(path.join(directory, "dependencies.json"));
+  for (const entry of appFolder ? fs.readdirSync(directory).sort() : []) {
     const file = path.join("patches", entry);
     const own = /^(.+?)@([^@]+)\.patch$/.exec(entry);
     const match = own ?? /^((?:@[^+]+\+)?[^+@]+)\+([^+]+?)(?:\.dev)?(?:\+.*)?\.patch$/.exec(entry);
