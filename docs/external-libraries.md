@@ -111,6 +111,8 @@ Spark applies its version-pinned patch to a library first, then the app's own `p
 
 One install holds one app patch set. The receipt's `appRoot` names the app root whose patch the library carries. When several app roots share one `node_modules`, such as workspaces in a monorepo, native preparation in a root with a different app patch for that library (or none, for a library Spark patches) stops instead of swapping layers back and forth. Keep the patch at the shared root and give every app root the same file.
 
+Each patched library keeps the app patch it carries in `.spark-app.patch`, so editing or deleting an app patch needs no reinstall: native preparation undoes the kept patch, then applies the current one or none. A library patched before Spark kept that file, or an app patch removed from a library that isn't a direct dependency, falls back to the old way: delete `node_modules/<lib>` and reinstall.
+
 patch-package `patches/<lib>+<version>.patch` files and Bun/pnpm `patchedDependencies` are installed by the package manager. Spark leaves them alone unless it also patches that library; then it undoes the package-manager patch, applies its own, reapplies the app's and warns. `"spark": { "patches": { "<lib>": false } }` in the app's `package.json` skips Spark's patch for that library, with a warning that desktop support isn't guaranteed. Fixes every Spark app needs belong in Spark's own patch.
 
 ## Optional backend dependencies

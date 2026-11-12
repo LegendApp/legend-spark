@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -52,7 +52,7 @@ export function patchLibrary(root: string, name: string, { done = false, force =
       return edit;
     }
     rmSync(work, { recursive: true, force: true });
-    cpSync(installed, base, { recursive: true, filter: source => !["node_modules", ".git"].includes(path.relative(installed, source).split(path.sep)[0]!) });
+    cpSync(installed, base, { recursive: true, filter: source => !["node_modules", ".git", ".spark-app.patch"].includes(path.relative(installed, source).split(path.sep)[0]!) });
     writeFileSync(path.join(base, "package.json"), withoutReceipt(readFileSync(path.join(base, "package.json"), "utf8")));
     if (own) layerPatches(base, name, [undefined, { text: own.bytes.toString("utf8"), apply: false, error: () => "" }]);
     cpSync(base, edit, { recursive: true });
@@ -67,17 +67,6 @@ export function patchLibrary(root: string, name: string, { done = false, force =
     if (after === undefined) throw new Error(`App patches can't delete ${relative}; empty it instead.`);
     if (after.includes("\0")) throw new Error(`App patches can't change binary file ${relative}.`);
     diff += `diff --git a/${relative} b/${relative}\n` + createTwoFilesPatch(before === undefined ? "/dev/null" : `a/${relative}`, `b/${relative}`, before ?? "", after).replace(/^=+\n/, "");
-  }
-  // Bring the installed copy to the edited files, so the next preparation finds both layers applied.
-  if (out === root) for (const relative of [...new Set([...files(installed), ...files(edit)])]) {
-    const target = path.join(installed, relative);
-    const after = read(path.join(edit, relative));
-    const current = relative === "package.json" ? withoutReceipt(read(target)!) : read(target);
-    if (after === current) continue;
-    if (after === undefined) { rmSync(target); continue; }
-    mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(`${target}.spark-${process.pid}.tmp`, after);
-    renameSync(`${target}.spark-${process.pid}.tmp`, target); // Preserve package-manager cache hardlinks.
   }
   if (diff) {
     mkdirSync(path.join(out, "patches"), { recursive: true });

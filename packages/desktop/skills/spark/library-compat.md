@@ -21,7 +21,7 @@ Fix bugs every Spark app would hit in Spark's own patch (`patches/` in the Spark
 
 App roots that share one `node_modules` (monorepo workspaces) need the same app patches: native preparation stops when another root's patch for that library differs. Keep the patch at the shared root and copy it to every app.
 
-App patches are pinned to the installed version. When Spark moves a pin, native preparation stops and names the patch to redo with `spark patch <lib>`; nothing is half-applied. After deleting or hand-editing a patch file, reinstall the library.
+App patches are pinned to the installed version. When Spark moves a pin, native preparation stops and names the patch to redo with `spark patch <lib>`; nothing is half-applied. Editing or deleting a patch file needs no reinstall: the library keeps the app patch it carries in `.spark-app.patch`, and native preparation undoes it before applying the current one. If preparation still can't apply a patch (the library was patched before Spark kept that file, or the patch targets a library that isn't a direct dependency), delete `node_modules/<lib>` and reinstall.
 
 patch-package (`patches/<lib>+<version>.patch`) and Bun/pnpm `patchedDependencies` keep working. For a library Spark also patches, Spark treats that patch as the app layer and warns; prefer `spark patch` there, because package-manager patches are made against the unpatched library.
 

@@ -214,3 +214,22 @@ test("app roots sharing an install must carry the same app patch", () => {
     expect(podspec(root, "native-lib")).toBe(both);
   }
 });
+
+test("editing or removing an app patch undoes the old layer without a reinstall", () => {
+  const root = fixture();
+  for (const [name, base] of [["native-lib", sparkPatched], ["plain-lib", upstream]]) {
+    const file = path.join(root, `patches/${name}@1.0.0.patch`);
+    writeFileSync(file, diff(base, base.replace("seven", "SEVEN")));
+    prepareNativePatches(root);
+    writeFileSync(file, diff(base, base.replace("seven", "Seven").replace("two", "TWO")));
+    prepareNativePatches(root);
+    expect(podspec(root, name)).toBe(base.replace("seven", "Seven").replace("two", "TWO"));
+    expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
+    rmSync(file);
+    prepareNativePatches(root);
+    expect(podspec(root, name)).toBe(base);
+    expect(receipt(root, name)?.appPatchHash).toBeUndefined();
+    expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
+  }
+  expect(JSON.parse(readFileSync(path.join(root, "node_modules/plain-lib/package.json"), "utf8")).spark).toBeUndefined();
+});
