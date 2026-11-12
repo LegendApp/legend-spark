@@ -122,6 +122,34 @@ int main(){@autoreleasepool{
   [v updateProps:soft oldProps:v->_props];[v layout];spin();
   assert(item.topAlignedAccessoryViewControllers.count==1);
   assert(item.topAlignedAccessoryViewControllers.firstObject==accessory);
+  // Check actual SDK underlay/accessory coordinates with a native scroll view.
+  // This is a coverage regression, not an offscreen assertion of rendered blur.
+  auto scrolling=std::make_shared<SidebarSplitViewProps>(*soft);scrolling->contentLayout="underlay";
+  [v updateProps:scrolling oldProps:v->_props];[v layout];spin();
+  NSScrollView *scroll=[[NSScrollView alloc]initWithFrame:content.bounds];
+  scroll.automaticallyAdjustsContentInsets=YES;
+  NSView *document=[[NSView alloc]initWithFrame:NSMakeRect(0,0,NSWidth(content.bounds),1800)];
+  scroll.documentView=document;[content addSubview:scroll];
+  [w.contentView.superview layoutSubtreeIfNeeded];spin();
+  auto covered=[&](){return [scroll convertRect:accessory.view.bounds fromView:accessory.view];};
+  assert(NSContainsRect(scroll.bounds,covered()));
+  NSRect paneInContent=[content convertRect:accessory.view.bounds fromView:accessory.view];
+  assert(NSWidth(paneInContent)>8);
+  NSRect paneViewport=NSMakeRect(NSMinX(paneInContent),0,NSWidth(paneInContent),NSHeight(content.bounds));
+  scroll.frame=paneViewport;[scroll layoutSubtreeIfNeeded];
+  assert(NSContainsRect(scroll.bounds,covered()));
+  NSRect insetViewport=paneViewport;insetViewport.origin.x+=4;insetViewport.size.width-=4;
+  scroll.frame=insetViewport;[scroll layoutSubtreeIfNeeded];
+  assert(!NSIsEmptyRect(NSIntersectionRect(scroll.bounds,covered())));
+  assert(!NSContainsRect(scroll.bounds,covered()));
+  // Moving that clearance into the document restores complete viewport coverage.
+  scroll.frame=content.bounds;
+  NSView *documentContent=[[NSView alloc]initWithFrame:NSMakeRect(NSMinX(paneInContent)+4,0,NSWidth(paneViewport)-4,1800)];
+  [document addSubview:documentContent];[scroll layoutSubtreeIfNeeded];
+  assert(NSContainsRect(scroll.bounds,covered()));
+  [scroll removeFromSuperview];
+  [v updateProps:soft oldProps:v->_props];[v layout];spin();
+  puts("PASS soft-edge full/pane viewport coverage and document-side clearance; partial overlap is insufficient");
   [v updateProps:props oldProps:v->_props];[v layout];spin();
   assert(item.topAlignedAccessoryViewControllers.count==0);
   puts("PASS public soft-edge opt-in, stable accessory identity, and disable cleanup");

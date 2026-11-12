@@ -82,6 +82,32 @@ In underlay mode, `contentX`/`contentY` are zero and `contentWidth`/`contentHeig
 
 Opt scroll views into their existing `contentInsetAdjustmentBehavior` (`'automatic'`, `'always'`, or `'scrollableAxes'`) for native clearance. With `'scrollableAxes'`, an explicitly bouncing axis retains clearance even for short documents. The RN macOS 0.83.0 compatibility patch filters applied document insets, never `NSView.safeAreaInsets`; AppKit needs the latter's real geometry for native edge masks. No effect is promised for a non-scrolling view. Native styling and extent remain owned by AppKit, not caller-specified blur layers or accessory dimensions.
 
+Keep the scrolling **viewport** stretched across the underlay, and put sidebar clearance and gutters in its scrolling **document**. Do not wrap the scroll view in leading padding/margins to clear the sidebar: that shrinks the viewport relative to the native content-pane edge registration. On macOS 26.7.2, a viewport starting just 4 points inside the pane reproduced an empty native pocket mask on first appearance even though scrolling and a nonempty accessory intersection both worked. Exact pane coverage or full-underlay coverage worked. Navigating away and back can hide this composition problem, so test first appearance too.
+
+```tsx
+<SidebarSplitView
+  style={{ flex: 1 }}
+  contentLayout="underlay"
+  contentScrollEdgeEffect="soft"
+  sidebar={sidebar}
+  content={
+    <ScrollView
+      style={{ flex: 1 }}
+      contentInsetAdjustmentBehavior="scrollableAxes"
+      contentContainerStyle={{
+        paddingStart: sidebarCollapsed ? 16 : sidebarWidth + 16,
+        paddingEnd: 16,
+        paddingVertical: 16,
+      }}
+    >
+      {content}
+    </ScrollView>
+  }
+/>
+```
+
+Here `ScrollView` is from `react-native`; `sidebarWidth` and `sidebarCollapsed` are the app's current pane state, updated through the split-view events. The example applies to a two-pane layout; include list-pane clearance when present. Virtualized lists should likewise keep the viewport full-width and apply the leading inset to their content container/header, deriving column widths from the remaining usable document width. This is layout guidance, not a promise that arbitrary partially overlapping scroll-view frames receive a native effect. The native geometry regression checks coverage; consumer rendering still needs a mounted first-appearance check.
+
 For a full-size window that also extends beneath its title bar, React Native scroll views can opt into AppKit's safe-area management with their existing `contentInsetAdjustmentBehavior` prop. The pinned RN macOS compatibility module keeps `never` unchanged, supports `automatic`/`always`, and limits `scrollableAxes` to axes that overflow or explicitly allow bounce. RN's `alwaysBounceVertical` therefore preserves top clearance for a short vertical document, while a non-scrolling/non-bouncing horizontal axis gains no phantom range. Recycled views reset to `never`. This enables the inset prerequisite for native scroll-edge presentation; it does not promise that arbitrary application chrome automatically registers every desired edge effect.
 
 AppKit can collapse the sidebar itself (View > Hide Sidebar, the sidebar toolbar button, `toggleSidebar:`). The component adopts that state, publishes a resize with the sidebar at width zero, and calls `onSidebarCollapsedChange(collapsed)`; it is not called for changes you make through `sidebarCollapsed`. Uncontrolled use needs nothing more: the sidebar stays as AppKit left it. A controlled app sets `sidebarCollapsed` from the callback, which is then a no-op natively. Only a change of the `sidebarCollapsed` value is applied: an unchanged prop never undoes a native toggle, and when a prop change arrives before a native toggle is observed, the prop change wins and no event is sent for that toggle.
