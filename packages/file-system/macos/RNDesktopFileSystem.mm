@@ -95,7 +95,7 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
       else if ([kind isEqual:@"cache"]) base = [fm URLForDirectory:NSCachesDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
       else if ([kind isEqual:@"temp"]) base = [NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES];
       else { SparkInvalid(reject, @"Unknown directory kind"); return; }
-      NSURL *url = [base URLByAppendingPathComponent:SparkNamespace() isDirectory:YES];
+      NSURL *url = [base URLByAppendingPathComponent:SparkStorageNamespace() isDirectory:YES];
       if (!error) [fm createDirectoryAtURL:url withIntermediateDirectories:YES attributes:nil error:&error];
       result = url.path;
     } else if ([method isEqual:@"unwatch"]) {

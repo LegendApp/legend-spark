@@ -4,6 +4,8 @@
 
 Sets snapshot finite JSON values before queuing. Operations serialize per key within one store; this is not cross-store or cross-process locking. An update callback must not await another operation on the same key in the same store.
 
+On macOS the default file store lives under `~/Library/Application Support/<bundle id>/Spark/settings`. A clone with a changed `CFBundleIdentifier` gets its own store. On the first rebuilt launch, Spark migrates an owned legacy project-namespace or display-name directory; see [clone isolation and migration](files.md#macos-clone-isolation-and-migration).
+
 ## Observable files
 
 `@legendapp/spark/settings/observable` explicitly integrates Legend State. Its observable types and React bindings remain owned by Legend State. General IO uses `@legendapp/spark/files`; the separate synchronous native storage API and `/settings/paths` are removed.

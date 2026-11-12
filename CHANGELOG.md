@@ -4,6 +4,7 @@
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
+- Isolate macOS app-clone launch locks and Spark file/MMKV stores by bundle identifier, with ownership-checked migration of legacy namespaced data. Rebuild custom hosts; see the packaged upgrade guide.
 - [Breaking] Move the default macOS `react-native-mmkv@4.3.2` store from `~/Documents/mmkv` to the app's namespaced Application Support folder. Existing data is not moved automatically; see UPGRADING.md before deploying.
 - Add version-pinned macOS integrations for desktop libraries, including MMKV, Unistyles, Quick Crypto, Nitro Fetch, Blur, Expo modules, image and date pickers, React Navigation and Expo Router. Keep app-owned dependencies and review platform limitations in `docs/external-libraries.md`; rebuild custom runtimes.
 - Fix native image sizing/backgrounds, optional dependency patch discovery, macOS codegen paths and macOS 14 pod targets; expand Kitchen Sink library and pointer checks.

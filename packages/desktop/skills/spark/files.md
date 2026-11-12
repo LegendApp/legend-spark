@@ -4,7 +4,7 @@ Exports: `@legendapp/spark/files`, `/dialogs`, `/drag-drop`.
 
 ## Where data goes
 
-- Use `getDirectory('data' | 'cache' | 'temp')` for app-owned storage. On macOS `data` is under `~/Library/Application Support/<namespace>`; Spark's settings and SQLite use the same place. Do not write app data to `~/Documents` or next to the app bundle.
+- Use `getDirectory('data' | 'cache' | 'temp')` for app-owned storage. On macOS `data` is under `~/Library/Application Support/<bundle id>/Spark`; Spark's settings and SQLite use the same place. Do not write app data to `~/Documents` or next to the app bundle.
 - Third-party storage libraries Spark patches (MMKV, Nitro SQLite, Release Profiler) are also moved to the app's Application Support or Caches folder; see [library-compat.md](library-compat.md).
 
 ## Files (`/files`)

@@ -14,6 +14,8 @@ Named windows are singleton instances. Opening an existing live ID rejects `E_AL
 
 The main window is host-created. Applications configure it through host configuration and manipulate it through the same live-window commands. `openWindow` does not recreate it.
 
+On macOS, app-instance ownership is scoped to `CFBundleIdentifier`. A re-signed clone with a different bundle ID creates its own main window and uses separate Spark file storage even when its display name and `SparkProjectIdentifier` are unchanged. See [legacy storage migration](files.md#macos-clone-isolation-and-migration).
+
 ### Core types
 
 The public types live in `packages/desktop-windows/src/types.ts`. Advanced macOS groups are described below.

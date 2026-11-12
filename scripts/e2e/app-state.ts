@@ -26,19 +26,18 @@ export const sparkNamespace = (projectId: string) => `spark.desktop.${createHash
 
 /** Every file and directory clearState deletes, besides the `defaults` domain named by the bundle identifier. */
 export function statePaths({ bundleId, projectId }: AppIdentity, { home, temp }: Pick<StateHost, "home" | "temp">): string[] {
-  const ns = sparkNamespace(projectId), library = path.join(home, "Library");
+  const ns = sparkNamespace(projectId), instance = sparkNamespace(bundleId), library = path.join(home, "Library");
   return [
-    path.join(library, "Application Support", ns), // settings, file-system "data", SQLite
-    path.join(library, "Application Support", bundleId), // React Native AsyncStorage
-    path.join(library, "Caches", ns), // file-system "cache"
-    path.join(library, "Caches", bundleId), // NSURLCache, Sparkle downloads, WebKit caches
+    path.join(library, "Application Support", bundleId), // Spark data/MMKV, React Native AsyncStorage and Nitro SQLite
+    path.join(library, "Caches", ns), // legacy library caches
+    path.join(library, "Caches", bundleId), // file-system "cache", NSURLCache, Sparkle downloads, WebKit caches
     path.join(library, "HTTPStorages", bundleId), // NSURLSession cookies and HSTS
     path.join(library, "HTTPStorages", `${bundleId}.binarycookies`),
     path.join(library, "Cookies", `${bundleId}.binarycookies`),
     path.join(library, "WebKit", bundleId), // WKWebsiteDataStore.defaultDataStore
     path.join(library, "Saved Application State", `${bundleId}.savedState`), // AppKit window restoration
-    path.join(temp, ns), // file-system "temp"
-    ...[".setup", ".lock", ".sock"].map(suffix => path.join(temp, `${ns}${suffix}`)), // the single-instance lock
+    path.join(temp, bundleId, "Spark"), // file-system "temp"
+    ...[".setup", ".lock", ".sock"].map(suffix => path.join(temp, `${instance}${suffix}`)), // the single-instance lock
     path.join(temp, "legend-codex-workspace", `codex-home-${bundleId}`), // the codex package's CODEX_HOME
   ];
 }

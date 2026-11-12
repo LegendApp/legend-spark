@@ -17,6 +17,6 @@ static NSString *lastPath;
 @end
 static NSDictionary *SparkArgs(NSString *json) { return [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil]; }
 static NSString *SparkJSON(id value) { return [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingFragmentsAllowed error:nil] encoding:NSUTF8StringEncoding]; }
-static NSString *SparkNamespace(void) { return @"spark.watch.test"; }
+static NSString *SparkStorageNamespace(void) { return @"spark.watch.test"; }
 static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
 static void SparkReject(RCTPromiseRejectBlock reject, NSError *error) { reject(SparkDesktopErrorCode(error), error.localizedDescription, error); }

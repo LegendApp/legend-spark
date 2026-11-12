@@ -8,7 +8,8 @@ test("CNG embeds stable project identity and deduplicated URL associations", () 
   expect(result.NSSupportsAutomaticTermination).toBe(false); expect(result.NSSupportsSuddenTermination).toBe(false); expect(result.CFBundleURLTypes[0].CFBundleURLSchemes).toEqual(["demo", "demo-auth"]);
 });
 test("legacy projects use bundle identifier without name-based collisions", () => {
-  expect(identity({ macos: { bundleIdentifier: "test.app" } }).SparkProjectIdentifier).toBe("test.app");
+  expect(identity({ macos: { bundleIdentifier: "test.app" } })).toMatchObject({ SparkProjectIdentifier: "test.app", SparkDefaultBundleIdentifier: "test.app" });
+  expect(identity({ macos: { bundleIdentifier: "test.app" }, extra: { spark: { projectId: "project-uuid" } } }).SparkDefaultBundleIdentifier).toBe("test.app");
   expect(() => identity({})).toThrow("projectId");
 });
 test("document associations use declared UTIs and conservative handler rank", () => {

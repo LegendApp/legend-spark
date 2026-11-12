@@ -5,6 +5,7 @@ Exports: `@legendapp/spark/windows`, `/windows/macos`, `/diagnostics`. Main wind
 ## Rules
 
 - Every command takes an explicit window ID. There is no implicit "frontmost" or "main" default; focus never decides ownership.
+- On macOS, launch forwarding is scoped to the bundle ID. A re-signed clone with a changed `CFBundleIdentifier` opens its own instance and uses separate Spark file storage; keep the generated default-bundle metadata for safe legacy migration.
 - Named windows are singletons. `openWindow` on a live ID rejects `E_ALREADY_EXISTS`; call `showWindow(id)` for an existing window. IDs can be reused after close.
 - `openWindow` resolves when the native window and root exist, not when your data has loaded. Use `show: false` to mount content first, then `showWindow`.
 - Props passed at open are JSON-serializable and immutable. Put changing data in app state, not in window props.

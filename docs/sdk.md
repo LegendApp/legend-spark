@@ -72,13 +72,15 @@ an unsaved editor buffer. Demo secrets are never printed in the event log.
 
 `spark create` assigns `projectId` in `desktop.config.json` a UUID. Legacy
 `app.json` projects use `expo.extra.spark.projectId`. Keep it stable across
-renames, builds and transfers of the same app. Give independently cloned apps a
-new ID. Older projects fall back to `expo.macos.bundleIdentifier`.
+renames, builds and transfers of the same app. Give independent projects a
+new ID. macOS app copies use distinct bundle identifiers for launch and file-storage isolation. Older projects fall back to `expo.macos.bundleIdentifier`.
 
 The Spark Runner receives the project ID and display name from the CLI. Custom and distribution
 apps embed the ID through CNG and ignore the Spark Runner's environment overrides. The native
-host hashes it for application data directories, settings, recent documents,
-window restoration, single-instance locks, and Keychain service names. Thus two
+host hashes it for recent documents, window restoration and Keychain service names.
+macOS file storage (including settings, Spark SQLite and patched MMKV) lives under
+`~/Library/Application Support/<bundle id>/Spark`; the Spark Runner appends the
+hosted project hash. Launch locks also include the bundle identifier. Thus two
 projects using the Spark Runner do not accidentally share these values. This is namespacing, not an
 OS security sandbox: JS can still access explicitly supplied filesystem paths.
 Keychain values use the normal macOS access policy; changing the app's signing
