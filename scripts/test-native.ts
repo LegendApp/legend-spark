@@ -7,7 +7,7 @@ import { prepareKitchenSink } from "./prepare-kitchen-sink.ts";
 import { build } from "../packages/cli/src/build.ts";
 import { binary, run } from "../packages/cli/src/commands.ts";
 import { availablePort } from "../packages/cli/src/local.ts";
-import { readJson, writeJson, prepareConfig } from "../packages/cli/src/project.ts";
+import { readJson, writeJson, prepareConfig, projectEnvironment } from "../packages/cli/src/project.ts";
 
 // All test effects live in this dedicated app. The driver is absent from Go.
 const reducedApp = `import React, { useEffect } from "react";
@@ -51,7 +51,7 @@ async function execute(app: string, phase: string, projectId: string, extraArgs:
   writeFileSync(path.join(reportDir, `${phase}.log`), "");
   const appLog = processLog(path.join(reportDir, `${phase}.log`));
   appProcess = spawnProcess([path.join(app, "Contents/MacOS", executableName), "-RCT_jsLocation", `127.0.0.1:${port}`, "--spark-test-report", reportFile, ...extraArgs], {
-    cwd: root, env: { ...process.env, SPARK_PROJECT_ID: projectId, SPARK_PROJECT_NAME: "SDK Tests", SPARK_PROJECT_VERSION: "9.8.7", SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=${development}&minify=false` }, stdout: appLog, stderr: appLog,
+    cwd: root, env: { ...process.env, SPARK_PROJECT_ID: projectId, SPARK_PROJECT_BUNDLE_IDENTIFIER: projectEnvironment(root).SPARK_PROJECT_BUNDLE_IDENTIFIER, SPARK_PROJECT_NAME: "SDK Tests", SPARK_PROJECT_VERSION: "9.8.7", SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=${development}&minify=false` }, stdout: appLog, stderr: appLog,
   });
   try {
     const result = await waitFor(async () => {

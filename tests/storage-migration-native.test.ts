@@ -15,12 +15,23 @@ beforeAll(async () => {
   const input = path.join(build, "main.mm");
   const native = path.resolve("packages/desktop-app/macos");
   writeFileSync(input, `#import "SparkStorage.h"
+#import <sys/stdio.h>
+#import <dlfcn.h>
+#import <errno.h>
+#import <string.h>
+extern "C" int renamex_np(const char *from, const char *to, unsigned flags) {
+  const char *failedSource = getenv("SPARK_TEST_RENAME_SOURCE");
+  if (failedSource && strcmp(from, failedSource) == 0) { errno = EXDEV; return -1; }
+  using Rename = int (*)(const char *, const char *, unsigned);
+  static Rename original = (Rename)dlsym(RTLD_NEXT, "renamex_np");
+  return original(from, to, flags);
+}
 int main(int argc, char **argv) { @autoreleasepool {
   NSMutableArray *legacy = [NSMutableArray new];
   for (int i = 4; i < argc; i++) [legacy addObject:[NSURL fileURLWithPath:@(argv[i]) isDirectory:YES]];
   NSError *error;
   BOOL result = SparkMigrateStorage([NSURL fileURLWithPath:@(argv[1]) isDirectory:YES], legacy, @(argv[2]), @(argv[3]), &error);
-  if (!result) fprintf(stderr, "%s\\n", error.localizedDescription.UTF8String);
+  if (!result) fprintf(stderr, "%s:%ld:%s\\n", error.domain.UTF8String, (long)error.code, error.localizedDescription.UTF8String);
   return result ? 0 : 1;
 } }
 `);
@@ -100,4 +111,18 @@ test.skipIf(!darwin)("symlinked storage rejects without writing through the link
   symlinkSync(f.legacy, f.destination);
   expect((await migrate(f.destination, [])).stderr).toContain("symlink");
   expect(existsSync(path.join(f.legacy, marker))).toBe(false);
+});
+
+test.skipIf(!darwin)("a failed exclusive rename preserves legacy data and succeeds on retry", async () => {
+  const f = fixture();
+  const failed = await run(binary, [f.destination, "test.original", "test.original", f.legacy], {
+    env: { ...process.env, SPARK_TEST_RENAME_SOURCE: f.legacy },
+  });
+  expect(failed.status).toBe(1);
+  expect(failed.stderr).toContain(`NSPOSIXErrorDomain:${os.constants.errno.EXDEV}:`);
+  expect(existsSync(f.destination)).toBe(false);
+  expect(readFileSync(path.join(f.legacy, "settings.json"), "utf8")).toBe("saved-before-upgrade");
+  expect(readFileSync(path.join(f.legacy, marker), "utf8")).toBe("test.original");
+  expect((await migrate(f.destination, [f.legacy])).status).toBe(0);
+  expect(readFileSync(path.join(f.destination, "settings.json"), "utf8")).toBe("saved-before-upgrade");
 });

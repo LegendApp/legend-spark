@@ -1,4 +1,6 @@
 #import "SparkStorage.h"
+#import <sys/stdio.h>
+#import <errno.h>
 
 static NSString * const SparkStorageOwnerFile = @".spark-bundle-identifier";
 static BOOL SparkStorageFail(NSError **error, NSString *message) {
@@ -61,7 +63,7 @@ BOOL SparkMigrateStorage(NSURL *destination, NSArray<NSURL *> *legacyDirectories
     NSString *owner = SparkStorageOwner(legacy, error);
     if (*error) return NO;
     if (!owner && !configuredIdentifier.length)
-      return SparkStorageFail(error, @"Rebuild the app to embed SparkDefaultBundleIdentifier before migrating unmarked storage.");
+      return SparkStorageFail(error, @"Unmarked storage needs SparkDefaultBundleIdentifier from a rebuilt custom host, or macos.bundleIdentifier supplied by the current Go CLI. Configure/rebuild the app or migrate explicitly.");
     if (owner ? ![owner isEqual:bundleIdentifier] : ![configuredIdentifier isEqual:bundleIdentifier]) continue;
     if (source) return SparkStorageFail(error, @"Multiple legacy storage directories need migration. Resolve them explicitly before launching the app.");
     source = legacy;
@@ -73,5 +75,8 @@ BOOL SparkMigrateStorage(NSURL *destination, NSArray<NSURL *> *legacyDirectories
   if (!SparkStorageClaim(source, bundleIdentifier, error)) return NO;
   // Both paths are in Application Support. Rename the owned folder atomically so
   // clearing the new store cannot resurrect an old snapshot on the next launch.
-  return [fm moveItemAtURL:source toURL:destination error:error];
+  if (renamex_np(source.fileSystemRepresentation, destination.fileSystemRepresentation, RENAME_EXCL) == 0) return YES;
+  int code = errno;
+  *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:code userInfo:@{ NSFilePathErrorKey: source.path }];
+  return NO;
 }

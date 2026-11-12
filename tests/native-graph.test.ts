@@ -254,6 +254,8 @@ test("Go launch identity is explicit, validated, and optional for opening a stan
     expect(projectEnvironment(root)).toEqual({});
     writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { name: "Demo", version: "2.3.4", extra: { spark: { projectId: "stable-id" } } } }));
     expect(projectEnvironment(root)).toEqual({ SPARK_WINDOW_CONFIG: "{}", SPARK_PROJECT_ID: "stable-id", SPARK_PROJECT_NAME: "Demo", SPARK_PROJECT_VERSION: "2.3.4" });
+    writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { macos: { bundleIdentifier: "test.project" }, extra: { spark: { projectId: "stable-id" } } } }));
+    expect(projectEnvironment(root).SPARK_PROJECT_BUNDLE_IDENTIFIER).toBe("test.project");
     writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { extra: { spark: { projectId: {} } } } }));
     expect(() => projectEnvironment(root)).toThrow("stable project identifier");
   } finally { rmSync(root, { recursive: true, force: true }); }

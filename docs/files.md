@@ -25,7 +25,7 @@ Whole-file writes replace atomically on supported desktop backends. Conditional 
 
 ## macOS clone isolation and migration
 
-`getDirectory('data')` uses `~/Library/Application Support/<bundle id>/Spark`; patched MMKV uses its `mmkv` child. AsyncStorage and Nitro SQLite retain their existing bundle-ID locations. File-system cache and temporary directories also include the bundle ID. The shared Spark Runner adds the hosted project hash to its directories.
+`getDirectory('data')` uses `~/Library/Application Support/<bundle id>/Spark`; patched MMKV uses its `mmkv` child. AsyncStorage and Nitro SQLite retain their existing bundle-ID locations. File-system cache and temporary directories also include the bundle ID. The shared Spark Runner adds the hosted project hash to its directories and uses the project's configured bundle ID for migration eligibility, so it cannot claim the app's unmarked legacy store.
 
 Rebuild custom runtimes for this change. Generated Info.plist metadata records `macos.bundleIdentifier` as `SparkDefaultBundleIdentifier`, separate from the runtime `CFBundleIdentifier`. A clone re-signed after changing only `CFBundleIdentifier` gets fresh Spark file storage and its own launch lock.
 

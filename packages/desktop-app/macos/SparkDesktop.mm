@@ -74,6 +74,12 @@ static NSString *SparkBundleIdentifier(void) {
   }
   return identifier;
 }
+static NSString *SparkConfiguredBundleIdentifier(void) {
+#if DEBUG
+  if ([SparkContext()[@"runtime"][@"mode"] isEqual:@"go"]) return NSProcessInfo.processInfo.environment[@"SPARK_PROJECT_BUNDLE_IDENTIFIER"];
+#endif
+  return [NSBundle.mainBundle objectForInfoDictionaryKey:@"SparkDefaultBundleIdentifier"];
+}
 NSString *SparkStorageNamespace(void) {
   NSString *value = [SparkBundleIdentifier() stringByAppendingPathComponent:@"Spark"];
   if ([SparkContext()[@"runtime"][@"mode"] isEqual:@"go"]) value = [value stringByAppendingPathComponent:SparkNamespace()];
@@ -204,7 +210,7 @@ void SparkPrepareStorage(void) {
     if (name.length) [legacy addObject:[base URLByAppendingPathComponent:name isDirectory:YES]];
   }
   SparkMigrateStorage([base URLByAppendingPathComponent:SparkStorageNamespace() isDirectory:YES], legacy.array,
-    SparkBundleIdentifier(), [NSBundle.mainBundle objectForInfoDictionaryKey:@"SparkDefaultBundleIdentifier"], &error);
+    SparkBundleIdentifier(), SparkConfiguredBundleIdentifier(), &error);
   if (error) SparkLaunchFailed(@"Unable to prepare the app's storage", error);
 }
 BOOL SparkAcquireInstance(void) {
