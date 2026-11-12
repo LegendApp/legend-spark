@@ -92,9 +92,11 @@ export interface MacOSTitleBarOptions {
   titleVisibility?: "visible" | "hidden";
   separator?: "automatic" | "none" | "line" | "shadow";
   material?: "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
+  /** Needs `material` (not `none` or `glass`) or `tintColor` in the same call. */
   blendingMode?: "behindWindow" | "withinWindow";
+  /** Needs `material` (not `none` or `glass`) or `tintColor` in the same call. */
   materialState?: "active" | "inactive" | "followsWindowActiveState";
-  /** #RRGGBB or #RRGGBBAA over the material; use alpha to keep the blur visible. */
+  /** #RRGGBB or #RRGGBBAA over the material; use alpha to keep the blur visible. Without `material` in the same call, uses `titlebar`. */
   tintColor?: string | { light: string; dark: string };
   trafficLights?: boolean;
   controls?: readonly MacOSTitleBarControl[];

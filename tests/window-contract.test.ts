@@ -39,6 +39,10 @@ test("titlebar tint accepts one hex color or a light/dark pair", () => {
   for (const tintColor of ["red", "rgba(0,0,0,0.5)", { light: "#ffffff" }, null]) expect(() => validateOptions({ macos: { titleBar: { tintColor } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
   expect(() => validateOptions({ macos: { titleBar: { tintColor: { light: "#ffffff", dark: "#000000", auto: "#888888" } } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
 });
+test("titlebar material options that would be ignored without a material reject", () => {
+  for (const titleBar of [{ blendingMode: "withinWindow" }, { materialState: "active" }, { material: "none", blendingMode: "withinWindow" }, { material: "glass", materialState: "active" }, { material: "none", tintColor: "#ffffff" }]) expect(() => validateOptions({ macos: { titleBar } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  for (const titleBar of [{ material: "sidebar", blendingMode: "withinWindow", materialState: "active" }, { tintColor: "#ffffff", materialState: "active" }, { material: "glass", tintColor: "#ffffff" }]) expect(() => validateOptions({ macos: { titleBar } } as never, "macos", false)).not.toThrow();
+});
 test("toolbar menus use shared menu IDs and numeric slider values", () => {
   const options = { macos: { toolbar: { items: [{ type: "menu", id: "view", items: [{ type: "slider", id: "zoom", label: "Zoom", min: 1, max: 10, value: 5 }] }] } } } as const;
   expect(() => validateOptions(options, "macos", false)).not.toThrow();

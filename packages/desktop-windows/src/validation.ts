@@ -119,6 +119,9 @@ export function validateMacOS(value: MacOSWindowOptions) {
     enumValue(title.materialState, ["active", "inactive", "followsWindowActiveState"], "materialState");
     if (typeof title.tintColor === "object") { object(title.tintColor, "tintColor"); keys(title.tintColor, ["light", "dark"]); color(title.tintColor.light); color(title.tintColor.dark); }
     else if (title.tintColor !== undefined) color(title.tintColor);
+    const material = title.material ?? (title.tintColor !== undefined ? "titlebar" : undefined);
+    if (title.tintColor !== undefined && material === "none") throw new SparkError("E_INVALID_ARGUMENT", "titleBar.tintColor needs a material other than none");
+    for (const key of ["blendingMode", "materialState"] as const) if (title[key] !== undefined && (material === undefined || material === "none" || material === "glass")) throw new SparkError("E_INVALID_ARGUMENT", `titleBar.${key} needs a material other than none or glass in the same call`);
     if (title.controls !== undefined) for (const control of entries(title.controls, "titlebar control")) {
       keys(control, ["id", "label", "placement", "disabled", "selected", "symbol", "tooltip"]); flags(control, ["disabled", "selected"]);
       enumValue(control.placement, ["left", "right"], "control placement");
