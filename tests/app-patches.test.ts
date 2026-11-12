@@ -156,3 +156,13 @@ test("spark patch round trip saves a diff against the Spark-patched library and 
   expect(podspec(root, "native-lib")).toBe(sparkPatched.replace("two", "TWO"));
   expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
 });
+
+test("spark patch finds libraries whose exports hide package.json", () => {
+  const root = fixture();
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  writeFileSync(path.join(root, "node_modules/plain-lib/package.json"), JSON.stringify({ name: "plain-lib", version: "1.0.0", exports: { ".": "./index.js" } }));
+  const edit = patchLibrary(root, "plain-lib");
+  writeFileSync(path.join(edit, "Native.podspec"), both);
+  expect(patchLibrary(root, "plain-lib", { done: true })).toBe(path.join(root, "patches/plain-lib@1.0.0.patch"));
+  expect(podspec(root, "plain-lib")).toBe(both);
+});

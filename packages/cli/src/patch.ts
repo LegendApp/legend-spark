@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
-import { appPatches, layerPatches, prepareNativePatches, withoutReceipt } from "@legendapp/spark-desktop-config/native-patches.cjs";
+import { appPatches, layerPatches, prepareNativePatches, resolveManifest, withoutReceipt } from "@legendapp/spark-desktop-config/native-patches.cjs";
 import { readJson } from "./project.ts";
 
 function files(directory: string, relative = ""): string[] {
@@ -26,7 +26,7 @@ export function patchLibrary(root: string, name: string, { done = false, force =
   prepareNativePatches(root);
   const app = readJson(path.join(root, "package.json"));
   let manifest: string;
-  try { manifest = createRequire(path.join(root, "package.json")).resolve(`${name}/package.json`); }
+  try { manifest = resolveManifest(createRequire(path.join(root, "package.json")), name); }
   catch { throw new Error(`${name} is not installed in ${root}.`); }
   const installed = realpathSync(path.dirname(manifest));
   const { version } = readJson(manifest);

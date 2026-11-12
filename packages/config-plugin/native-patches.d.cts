@@ -4,4 +4,5 @@ export type AppPatch = { version?: string; file: string; thirdParty: boolean; er
 export function appPatches(root: string, app: any): Record<string, AppPatch>;
 export type PatchLayer = { text: string; apply: boolean; error(relative: string): string } | undefined;
 export function layerPatches(packageRoot: string, name: string, layers: PatchLayer[]): void;
+export function resolveManifest(req: NodeJS.Require, name: string): string;
 export function withoutReceipt(manifest: string): string;

@@ -248,4 +248,4 @@ function removeExpoApplicationAlias(rn, expo) {
   fs.renameSync(temporary, file); // Preserve package-manager cache hardlinks.
 }
 
-module.exports = { prepareNativePatches, removeExpoApplicationAlias, appPatches, layerPatches, withoutReceipt };
+module.exports = { prepareNativePatches, removeExpoApplicationAlias, appPatches, layerPatches, resolveManifest, withoutReceipt };
