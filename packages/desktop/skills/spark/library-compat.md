@@ -11,6 +11,20 @@ Export: `@legendapp/spark/contracts` (`SparkError`, `Availability`, `Subscriptio
 - **Data locations are fixed for you.** Spark moves MMKV storage from `~/Documents/mmkv` to the app's Application Support folder; Release Profiler traces and Image Manipulator output go to the app's Caches folder. Nitro SQLite uses `~/Library/Application Support/<bundle id>`. Don't override these to user-visible folders.
 - iOS-only modules on macOS typically become no-ops or report unavailable (Keyboard Controller events never fire, Tracking Transparency reports `unavailable`, Splash Screen does nothing). Don't build features that depend on them on desktop.
 
+## Patch a library
+
+Fix bugs every Spark app would hit in Spark's own patch (`patches/` in the Spark repository), not in one app. For an app-specific change:
+
+1. Run `spark patch <lib>`. It prints a temporary copy of the installed library with Spark's patch applied.
+2. Edit that copy, then run `spark patch <lib> --done`. It saves `patches/<lib>@<version>.patch` (scoped names use `+` for `/`) against the Spark-patched library and updates `node_modules`.
+3. Commit the patch file. Native preparation applies Spark's patch first, then the app's; this works for any library, Spark-patched or not.
+
+App patches are pinned to the installed version. When Spark moves a pin, native preparation stops and names the patch to redo with `spark patch <lib>`; nothing is half-applied. After deleting or hand-editing a patch file, reinstall the library.
+
+patch-package (`patches/<lib>+<version>.patch`) and Bun/pnpm `patchedDependencies` keep working. For a library Spark also patches, Spark treats that patch as the app layer and warns; prefer `spark patch` there, because package-manager patches are made against the unpatched library.
+
+To drop Spark's patch for one library, set `"spark": { "patches": { "<lib>": false } }` in the app's `package.json`. The app's patch still applies alone; native preparation warns that desktop support for that library isn't guaranteed.
+
 [external-libraries.md](external-libraries.md) lists every integrated library with the version Spark tested and its per-library limits on desktop.
 
 ## Spark errors and availability
