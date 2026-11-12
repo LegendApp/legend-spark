@@ -116,7 +116,8 @@ function stamp(file, installed, update) {
   const manifest = readManifest(file);
   manifest.spark ??= {};
   update(manifest);
-  const pkg = installed.find(pkg => pkg.root === fs.realpathSync(path.dirname(file)));
+  const root = fs.realpathSync(path.dirname(file));
+  const pkg = installed.find(pkg => pkg.root === root);
   if (pkg) pkg.json = manifest;
   const serialized = JSON.stringify(manifest, null, 2) + "\n";
   if (fs.readFileSync(file, "utf8") !== serialized) {
