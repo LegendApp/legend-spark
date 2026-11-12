@@ -26,7 +26,7 @@ import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
 import { devCommand } from "./dev-command.ts";
 import { optionalBackendIssues, printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
 import { upgrade } from "./upgrade.ts";
-import { patchLibrary } from "./patch.ts";
+import { patchLibrary, patchRoot } from "./patch.ts";
 import { ensureProjectVersion } from "./project-version.ts";
 import { reportError } from "./errors.ts";
 
@@ -83,6 +83,7 @@ async function main() {
   spark doctor        Check app dependency pins and native tooling (exits 1 on issues)
   spark upgrade       Update Spark on its current release channel (--dry-run previews changes)
   spark patch <lib>   Copy a library with Spark's patch for editing; --done saves patches/<lib>@<version>.patch
+                      in the nearest app or patches/ owner (--root: where it's installed, --out: where patches/ goes)
   spark customize publish  Upload prepared customization artifacts to existing GitHub releases
 
 Inside an app: npm run dev, npm run build, npm run package (or pnpm, yarn, bun)
@@ -205,7 +206,8 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       break;
     }
     case "patch": {
-      patchLibrary(project(), positionals[1]!, { done: !!values.done, force: !!values.force });
+      const root = values.root ? path.resolve(values.root) : patchRoot(start);
+      patchLibrary(root, positionals[1]!, { done: !!values.done, force: !!values.force, out: values.out ? path.resolve(values.out) : root });
       break;
     }
     case "customize": {

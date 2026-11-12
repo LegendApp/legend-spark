@@ -7,6 +7,7 @@ const options = {
   device: { type: "string" }, project: { type: "string" }, platform: { type: "string" },
   packages: { type: "string" }, port: { type: "string" }, runner: { type: "boolean" },
   dev: { type: "boolean" }, release: { type: "boolean" }, preview: { type: "boolean" },
+  root: { type: "string" }, out: { type: "string" },
   force: { type: "boolean" }, done: { type: "boolean" }, "dry-run": { type: "boolean" }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
 } as const;
 const commands: Record<string, { flags: readonly string[]; arguments: readonly [number, number] }> = {
@@ -22,7 +23,7 @@ const commands: Record<string, { flags: readonly string[]; arguments: readonly [
   prebuild: { flags: ["project", "platform"], arguments: [0, 0] },
   doctor: { flags: ["project"], arguments: [0, 0] },
   upgrade: { flags: ["project", "dry-run"], arguments: [0, 0] },
-  patch: { flags: ["project", "done", "force"], arguments: [1, 1] },
+  patch: { flags: ["project", "root", "out", "done", "force"], arguments: [1, 1] },
   "updates init": { flags: ["project", "platform"], arguments: [1, 1] },
   credentials: { flags: ["project", "platform"], arguments: [0, 0] },
   package: { flags: ["project", "platform", "force", "submission-id"], arguments: [0, 0] },

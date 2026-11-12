@@ -7,7 +7,7 @@ import { createTwoFilesPatch } from "diff";
 import { prepareNativePatches } from "../packages/config-plugin/native-patches.cjs";
 import { validateAppPatches } from "../packages/cli/src/native-patch-preflight.ts";
 import { installedPackages } from "../packages/cli/src/project.ts";
-import { patchLibrary } from "../packages/cli/src/patch.ts";
+import { patchLibrary, patchRoot } from "../packages/cli/src/patch.ts";
 
 const upstream = "one\ntwo\nthree\nfour\nfive\nsix\nseven\n";
 const sparkPatched = upstream.replace("one", "ONE");
@@ -176,4 +176,22 @@ test("Spark's own repository doesn't read its patches folder as app patches", ()
   prepareNativePatches(root);
   expect(podspec(root, "native-lib")).toBe(sparkPatched);
   expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
+});
+
+test("spark patch finds the patches owner above cwd and can write the patch elsewhere", () => {
+  const root = fixture();
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  mkdirSync(path.join(root, "apps/plain/src"), { recursive: true });
+  expect(patchRoot(path.join(root, "apps/plain/src"))).toBe(root);
+  // A Spark app keeps its own patches even before it has a patches/ folder.
+  writeFileSync(path.join(root, "apps/plain/app.json"), "{}");
+  writeFileSync(path.join(root, "apps/plain/package.json"), "{}");
+  expect(patchRoot(path.join(root, "apps/plain/src"))).toBe(path.join(root, "apps/plain"));
+  const out = path.join(root, "shared");
+  const edit = patchLibrary(root, "plain-lib", { out });
+  writeFileSync(path.join(edit, "Native.podspec"), both);
+  expect(patchLibrary(root, "plain-lib", { out, done: true })).toBe(path.join(out, "patches/plain-lib@1.0.0.patch"));
+  expect(existsSync(path.join(root, "patches/plain-lib@1.0.0.patch"))).toBe(false);
+  // The install follows the patches it reads, not ones saved elsewhere.
+  expect(podspec(root, "plain-lib")).toBe(upstream);
 });
