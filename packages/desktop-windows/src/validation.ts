@@ -109,7 +109,7 @@ export function validateMacOS(value: MacOSWindowOptions) {
   }
   if (value.titleBar !== undefined) {
     const title = value.titleBar; object(title, "titleBar");
-    keys(title, ["contentLayout", "transparent", "titleVisibility", "separator", "material", "blendingMode", "materialState", "trafficLights", "controls"]);
+    keys(title, ["contentLayout", "transparent", "titleVisibility", "separator", "material", "blendingMode", "materialState", "tintColor", "trafficLights", "controls"]);
     flags(title, ["transparent", "trafficLights"]);
     enumValue(title.contentLayout, ["contentLayoutGuide", "fullSize"], "contentLayout");
     enumValue(title.titleVisibility, ["visible", "hidden"], "titleVisibility");
@@ -117,6 +117,8 @@ export function validateMacOS(value: MacOSWindowOptions) {
     enumValue(title.material, ["none", "glass", "titlebar", "headerView", "hudWindow", "sidebar", "windowBackground"], "material");
     enumValue(title.blendingMode, ["behindWindow", "withinWindow"], "blendingMode");
     enumValue(title.materialState, ["active", "inactive", "followsWindowActiveState"], "materialState");
+    if (typeof title.tintColor === "object") { object(title.tintColor, "tintColor"); keys(title.tintColor, ["light", "dark"]); color(title.tintColor.light); color(title.tintColor.dark); }
+    else if (title.tintColor !== undefined) color(title.tintColor);
     if (title.controls !== undefined) for (const control of entries(title.controls, "titlebar control")) {
       keys(control, ["id", "label", "placement", "disabled", "selected", "symbol", "tooltip"]); flags(control, ["disabled", "selected"]);
       enumValue(control.placement, ["left", "right"], "control placement");

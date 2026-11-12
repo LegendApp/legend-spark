@@ -166,7 +166,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Style masks | Translate ordinary bits to common booleans/title-bar options; keep native panel styles under creation-only `macos.panelStyle`. |
 | Represented URL | `macos.representedUri`, nullable for clearing. |
 | Window level | `macos.level`; reject conflicting `alwaysOnTop` requests. |
-| Content layout guide, title visibility, material/blending/state, traffic lights | `macos.titleBar` group. |
+| Content layout guide, title visibility, material/blending/state/tint, traffic lights | `macos.titleBar` group. |
 | Toolbar style, items, titlebar controls | Typed `macos.toolbar` and `macos.titleBar.controls`. |
 | Startup split-view shell | `macos.startupSplitView`, nullable for clearing; preserve pre-React rendering. |
 | Shell restoration across launches | `macos.restoreOnLaunch`, separate from common saved bounds restoration. |

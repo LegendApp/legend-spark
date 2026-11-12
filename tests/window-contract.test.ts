@@ -34,6 +34,11 @@ test("macOS groups reject unknown fields and conflicting level ownership", () =>
   expect(() => validateOptions({ macos: { representedUri: "relative.txt" } }, "macos", false)).toThrow();
   expect(() => validateOptions({ macos: { representedUri: null, startupSplitView: null, titleBar: { controls: [] }, toolbar: { items: [] } } }, "macos", false)).not.toThrow();
 });
+test("titlebar tint accepts one hex color or a light/dark pair", () => {
+  for (const tintColor of ["#ffffff", "#1a1b1ccc", { light: "#ffffffcc", dark: "#000000" }]) expect(() => validateOptions({ macos: { titleBar: { tintColor } } }, "macos", false)).not.toThrow();
+  for (const tintColor of ["red", "rgba(0,0,0,0.5)", { light: "#ffffff" }, null]) expect(() => validateOptions({ macos: { titleBar: { tintColor } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => validateOptions({ macos: { titleBar: { tintColor: { light: "#ffffff", dark: "#000000", auto: "#888888" } } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+});
 test("toolbar menus use shared menu IDs and numeric slider values", () => {
   const options = { macos: { toolbar: { items: [{ type: "menu", id: "view", items: [{ type: "slider", id: "zoom", label: "Zoom", min: 1, max: 10, value: 5 }] }] } } } as const;
   expect(() => validateOptions(options, "macos", false)).not.toThrow();

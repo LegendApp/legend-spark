@@ -94,6 +94,8 @@ export interface MacOSTitleBarOptions {
   material?: "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
   blendingMode?: "behindWindow" | "withinWindow";
   materialState?: "active" | "inactive" | "followsWindowActiveState";
+  /** #RRGGBB or #RRGGBBAA over the material; use alpha to keep the blur visible. */
+  tintColor?: string | { light: string; dark: string };
   trafficLights?: boolean;
   controls?: readonly MacOSTitleBarControl[];
 }

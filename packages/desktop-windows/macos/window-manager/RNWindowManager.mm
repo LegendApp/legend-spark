@@ -439,6 +439,34 @@ static NSView *LegendCreateOverscannedGlassEffectView(NSRect frame)
   return containerView;
 }
 
+@interface LegendTitlebarTintView : NSView
+@property (nonatomic, strong) NSColor *lightColor;
+@property (nonatomic, strong) NSColor *darkColor;
+@end
+
+@implementation LegendTitlebarTintView
+- (BOOL)wantsUpdateLayer
+{
+  return YES;
+}
+
+- (void)updateLayer
+{
+  self.layer.backgroundColor = (LegendAppearanceIsDark(self.effectiveAppearance) ? self.darkColor : self.lightColor).CGColor;
+}
+
+- (void)viewDidChangeEffectiveAppearance
+{
+  [super viewDidChangeEffectiveAppearance];
+  self.needsDisplay = YES;
+}
+
+- (NSView *)hitTest:(NSPoint)point
+{
+  return nil;
+}
+@end
+
 static void LegendApplyTitlebarBackgroundColor(NSView *view, NSColor *backgroundColor)
 {
   BOOL isTitlebarContainer = LegendViewIsTitlebarContainer(view);
@@ -1052,6 +1080,17 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       : nil;
     effectView.blendingMode = LegendVisualEffectBlendingModeForName(blendingMode);
     effectView.state = LegendVisualEffectStateForName(state);
+  }
+
+  NSDictionary *tintColor = [windowStyle[@"titlebarMaterialTintColor"] isKindOfClass:NSDictionary.class]
+    ? windowStyle[@"titlebarMaterialTintColor"]
+    : nil;
+  if (tintColor) {
+    LegendTitlebarTintView *tintView = [[LegendTitlebarTintView alloc] initWithFrame:materialView.bounds];
+    tintView.lightColor = LegendColorFromHexString(tintColor[@"light"]);
+    tintView.darkColor = LegendColorFromHexString(tintColor[@"dark"]);
+    tintView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [materialView addSubview:tintView];
   }
 
   materialView.translatesAutoresizingMaskIntoConstraints = YES;

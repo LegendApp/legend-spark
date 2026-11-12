@@ -24,6 +24,8 @@ export function WindowManager() {
     <Button testID="windows-window-manager-rename" onPress={() => run("Renamed child", () => setWindowOptions(CHILD, { title: "Renamed from JS" }))}>Rename child</Button>
     <Button testID="windows-window-manager-blur" onPress={() => run("Blurred child", () => setWindowBlur(CHILD, { radius: 8, durationMs: 250 }))}>Blur child</Button>
     <Button testID="windows-window-manager-clear-blur" onPress={() => run("Cleared blur", () => setWindowBlur(CHILD, { radius: 0, durationMs: 250 }))}>Clear blur</Button>
+    <Button testID="windows-window-manager-tint" onPress={() => run("Tinted child titlebar", () => setWindowOptions(CHILD, { macos: { titleBar: { material: "titlebar", tintColor: { light: "#ff660066", dark: "#3366ff66" } } } }))}>Tint child titlebar</Button>
+    <Button testID="windows-window-manager-untint" onPress={() => run("Untinted child titlebar", () => setWindowOptions(CHILD, { macos: { titleBar: { material: "titlebar" } } }))}>Untint child titlebar</Button>
     <Button testID="windows-window-manager-close" onPress={() => { closeWindow(CHILD).then(result => setStatus(result.closed ? "Closed child" : "Close vetoed"), report); }}>Close child</Button>
     <Button testID="windows-window-manager-show-main" onPress={() => run("Showing main", () => showWindow("main"))}>Show main window</Button>
     <Button testID="windows-window-manager-read-frame" onPress={() => run("Read frame", async () => setBounds((await getWindow("main")).bounds))}>Read frame</Button>

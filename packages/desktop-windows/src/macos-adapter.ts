@@ -32,6 +32,8 @@ export function macosOptions({ macos: options, appearance, backgroundColor }: Pi
   if (title) {
     const fields = { contentLayout: "contentLayoutMode", transparent: "titlebarAppearsTransparent", titleVisibility: "titleVisibility", separator: "titlebarSeparatorStyle", material: "titlebarMaterial", blendingMode: "titlebarMaterialBlendingMode", materialState: "titlebarMaterialState", trafficLights: "trafficLights" } as const;
     for (const [key, target] of Object.entries(fields)) if (title[key as keyof typeof fields] !== undefined) style[target] = title[key as keyof typeof fields];
+    if (typeof title.tintColor === "string") style.titlebarMaterialTintColor = { light: title.tintColor, dark: title.tintColor };
+    else if (title.tintColor) style.titlebarMaterialTintColor = title.tintColor;
     if (title.controls) style.titlebarControls = title.controls.map(({ symbol, disabled, ...control }) => ({ ...control, type: "button", enabled: !disabled, systemImageName: symbol }));
   }
   if (options.toolbar) {
