@@ -2,7 +2,7 @@ import { assertEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { prepareNativePatches } from "@legendapp/spark-desktop-config/native-patches.cjs";
+import { appPatches, prepareNativePatches } from "@legendapp/spark-desktop-config/native-patches.cjs";
 import { findFramework } from "./local.ts";
 import { installedPackages, readJson, VERSION, type NativePackage } from "./project.ts";
 
@@ -69,6 +69,22 @@ export function validateWorkspaceNativePatches(root: string, packages: Pick<Nati
   return errors;
 }
 
+/** Each patched package's receipt must name the Spark and app patch layers the app currently declares. */
+export function validateAppPatches(root: string, packages: Pick<NativePackage, "name" | "json">[]): string[] {
+  const app = readJson(path.join(root, "package.json"));
+  const patches = app.name === "@legendapp/spark" ? {} : appPatches(root, app);
+  const errors: string[] = [];
+  for (const pkg of packages) {
+    const receipt = pkg.json.spark?.dependencyPatch;
+    if (!receipt) continue;
+    const own = patches[pkg.name];
+    const appPatchHash = own && createHash("sha256").update(own.bytes).digest("hex");
+    if (receipt.appPatchHash !== appPatchHash) errors.push(`${pkg.name}@${pkg.json.version} does not carry ${own?.file ?? "the app's current patches"}. Reinstall ${pkg.name}, then retry.`);
+    if (app.spark?.patches?.[pkg.name] === false && receipt.patchHash) errors.push(`${pkg.name}@${pkg.json.version} still has Spark's patch, which spark.patches disables. Reinstall ${pkg.name}, then retry.`);
+  }
+  return errors;
+}
+
 export function assertNativePatchPreflight(root: string) {
   assertEnrichedHtmlPins(root);
   const packages = installedPackages(root);
@@ -82,5 +98,6 @@ export function assertNativePatchPreflight(root: string) {
   else {
     errors = validatePackedNativePatches(packages, requirements);
   }
+  errors.push(...validateAppPatches(root, packages));
   if (errors.length) throw new Error(`Native patch preparation stopped before changing project files:\n${errors.map(error => `- ${error}`).join("\n")}`);
 }
