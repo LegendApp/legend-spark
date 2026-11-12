@@ -165,6 +165,14 @@ function prepareNativePatches(root, installed = []) {
     if (own?.version && own.version !== version) throw new Error(`${own.file} patches ${name}@${own.version}, but ${version} is installed. Redo it with spark patch ${name}.`);
     return own;
   };
+  // Records which app root's patch an install carries; app roots sharing one install must agree on it.
+  const appRoot = (name, packageRoot, manifest, own) => {
+    const previous = manifest.spark?.dependencyPatch, appPatchHash = own && hash(own.bytes), self = path.resolve(root);
+    if (previous?.appRoot && previous.appRoot !== self && previous.appPatchHash !== appPatchHash) {
+      throw new Error(`${name} in ${packageRoot} carries the app patch from ${previous.appRoot}, not ${self}'s. App roots that share one install need one patch set: keep the patch at the shared root and give every app the same file, or reinstall ${name}.`);
+    }
+    return own && (previous?.appPatchHash === appPatchHash && previous.appRoot || self);
+  };
   const layered = new Set();
   const queue = [appRequire, createRequire(sparkFile)].map(req => ({ req, optionalOnly: false }));
   if (hasCamera || optionalBackends.some(name => dependencies[name])) queue.push(...installed.map(pkg => ({ req: createRequire(path.join(pkg.root, "package.json")), optionalOnly: true })));
@@ -197,6 +205,7 @@ function prepareNativePatches(root, installed = []) {
       }
       const bytes = fs.readFileSync(path.join(patchesRoot, pin.patch));
       const own = appPatch(name, manifest.version);
+      const ownRoot = appRoot(name, packageRoot, manifest, own);
       const enabled = app.spark?.patches?.[name] !== false;
       if (!enabled) warnOnce(`Spark's ${name} patch is disabled by spark.patches in package.json; desktop support for ${name} isn't guaranteed.`);
       if (own?.thirdParty) warnOnce(`Spark applies its ${name} patch first, then ${own.file}.`);
@@ -211,7 +220,7 @@ function prepareNativePatches(root, installed = []) {
           manifest.spark.requires = pin.requires ?? [];
         }
         manifest.spark.dependencyPatch = { schema: 1, version: pin.version, patchHash: enabled ? hash(bytes) : undefined,
-          appPatchHash: own && hash(own.bytes), upstreamIntegrity: pin.integrity };
+          appPatchHash: own && hash(own.bytes), appRoot: ownRoot, upstreamIntegrity: pin.integrity };
       });
     }
   }
@@ -225,11 +234,12 @@ function prepareNativePatches(root, installed = []) {
       warnOnce(`${own.file} patches ${name}, which isn't installed.`);
       continue;
     }
-    const { version } = readManifest(file);
+    const manifest = readManifest(file), { version } = manifest, packageRoot = fs.realpathSync(path.dirname(file));
     appPatch(name, version);
-    layerPatches(fs.realpathSync(path.dirname(file)), name, [undefined,
+    const ownRoot = appRoot(name, packageRoot, manifest, own);
+    layerPatches(packageRoot, name, [undefined,
       { text: own.bytes.toString("utf8"), apply: true, error: relative => `Cannot apply ${own.file} to ${relative}. Reinstall dependencies or redo it with spark patch ${name}.` }]);
-    stamp(file, installed, manifest => { manifest.spark.dependencyPatch = { schema: 1, version, appPatchHash: hash(own.bytes) }; });
+    stamp(file, installed, manifest => { manifest.spark.dependencyPatch = { schema: 1, version, appPatchHash: hash(own.bytes), appRoot: ownRoot }; });
   }
   for (const name of active) {
     if (!packages[name] && !pins[name].optional) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);

@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
@@ -75,7 +75,7 @@ test("app patches on libraries Spark doesn't patch apply alone", () => {
   expect(podspec(root, "plain-lib")).toBe(upstream.replace("two", "TWO"));
   expect(podspec(root, "native-lib")).toBe(sparkPatched);
   expect(JSON.parse(readFileSync(path.join(root, "node_modules/plain-lib/package.json"), "utf8")).spark)
-    .toEqual({ dependencyPatch: { schema: 1, version: "1.0.0", appPatchHash: hash(own) } });
+    .toEqual({ dependencyPatch: { schema: 1, version: "1.0.0", appPatchHash: hash(own), appRoot: root } });
   prepareNativePatches(root);
   expect(podspec(root, "plain-lib")).toBe(upstream.replace("two", "TWO"));
 });
@@ -91,7 +91,7 @@ test("spark.patches opt-out removes Spark's layer, keeps the app's, and warns", 
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   prepareNativePatches(root);
   expect(podspec(root, "native-lib")).toBe(upstream.replace("seven", "SEVEN"));
-  expect(receipt(root, "native-lib")).toEqual({ schema: 1, version: "1.0.0", appPatchHash: hash(own), upstreamIntegrity: "sha512-fixture" });
+  expect(receipt(root, "native-lib")).toEqual({ schema: 1, version: "1.0.0", appPatchHash: hash(own), appRoot: root, upstreamIntegrity: "sha512-fixture" });
   expect(warn).toHaveBeenCalledWith("Spark's native-lib patch is disabled by spark.patches in package.json; desktop support for native-lib isn't guaranteed.");
   expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
 });
@@ -194,4 +194,23 @@ test("spark patch finds the patches owner above cwd and can write the patch else
   expect(existsSync(path.join(root, "patches/plain-lib@1.0.0.patch"))).toBe(false);
   // The install follows the patches it reads, not ones saved elsewhere.
   expect(podspec(root, "plain-lib")).toBe(upstream);
+});
+
+test("app roots sharing an install must carry the same app patch", () => {
+  const root = fixture();
+  const own = diff(sparkPatched, both);
+  writeFileSync(path.join(root, "patches/native-lib@1.0.0.patch"), own);
+  prepareNativePatches(root);
+  const other = path.join(root, "apps/other");
+  mkdirSync(path.join(other, "patches"), { recursive: true });
+  writeFileSync(path.join(other, "package.json"), readFileSync(path.join(root, "package.json")));
+  writeFileSync(path.join(other, "patches/native-lib@1.0.0.patch"), own);
+  prepareNativePatches(other);
+  expect(receipt(root, "native-lib")).toMatchObject({ appPatchHash: hash(own), appRoot: root });
+  for (const patch of [diff(sparkPatched, sparkPatched.replace("two", "TWO")), undefined]) {
+    if (patch) writeFileSync(path.join(other, "patches/native-lib@1.0.0.patch"), patch);
+    else rmSync(path.join(other, "patches/native-lib@1.0.0.patch"));
+    expect(() => prepareNativePatches(other)).toThrow(`native-lib in ${realpathSync(path.join(root, "node_modules/native-lib"))} carries the app patch from ${root}, not ${other}'s. App roots that share one install need one patch set: keep the patch at the shared root and give every app the same file, or reinstall native-lib.`);
+    expect(podspec(root, "native-lib")).toBe(both);
+  }
 });
