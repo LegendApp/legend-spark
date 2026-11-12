@@ -68,21 +68,26 @@ function withoutReceipt(text) {
   return JSON.stringify(manifest, null, 2) + "\n";
 }
 
-// Layers are [Spark's patch, the app's patch], each { text, apply, error }. A file may hold both layers,
-// Spark's alone, the app's alone (installed by a package manager) or neither: undo what it holds, then
-// apply the enabled layers. Every file is verified before any is written.
+// Layers are [Spark's patch, the app's patch], each { text, applied, apply, error }, where applied is the
+// layer's text the package may hold when it differs from text. A file may hold both layers, Spark's alone,
+// the app's alone (installed by a package manager) or neither: undo what it holds, then apply the enabled
+// layers. Every file is verified before any is written.
 function layerPatches(packageRoot, name, layers) {
   const { parsePatch, applyPatch, reversePatch } = require("diff");
   const files = new Map();
-  layers.forEach((layer, index) => {
-    for (const patch of layer ? parsePatch(layer.text) : []) {
+  const add = (text, index, kind) => {
+    for (const patch of text ? parsePatch(text) : []) {
       let relative = patch.newFileName.replace(/^b\//, "");
       if (relative.startsWith(`node_modules/${name}/`)) relative = relative.slice(`node_modules/${name}/`.length);
       const target = path.resolve(packageRoot, relative);
       if (!target.startsWith(packageRoot + path.sep) || patch.newFileName === "/dev/null") throw new Error(`Invalid native patch target: ${relative}`);
-      if (!files.has(relative)) files.set(relative, { target, patches: [] });
-      files.get(relative).patches[index] = patch;
+      if (!files.has(relative)) files.set(relative, { target, held: [], patches: [] });
+      files.get(relative)[kind][index] = patch;
     }
+  };
+  layers.forEach((layer, index) => {
+    add(layer?.applied ?? layer?.text, index, "held");
+    if (layer?.apply) add(layer.text, index, "patches");
   });
   const created = patch => patch?.oldFileName === "/dev/null";
   const undo = (text, patch) => {
@@ -91,17 +96,17 @@ function layerPatches(packageRoot, name, layers) {
     return created(patch) && result !== "" ? false : result;
   };
   const writes = [];
-  for (const [relative, { target, patches }] of files) {
+  for (const [relative, { target, held, patches }] of files) {
     let current = fs.existsSync(target) ? fs.readFileSync(target, "utf8") : "";
     if (relative === "package.json") current = withoutReceipt(current);
-    let next = [[0, 1], [0], [1]].map(state => state.reduceRight((text, index) => undo(text, patches[index]), current))
+    let next = [[0, 1], [0], [1]].map(state => state.reduceRight((text, index) => undo(text, held[index]), current))
       .find(text => text !== false) ?? current;
     layers.forEach((layer, index) => {
-      if (!layer?.apply || !patches[index]) return;
+      if (!patches[index]) return;
       next = created(patches[index]) && next !== "" ? false : applyPatch(next, patches[index]);
       if (next === false) throw new Error(layer.error(relative));
     });
-    if (next !== current) writes.push([target, next === "" && patches.some(created) ? null : next]);
+    if (next !== current) writes.push([target, next === "" && [...held, ...patches].some(created) ? null : next]);
   }
   // Rename rather than mutate package-manager cache hardlinks.
   for (const [target, next] of writes) {
@@ -158,12 +163,28 @@ function prepareNativePatches(root, installed = []) {
     (hasCamera && name === "react-native-nitro-modules") ||
     (dependencies["react-native-vision-camera"] && name === "react-native-nitro-image"));
   const ownPatches = app.name === "@legendapp/spark" ? {} : appPatches(root, app);
-  if (!active.length && !Object.keys(ownPatches).length) return {};
   const appPatch = (name, version) => {
     const own = ownPatches[name];
     if (own?.error) throw new Error(own.error);
     if (own?.version && own.version !== version) throw new Error(`${own.file} patches ${name}@${own.version}, but ${version} is installed. Redo it with spark patch ${name}.`);
     return own;
+  };
+  // Records which app root's patch an install carries; app roots sharing one install must agree on it.
+  const appRoot = (name, packageRoot, manifest, own) => {
+    const previous = manifest.spark?.dependencyPatch, appPatchHash = own && hash(own.bytes), self = path.resolve(root);
+    if (previous?.appRoot && previous.appRoot !== self && previous.appPatchHash !== appPatchHash) {
+      throw new Error(`${name} in ${packageRoot} carries the app patch from ${previous.appRoot}, not ${self}'s. App roots that share one install need one patch set: keep the patch at the shared root and give every app the same file, or reinstall ${name}.`);
+    }
+    return own && (previous?.appPatchHash === appPatchHash && previous.appRoot || self);
+  };
+  // The package keeps the app patch it carries, so an edited or removed patch is undone in place.
+  const layerApp = (packageRoot, name, spark, own, error) => {
+    const kept = path.join(packageRoot, ".spark-app.patch");
+    const applied = fs.existsSync(kept) ? fs.readFileSync(kept, "utf8") : undefined;
+    const text = own ? own.bytes.toString("utf8") : applied;
+    layerPatches(packageRoot, name, [spark, text !== undefined && { text, applied, apply: !!own, error }]);
+    if (!own) fs.rmSync(kept, { force: true });
+    else if (applied !== text) fs.writeFileSync(kept, own.bytes);
   };
   const layered = new Set();
   const queue = [appRequire, createRequire(sparkFile)].map(req => ({ req, optionalOnly: false }));
@@ -197,13 +218,13 @@ function prepareNativePatches(root, installed = []) {
       }
       const bytes = fs.readFileSync(path.join(patchesRoot, pin.patch));
       const own = appPatch(name, manifest.version);
+      const ownRoot = appRoot(name, packageRoot, manifest, own);
       const enabled = app.spark?.patches?.[name] !== false;
       if (!enabled) warnOnce(`Spark's ${name} patch is disabled by spark.patches in package.json; desktop support for ${name} isn't guaranteed.`);
       if (own?.thirdParty) warnOnce(`Spark applies its ${name} patch first, then ${own.file}.`);
-      layerPatches(packageRoot, name, [
+      layerApp(packageRoot, name,
         { text: bytes.toString("utf8"), apply: enabled, error: relative => `Cannot apply Spark's ${name} patch to ${relative}. Reinstall dependencies before retrying.` },
-        own && { text: own.bytes.toString("utf8"), apply: true, error: relative => `Cannot apply ${own.file} to ${relative}${enabled ? " on top of Spark's patch" : ""}. Redo it with spark patch ${name}.` },
-      ]);
+        own, relative => `Cannot apply ${own.file} to ${relative}${enabled ? " on top of Spark's patch" : ""}. Redo it with spark patch ${name}.`);
       layered.add(name);
       stamp(file, installed, manifest => {
         if (name !== "react-native-nitro-modules" && !pin.optional) {
@@ -211,7 +232,7 @@ function prepareNativePatches(root, installed = []) {
           manifest.spark.requires = pin.requires ?? [];
         }
         manifest.spark.dependencyPatch = { schema: 1, version: pin.version, patchHash: enabled ? hash(bytes) : undefined,
-          appPatchHash: own && hash(own.bytes), upstreamIntegrity: pin.integrity };
+          appPatchHash: own && hash(own.bytes), appRoot: ownRoot, upstreamIntegrity: pin.integrity };
       });
     }
   }
@@ -225,11 +246,25 @@ function prepareNativePatches(root, installed = []) {
       warnOnce(`${own.file} patches ${name}, which isn't installed.`);
       continue;
     }
-    const { version } = readManifest(file);
+    const manifest = readManifest(file), { version } = manifest, packageRoot = fs.realpathSync(path.dirname(file));
     appPatch(name, version);
-    layerPatches(fs.realpathSync(path.dirname(file)), name, [undefined,
-      { text: own.bytes.toString("utf8"), apply: true, error: relative => `Cannot apply ${own.file} to ${relative}. Reinstall dependencies or redo it with spark patch ${name}.` }]);
-    stamp(file, installed, manifest => { manifest.spark.dependencyPatch = { schema: 1, version, appPatchHash: hash(own.bytes) }; });
+    const ownRoot = appRoot(name, packageRoot, manifest, own);
+    layerApp(packageRoot, name, undefined, own, relative => `Cannot apply ${own.file} to ${relative}. Reinstall dependencies or redo it with spark patch ${name}.`);
+    stamp(file, installed, manifest => { manifest.spark.dependencyPatch = { schema: 1, version, appPatchHash: hash(own.bytes), appRoot: ownRoot }; });
+  }
+  // Undo app patches the app removed from libraries Spark doesn't patch.
+  for (const name of Object.keys({ ...app.dependencies, ...app.devDependencies })) {
+    if (ownPatches[name] || layered.has(name)) continue;
+    let file;
+    try { file = resolveManifest(appRequire, name); } catch { continue; }
+    if (!fs.existsSync(path.join(path.dirname(file), ".spark-app.patch"))) continue;
+    const packageRoot = fs.realpathSync(path.dirname(file));
+    appRoot(name, packageRoot, readManifest(file));
+    layerApp(packageRoot, name);
+    stamp(file, installed, manifest => {
+      delete manifest.spark.dependencyPatch;
+      if (!Object.keys(manifest.spark).length) delete manifest.spark;
+    });
   }
   for (const name of active) {
     if (!packages[name] && !pins[name].optional) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);

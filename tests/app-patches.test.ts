@@ -1,13 +1,13 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { prepareNativePatches } from "../packages/config-plugin/native-patches.cjs";
 import { validateAppPatches } from "../packages/cli/src/native-patch-preflight.ts";
 import { installedPackages } from "../packages/cli/src/project.ts";
-import { patchLibrary } from "../packages/cli/src/patch.ts";
+import { patchLibrary, patchRoot } from "../packages/cli/src/patch.ts";
 
 const upstream = "one\ntwo\nthree\nfour\nfive\nsix\nseven\n";
 const sparkPatched = upstream.replace("one", "ONE");
@@ -75,7 +75,7 @@ test("app patches on libraries Spark doesn't patch apply alone", () => {
   expect(podspec(root, "plain-lib")).toBe(upstream.replace("two", "TWO"));
   expect(podspec(root, "native-lib")).toBe(sparkPatched);
   expect(JSON.parse(readFileSync(path.join(root, "node_modules/plain-lib/package.json"), "utf8")).spark)
-    .toEqual({ dependencyPatch: { schema: 1, version: "1.0.0", appPatchHash: hash(own) } });
+    .toEqual({ dependencyPatch: { schema: 1, version: "1.0.0", appPatchHash: hash(own), appRoot: root } });
   prepareNativePatches(root);
   expect(podspec(root, "plain-lib")).toBe(upstream.replace("two", "TWO"));
 });
@@ -91,7 +91,7 @@ test("spark.patches opt-out removes Spark's layer, keeps the app's, and warns", 
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   prepareNativePatches(root);
   expect(podspec(root, "native-lib")).toBe(upstream.replace("seven", "SEVEN"));
-  expect(receipt(root, "native-lib")).toEqual({ schema: 1, version: "1.0.0", appPatchHash: hash(own), upstreamIntegrity: "sha512-fixture" });
+  expect(receipt(root, "native-lib")).toEqual({ schema: 1, version: "1.0.0", appPatchHash: hash(own), appRoot: root, upstreamIntegrity: "sha512-fixture" });
   expect(warn).toHaveBeenCalledWith("Spark's native-lib patch is disabled by spark.patches in package.json; desktop support for native-lib isn't guaranteed.");
   expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
 });
@@ -176,4 +176,60 @@ test("Spark's own repository doesn't read its patches folder as app patches", ()
   prepareNativePatches(root);
   expect(podspec(root, "native-lib")).toBe(sparkPatched);
   expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
+});
+
+test("spark patch finds the patches owner above cwd and can write the patch elsewhere", () => {
+  const root = fixture();
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  mkdirSync(path.join(root, "apps/plain/src"), { recursive: true });
+  expect(patchRoot(path.join(root, "apps/plain/src"))).toBe(root);
+  // A Spark app keeps its own patches even before it has a patches/ folder.
+  writeFileSync(path.join(root, "apps/plain/app.json"), "{}");
+  writeFileSync(path.join(root, "apps/plain/package.json"), "{}");
+  expect(patchRoot(path.join(root, "apps/plain/src"))).toBe(path.join(root, "apps/plain"));
+  const out = path.join(root, "shared");
+  const edit = patchLibrary(root, "plain-lib", { out });
+  writeFileSync(path.join(edit, "Native.podspec"), both);
+  expect(patchLibrary(root, "plain-lib", { out, done: true })).toBe(path.join(out, "patches/plain-lib@1.0.0.patch"));
+  expect(existsSync(path.join(root, "patches/plain-lib@1.0.0.patch"))).toBe(false);
+  // The install follows the patches it reads, not ones saved elsewhere.
+  expect(podspec(root, "plain-lib")).toBe(upstream);
+});
+
+test("app roots sharing an install must carry the same app patch", () => {
+  const root = fixture();
+  const own = diff(sparkPatched, both);
+  writeFileSync(path.join(root, "patches/native-lib@1.0.0.patch"), own);
+  prepareNativePatches(root);
+  const other = path.join(root, "apps/other");
+  mkdirSync(path.join(other, "patches"), { recursive: true });
+  writeFileSync(path.join(other, "package.json"), readFileSync(path.join(root, "package.json")));
+  writeFileSync(path.join(other, "patches/native-lib@1.0.0.patch"), own);
+  prepareNativePatches(other);
+  expect(receipt(root, "native-lib")).toMatchObject({ appPatchHash: hash(own), appRoot: root });
+  for (const patch of [diff(sparkPatched, sparkPatched.replace("two", "TWO")), undefined]) {
+    if (patch) writeFileSync(path.join(other, "patches/native-lib@1.0.0.patch"), patch);
+    else rmSync(path.join(other, "patches/native-lib@1.0.0.patch"));
+    expect(() => prepareNativePatches(other)).toThrow(`native-lib in ${realpathSync(path.join(root, "node_modules/native-lib"))} carries the app patch from ${root}, not ${other}'s. App roots that share one install need one patch set: keep the patch at the shared root and give every app the same file, or reinstall native-lib.`);
+    expect(podspec(root, "native-lib")).toBe(both);
+  }
+});
+
+test("editing or removing an app patch undoes the old layer without a reinstall", () => {
+  const root = fixture();
+  for (const [name, base] of [["native-lib", sparkPatched], ["plain-lib", upstream]]) {
+    const file = path.join(root, `patches/${name}@1.0.0.patch`);
+    writeFileSync(file, diff(base, base.replace("seven", "SEVEN")));
+    prepareNativePatches(root);
+    writeFileSync(file, diff(base, base.replace("seven", "Seven").replace("two", "TWO")));
+    prepareNativePatches(root);
+    expect(podspec(root, name)).toBe(base.replace("seven", "Seven").replace("two", "TWO"));
+    expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
+    rmSync(file);
+    prepareNativePatches(root);
+    expect(podspec(root, name)).toBe(base);
+    expect(receipt(root, name)?.appPatchHash).toBeUndefined();
+    expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
+  }
+  expect(JSON.parse(readFileSync(path.join(root, "node_modules/plain-lib/package.json"), "utf8")).spark).toBeUndefined();
 });

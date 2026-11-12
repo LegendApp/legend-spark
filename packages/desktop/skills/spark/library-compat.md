@@ -16,10 +16,12 @@ Export: `@legendapp/spark/contracts` (`SparkError`, `Availability`, `Subscriptio
 Fix bugs every Spark app would hit in Spark's own patch (`patches/` in the Spark repository), not in one app. For an app-specific change:
 
 1. Run `spark patch <lib>`. It prints a temporary copy of the installed library with Spark's patch applied.
-2. Edit that copy, then run `spark patch <lib> --done`. It saves `patches/<lib>@<version>.patch` (scoped names use `+` for `/`) against the Spark-patched library and updates `node_modules`.
+2. Edit that copy, then run `spark patch <lib> --done`. It saves `patches/<lib>@<version>.patch` (scoped names use `+` for `/`) against the Spark-patched library and updates `node_modules`. From a monorepo root or a subfolder, it uses the nearest Spark app or folder with `patches/`; `--root <dir>` sets where the library is installed and `--out <dir>` where `patches/` goes.
 3. Commit the patch file. Native preparation applies Spark's patch first, then the app's; this works for any library, Spark-patched or not.
 
-App patches are pinned to the installed version. When Spark moves a pin, native preparation stops and names the patch to redo with `spark patch <lib>`; nothing is half-applied. After deleting or hand-editing a patch file, reinstall the library.
+App roots that share one `node_modules` (monorepo workspaces) need the same app patches: native preparation stops when another root's patch for that library differs. Keep the patch at the shared root and copy it to every app.
+
+App patches are pinned to the installed version. When Spark moves a pin, native preparation stops and names the patch to redo with `spark patch <lib>`; nothing is half-applied. Editing or deleting a patch file needs no reinstall: the library keeps the app patch it carries in `.spark-app.patch`, and native preparation undoes it before applying the current one. If preparation still can't apply a patch (the library was patched before Spark kept that file, or the patch targets a library that isn't a direct dependency), delete `node_modules/<lib>` and reinstall.
 
 patch-package (`patches/<lib>+<version>.patch`) and Bun/pnpm `patchedDependencies` keep working. For a library Spark also patches, Spark treats that patch as the app layer and warns; prefer `spark patch` there, because package-manager patches are made against the unpatched library.
 
