@@ -223,6 +223,12 @@ test("macOS native chrome receives common appearance and background on creation 
   expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ backgroundColor: "#f5f6f8" });
   await windows.setWindowOptions("editor", { macos: { titleBar: { contentLayout: "contentLayoutGuide" } } });
   expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ contentLayoutMode: "contentLayoutGuide" });
+  await windows.setWindowOptions("editor", { macos: { titleBar: { material: "titlebar", tintColor: "#ffffffcc" } } });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ titlebarMaterial: "titlebar", titlebarMaterialTintColor: { light: "#ffffffcc", dark: "#ffffffcc" } });
+  await windows.setWindowOptions("editor", { macos: { titleBar: { tintColor: "#ffffffcc" } } });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ titlebarMaterial: "titlebar", titlebarMaterialTintColor: { light: "#ffffffcc", dark: "#ffffffcc" } });
+  await windows.setWindowOptions("editor", { macos: { titleBar: { material: "titlebar", tintColor: { light: "#ffffffcc", dark: "#1a1b1ccc" } } } });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ titlebarMaterial: "titlebar", titlebarMaterialTintColor: { light: "#ffffffcc", dark: "#1a1b1ccc" } });
   await windows.openWindow({ id: "plain", component: "Editor", appearance: "light", backgroundColor: "#f5f6f8" });
   expect(JSON.parse(managed.openWindow.mock.calls.at(-1)![0]).windowStyle).toEqual({ appearance: "light", backgroundColor: "#f5f6f8" });
   expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ appearance: "light", backgroundColor: "#f5f6f8" });

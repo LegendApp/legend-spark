@@ -70,6 +70,8 @@ AppKit features live in typed `macos` groups (`macos.titleBar`, `macos.toolbar`,
 
 Per-window appearance is a window option (`appearance: 'system' | 'light' | 'dark'`). Content that should show a native material through needs a transparent React background.
 
+`macos.titleBar.tintColor` (`'#RRGGBBAA'` or `{ light, dark }`) lays a color over the titlebar `material` and follows the window's effective appearance; alpha below `ff` keeps the blur showing through. Without `material` in the same call it uses `titlebar`; with `material: 'none'` it is rejected. `blendingMode` and `materialState` need a `material` other than `none` or `glass` (or a `tintColor`) in the same call, or validation throws.
+
 `/diagnostics` exposes `getStartupTiming()`; `finishWindowRestoration()` lives in `/app`.
 
 ## Platforms
