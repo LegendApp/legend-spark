@@ -42,7 +42,16 @@ Install native dependencies with the app's manager and use their documented impo
 
 `spark analyze` reports native production selection in `.spark/selection-report.json`. Only SDK modules are pruned automatically; unknown third-party native dependencies stay included. Use package names in `expo.extra.spark.include` for native-only requirements; custom native configuration can require a custom runtime even without extra modules.
 
-## Build and package
+## Prepare, build and package
+
+`spark prebuild --platform macos [--project <directory>]` generates the native
+macOS project and installs Pods using the development native selection. It shares
+build's lock, migration preflight, config plugins, cache recovery, and provenance.
+Missing/stale Pods are repaired even with a cached app; a second unchanged run
+skips generation and pod install. It runs no xcodebuild, app signing/packaging, or
+Metro, installs no JS dependencies, and changes no pins. Pod prepare commands can
+compile dependency artifacts. Build flags such as `--dev` and `--force` are rejected.
+Follow pending-migration guidance; never stamp `.spark/version` to bypass it.
 
 `spark build` creates a standalone macOS `.app` with bundled JavaScript; `spark open` opens the last standalone build. `spark build --dev` creates the custom Debug runtime. `spark build --preview` uses production module selection in Debug.
 
@@ -55,7 +64,7 @@ Native macOS builds need full Xcode (license/first-launch setup and selected dev
 - `catalog:` and `workspace:` baseline specs are left to their owner; validate their resolved versions yourself. Only the app manifest is checked, not workspace-root overrides. Workspace-managed Spark versions need updating at their owner.
 - `spark upgrade --dry-run` previews the newest release on the installed version's channel (`next` or `latest`), target pins, install command, and migrations without modifying the app. `spark upgrade` updates Spark and its release inputs, runs the detected manager's install, then applies versioned migrations and refreshes the AI pointers. Both support `--project <directory>`.
 - `spark patch <lib>` then `spark patch <lib> --done` saves an app patch layered on Spark's; see [library-compat.md](library-compat.md#patch-a-library).
-- `.spark/version` records successful migrations. `dev`, `build`, and `doctor` apply safe idempotent migrations after a manual version change; unsafe pending changes or downgrades stop with `run spark upgrade`. Lifecycle scripts are not required for this check.
+- `.spark/version` records successful migrations. `dev`, `build`, `prebuild`, and `doctor` apply safe idempotent migrations after a manual version change; unsafe pending changes or downgrades stop with `run spark upgrade`. Lifecycle scripts are not required for this check.
 - Keep the generated Spark sections in `AGENTS.md` / `CLAUDE.md` and the `.claude/skills/spark/SKILL.md` pointer thin. Instructions live in this installed package, so updating Spark updates the skill.
 
 ## Upgrade an app

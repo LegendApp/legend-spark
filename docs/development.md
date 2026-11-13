@@ -47,12 +47,32 @@ report each phase's log path and elapsed time. Each mode's build receipt records
 the native contents, configuration, and package locations used to build its app.
 An unchanged cached dev app can be reused after a release build, even when that
 build changed the shared generated project. Older receipts rebuild once to record
-this provenance. When compilation is needed, missing CocoaPods XCFramework inputs
-trigger a pod reinstall and must be restored before Xcode starts.
+this provenance. Missing or stale CocoaPods state and missing XCFramework inputs
+trigger a pod reinstall before cached app reuse or compilation.
 Codegen and podspec edits refresh Pods without regenerating the native project.
 Configuration, host, package metadata, and package location changes regenerate
 the project while preserving installed Pods, the lockfile, and Hermes downloads.
 Xcode's separate DerivedData cache is retained in both cases.
+
+To generate a macOS native project and install CocoaPods dependencies without
+building an app, run the installed CLI:
+
+```sh
+npx --no-install spark prebuild --platform macos --project /path/to/app
+```
+
+Omit `--project` inside the app. This uses the development native module selection
+and the same preparation, project lock, migration preflight, config plugins, cache
+recovery, and metadata restoration as `spark build --dev`. It repairs missing or
+stale Pods even if a cached app exists. Repeating it skips generation and pod
+install when preparation is current. Successful preparation is recorded in
+`.spark/native-preparation.json`; failed preparation does not advance that receipt.
+It runs no xcodebuild, app packaging, signing, or Metro, and performs no JavaScript
+dependency install or pin upgrade. CocoaPods may download dependencies and compile
+artifacts required by pod prepare commands. Only `--platform`, `--project`, and
+`--help` are accepted; build modes and `--force` are rejected. Pending migrations
+stop with the same actionable guidance as build; follow that guidance rather than
+writing `.spark/version` yourself. Windows/mobile prebuild behavior is unchanged.
 
 macOS releases target ARM64 and enable dead-code stripping, ThinLTO, and `-Oz`
 for the app and source-built Pods. Release postprocessing strips distribution

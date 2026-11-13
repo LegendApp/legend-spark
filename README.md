@@ -130,6 +130,11 @@ This produces a local ad-hoc-signed `.app` with embedded JavaScript and prints i
 npx --no-install spark open
 ```
 
+Use `spark prebuild --platform macos [--project <directory>]` to generate the native
+project and install or repair Pods without xcodebuild or Metro. Repeated unchanged
+runs skip generation and pod install. See [native preparation](docs/development.md)
+for migration preflight, caching, and supported options.
+
 To prepare a Developer ID-signed, notarized distribution ZIP:
 
 ```sh

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { build } from "../packages/cli/src/build.ts";
+import { build, prebuild } from "../packages/cli/src/build.ts";
 import { readJson, writeJson } from "../packages/cli/src/project.ts";
 import { preserveMacOSPods } from "../packages/cli/src/native-preparation.ts";
 
@@ -38,7 +38,9 @@ beforeEach(() => {
       write(path.join(root, "macos/Fixture.xcodeproj/project.pbxproj"), "fixture project");
       write(path.join(root, "macos/Fixture/Info.plist"), JSON.stringify({ SparkProjectIdentifier: "test.fixture" }));
     } else if (argv[0] === "pod") {
-      write(path.join(root, "macos/Pods/Manifest.lock"), "fixture");
+      const lock = path.join(root, "macos/Podfile.lock");
+      if (!existsSync(lock)) write(lock, "fixture");
+      write(path.join(root, "macos/Pods/Manifest.lock"), readFileSync(lock, "utf8"));
       write(path.join(root, "macos/Pods/Target Support Files/Fixture/Fixture-xcframeworks.sh"), 'install_xcframework "${PODS_ROOT}/../../node_modules/fixture/Fixture.xcframework" "Fixture" "framework" "macos-arm64_x86_64"\n');
       if (commands.restore) {
         write(path.join(framework(), "Info.plist"), "fixture");
@@ -191,7 +193,7 @@ test("dev -> release -> dev reuses the dev app despite release preparation and m
   rmSync(framework(), { recursive: true });
   expect(await build(root, "dev")).toEqual(dev);
   expect(commandCount("xcodebuild")).toBe(2);
-  expect(commandCount("pod")).toBe(2);
+  expect(commandCount("pod")).toBe(3);
 });
 
 test("native edits compile incrementally, while configuration and package moves refresh preparation", async () => {
@@ -395,4 +397,103 @@ test("a missing macOS slice is restored even when the XCFramework container surv
   expect(commandCount("pod")).toBe(2);
   expect(commandCount("prebuild")).toBe(1);
   expect(commandCount("xcodebuild")).toBe(2);
+});
+
+test("macOS prebuild generates and installs without building, then reuses preparation for build", async () => {
+  await prebuild(root);
+  expect(commandCount("prebuild")).toBe(1);
+  expect(commandCount("pod")).toBe(1);
+  expect(commandCount("xcodebuild")).toBe(0);
+  expect(commandCount("codesign")).toBe(0);
+  expect(commandCount("export:embed")).toBe(0);
+  expect(existsSync(path.join(root, ".spark/native-preparation.json"))).toBe(true);
+  expect(existsSync(path.join(root, ".spark/dev-build.json"))).toBe(false);
+  await prebuild(root);
+  expect(commandCount("prebuild")).toBe(1);
+  expect(commandCount("pod")).toBe(1);
+  await build(root, "dev");
+  expect(commandCount("prebuild")).toBe(1);
+  expect(commandCount("pod")).toBe(1);
+  expect(commandCount("xcodebuild")).toBe(1);
+});
+
+test.each(["missing", "stale", "framework"])("prebuild repairs %s Pods despite a cached app", async state => {
+  const app = await build(root, "dev");
+  if (state === "missing") rmSync(path.join(root, "macos/Pods"), { recursive: true });
+  if (state === "stale") write(path.join(root, "macos/Pods/Manifest.lock"), "outdated");
+  if (state === "framework") rmSync(framework(), { recursive: true });
+  await prebuild(root);
+  await prebuild(root);
+  expect(commandCount("pod")).toBe(2);
+  expect(commandCount("prebuild")).toBe(1);
+  expect(commandCount("xcodebuild")).toBe(1);
+  expect(existsSync(framework())).toBe(true);
+  expect(await build(root, "dev")).toEqual(app);
+  expect(commandCount("xcodebuild")).toBe(1);
+});
+
+test("a cached build also repairs missing Pods before returning its app", async () => {
+  const app = await build(root, "dev");
+  rmSync(path.join(root, "macos/Pods"), { recursive: true });
+  expect(await build(root, "dev")).toEqual(app);
+  expect(commandCount("pod")).toBe(2);
+  expect(commandCount("xcodebuild")).toBe(1);
+});
+
+test("failed prebuild pod install invalidates provenance and releases the shared lock for retry", async () => {
+  await prebuild(root);
+  write(path.join(root, "macos/Pods/Manifest.lock"), "stale");
+  const run = commands.run.getMockImplementation()!;
+  commands.run.mockImplementation(async (...args) => {
+    if (args[1][0] === "pod") throw new Error("pod install failed");
+    return run(...args);
+  });
+  await expect(prebuild(root)).rejects.toThrow("pod install failed");
+  expect(existsSync(path.join(root, ".spark/native-preparation.json"))).toBe(false);
+  expect(existsSync(path.join(root, ".spark/build.lock"))).toBe(false);
+  expect(commandCount("xcodebuild")).toBe(0);
+  commands.run.mockImplementation(run);
+  await prebuild(root);
+  expect(existsSync(path.join(root, ".spark/native-preparation.json"))).toBe(true);
+});
+
+test("prebuild respects an active build lock", async () => {
+  write(path.join(root, ".spark/build.lock"), String(process.pid));
+  await expect(prebuild(root)).rejects.toThrow("Another build or prebuild owns this project");
+  expect(commands.run).not.toHaveBeenCalled();
+  expect(readFileSync(path.join(root, ".spark/build.lock"), "utf8")).toBe(String(process.pid));
+});
+
+test("prebuild rejects missing frameworks and recovers interrupted Pods before retrying", async () => {
+  const cache = path.join(root, ".spark/prebuild-cache/macos");
+  write(path.join(cache, "Pods/archive"), "keep archive");
+  write(path.join(cache, "Podfile.lock"), "locked");
+  commands.restore = false;
+  await expect(prebuild(root)).rejects.toThrow("Native frameworks are missing after pod install");
+  expect(readFileSync(path.join(root, "macos/Pods/archive"), "utf8")).toBe("keep archive");
+  expect(existsSync(cache)).toBe(false);
+  expect(existsSync(path.join(root, ".spark/native-preparation.json"))).toBe(false);
+  expect(existsSync(path.join(root, ".spark/build.lock"))).toBe(false);
+  expect(commandCount("xcodebuild")).toBe(0);
+  commands.restore = true;
+  await prebuild(root);
+  expect(existsSync(path.join(root, ".spark/native-preparation.json"))).toBe(true);
+});
+
+test("preparation receipts include sources generated by pod prepare commands", async () => {
+  const run = commands.run.getMockImplementation()!;
+  commands.run.mockImplementation(async (...args) => {
+    const result = await run(...args);
+    if (args[1][0] === "pod") write(path.join(moduleRoot, "cpp/generated/header.h"), "pod-generated header");
+    return result;
+  });
+  await prebuild(root);
+  const receipt = readFileSync(path.join(root, ".spark/native-preparation.json"), "utf8");
+  await prebuild(root);
+  expect(readFileSync(path.join(root, ".spark/native-preparation.json"), "utf8")).toBe(receipt);
+  expect(commandCount("pod")).toBe(1);
+  await build(root, "dev");
+  expect(commandCount("pod")).toBe(1);
+  expect(commandCount("prebuild")).toBe(1);
+  expect(commandCount("xcodebuild")).toBe(1);
 });

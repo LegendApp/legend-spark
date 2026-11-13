@@ -100,7 +100,7 @@ export function binary(root: string, name: string) {
   if (!entry) throw new Error(`${name} does not expose its CLI entry point`);
   return path.resolve(path.dirname(manifest), entry);
 }
-export async function doctor(root: string) {
+export async function doctor(root: string, { nativeBuild = true } = {}) {
   if (process.platform === "win32") {
     for (const tool of ["node", "pwsh.exe", "dotnet.exe"]) if (!which(tool)) throw new Error(`Missing ${tool}; see docs/windows-slice.md.`);
     await checkExpoDesktopNode(root);
@@ -111,13 +111,13 @@ export async function doctor(root: string) {
   }
   if (process.platform !== "darwin")
     throw new Error("Native macOS builds require macOS.");
-  for (const tool of ["node", "pod", "xcodebuild"])
+  for (const tool of ["node", "pod", ...(nativeBuild ? ["xcodebuild"] : [])])
     if (!which(tool))
       throw new Error(
         `Missing ${tool}. Install the macOS native prerequisites described in docs/development.md, then retry the build.`,
       );
   await checkExpoDesktopNode(root);
-  await run(root, ["xcodebuild", "-version"], { capture: true });
+  if (nativeBuild) await run(root, ["xcodebuild", "-version"], { capture: true });
   await run(root, ["xcrun", "--sdk", "macosx", "--show-sdk-path"], {
     capture: true,
   });
