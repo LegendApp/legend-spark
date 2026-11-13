@@ -1,10 +1,20 @@
 # Changelog
 
+## 0.0.4
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- Isolate macOS app-clone launch locks and Spark file/MMKV stores by bundle identifier, with ownership-checked migration of legacy namespaced data. Rebuild custom hosts; see the packaged upgrade guide (#541).
+- cli: Add `spark migrate` to preview and apply migrations at the app's installed Spark version without installing; `spark create`, template initialization and `spark add desktop` stamp `.spark/version`, and external generators can call `spark migrate --init` (#542).
+- cli: Add `spark prebuild --platform macos` to generate the macOS project and install or repair Pods without compiling the app (#543).
+- patches: Apps can layer their own `patches/<lib>@<version>.patch` on Spark's native patches; `spark patch <lib> [--done]` saves one, including from a monorepo root, and `spark.patches.<lib>: false` skips Spark's patch with a warning (#538, #539).
+- windows: Add `macos.titleBar.tintColor` (one color or a light/dark pair) over the titlebar material (#540) and a `showWindow` `activate` option that activates an inactive macOS app before focusing (#536).
+- docs: Add agent API reference skills (#537).
+
 ## 0.0.3
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
-- Isolate macOS app-clone launch locks and Spark file/MMKV stores by bundle identifier, with ownership-checked migration of legacy namespaced data. Rebuild custom hosts; see the packaged upgrade guide.
 - [Breaking] Move the default macOS `react-native-mmkv@4.3.2` store from `~/Documents/mmkv` to the app's namespaced Application Support folder. Existing data is not moved automatically; see UPGRADING.md before deploying.
 - Add version-pinned macOS integrations for desktop libraries, including MMKV, Unistyles, Quick Crypto, Nitro Fetch, Blur, Expo modules, image and date pickers, React Navigation and Expo Router. Keep app-owned dependencies and review platform limitations in `docs/external-libraries.md`; rebuild custom runtimes.
 - Fix native image sizing/backgrounds, optional dependency patch discovery, macOS codegen paths and macOS 14 pod targets; expand Kitchen Sink library and pointer checks.
