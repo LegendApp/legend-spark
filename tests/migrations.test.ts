@@ -115,7 +115,7 @@ test("invalid records, downgrades and a different installed CLI stop with upgrad
   expect(() => ensureProjectVersion(app("999.0.0"))).toThrow("app's installed CLI");
 });
 
-test.each(["dev", "build", "doctor"])("spark %s refuses downgraded project state before starting tools", async command => {
+test.each(["dev", "build", "prebuild", "doctor"])("spark %s refuses downgraded project state before starting tools", async command => {
   const root = app();
   stamp(root, "999.0.0");
   const child = spawnProcess([process.execPath, path.resolve("packages/cli/src/index.ts"), command, "--project", root], { stdout: "pipe", stderr: "pipe" });

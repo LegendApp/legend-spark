@@ -18,7 +18,7 @@ import { buildMode } from "./build-mode.ts";
 import { initializeUpdates } from "./updates.ts";
 import { packageApp } from "./package.ts";
 import { credentials } from "./credentials.ts";
-import { build, analyze } from "./build.ts";
+import { build, analyze, prebuild } from "./build.ts";
 import { launch } from "./dev.ts";
 import { doctor, run } from "./commands.ts";
 import { findFramework, findProject, sparkHome, creationManifest, packageManifest, registerRuntime } from "./local.ts";
@@ -78,7 +78,7 @@ async function main() {
   spark add desktop  Add desktop to an existing Expo app without replacing its entry point
   spark dev           Develop with Fast Refresh
   spark build         Build a standalone desktop app
-  spark prebuild      Generate a Windows/mobile native project
+  spark prebuild      Generate a native project (macOS also installs Pods; no app build)
   spark package       Sign and notarize a distribution archive
   spark doctor        Check app dependency pins and native tooling (exits 1 on issues)
   spark upgrade       Update Spark on its current release channel (--dry-run previews changes)
@@ -174,8 +174,8 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       break;
     }
     case "prebuild":
-      if (readConfig(project()).expo.platforms[0] !== "windows") throw new Error("For macOS, spark build --dev generates and builds the native project.");
-      await prepareWindows(project(), "dev");
+      if (readConfig(project()).expo.platforms[0] === "windows") await prepareWindows(project(), "dev");
+      else await prebuild(project());
       break;
     case "doctor": {
       let root: string | undefined;
