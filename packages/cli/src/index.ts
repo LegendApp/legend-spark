@@ -20,6 +20,7 @@ import { packageApp } from "./package.ts";
 import { credentials } from "./credentials.ts";
 import { build, analyze, prebuild } from "./build.ts";
 import { launch } from "./dev.ts";
+import { appPatchIssues } from "@legendapp/spark-desktop-config/native-patches.cjs";
 import { doctor, run } from "./commands.ts";
 import { findFramework, findProject, sparkHome, creationManifest, packageManifest, registerRuntime } from "./local.ts";
 import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
@@ -81,7 +82,7 @@ async function main() {
   spark build         Build a standalone desktop app
   spark prebuild      Generate a native project (macOS also installs Pods; no app build)
   spark package       Sign and notarize a distribution archive
-  spark doctor        Check app dependency pins and native tooling (exits 1 on issues)
+  spark doctor        Check dependency pins, app patches, and native tooling (exits 1 on issues)
   spark migrate       Apply installed-version migrations (--project <dir>, --dry-run; --init stamps a newly generated project)
   spark upgrade       Update Spark on its current release channel (--dry-run previews changes)
   spark patch <lib>   Copy a library with Spark's patch for editing; --done saves patches/<lib>@<version>.patch
@@ -201,6 +202,12 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
           process.exitCode = 1;
           pinIssues = true;
         }
+      }
+      const patchIssues = appPatchIssues(root ?? start);
+      if (patchIssues.length) {
+        console.error(`App patch issues:\n${patchIssues.map(issue => `- ${issue}`).join("\n")}`);
+        process.exitCode = 1;
+        break;
       }
       await doctor(root ?? start);
       console.log("Native toolchain available.");
