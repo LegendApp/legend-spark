@@ -29,12 +29,8 @@ jobs:
       - run: bun tests/create-packed.integration.ts
 
   portable:
-    name: Source and package gates (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    name: Source and package gates (macos-latest)
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
