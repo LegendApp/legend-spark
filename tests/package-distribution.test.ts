@@ -216,6 +216,18 @@ test("single Spark archive resolves public exports and preserves private native 
     }
     expect(req("@legendapp/spark/config").readConfig).toBeTypeOf("function");
     expect(req("@legendapp/spark/metro").withDesktop).toBeTypeOf("function");
+    const appManifest = path.join(app, "package.json"), originalApp = readFileSync(appManifest, "utf8");
+    const declared = JSON.parse(originalApp);
+    declared.dependencies["expo-clipboard"] = "55.0.17";
+    writeFileSync(appManifest, JSON.stringify(declared));
+    const metro = req("@legendapp/spark/metro").withDesktop({ projectRoot: app }, { runtimes: false });
+    const context = { originModulePath: path.join(app, "App.tsx"), resolveRequest: () => ({ type: "empty" }) };
+    const redirected = metro.resolver.resolveRequest(context, "expo-clipboard", "macos");
+    expect(redirected.filePath).toBe(path.join(realpathSync(destination), "vendor/node_modules/@legendapp/spark-expo-compat/src/clipboard.ts"));
+    expect(existsSync(redirected.filePath)).toBe(true);
+    expect(metro.resolver.resolveRequest(context, "expo-clipboard", "ios")).toEqual({ type: "empty" });
+    expect(metro.resolver.resolveRequest({ ...context, originModulePath: path.join(destination, "vendor/node_modules/@legendapp/spark-clipboard/src/expo.ts") }, "expo-clipboard", "macos")).toEqual({ type: "empty" });
+    writeFileSync(appManifest, originalApp);
     expect(req("@legendapp/spark/native").withSparkNative).toBeTypeOf("function");
     expect(req("@legendapp/spark/init-template").initializeTemplate).toBeTypeOf("function");
     expect(req("@legendapp/spark/schema.json")).toEqual(JSON.parse(readFileSync(path.join(framework, "packages/config-plugin/schema.json"), "utf8")));

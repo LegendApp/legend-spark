@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-clipboard original import on macOS
+intent: >
+  The original Expo Clipboard import round-trips text, HTML, and a 4×2 PNG through the macOS clipboard,
+  with Expo's data URI and image size result.
+checks: [SYS-EXPOCLIPBOARD-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/expo-clipboard" }
+- extendedWaitUntil: { visible: { id: system-integration-expo-clipboard-passed }, timeout: 10s }
+- assertNotVisible: { id: system-integration-expo-clipboard-failed }

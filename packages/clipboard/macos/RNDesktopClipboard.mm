@@ -70,7 +70,7 @@ RCT_EXPORT_MODULE(NativeDesktopClipboard)
         if (item.types.count) [objects addObject:item];
       }
       [board clearContents]; if (objects.count && ![board writeObjects:objects]) { reject(@"E_CLIPBOARD", @"Could not write clipboard", nil); return; }
-      resolve(@"null"); return;
+      resolve(binary ? NSNull.null : @"null"); return;
     }
     SparkInvalid(reject, @"Unknown clipboard operation");
   });

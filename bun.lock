@@ -247,6 +247,7 @@
       "version": "0.0.3",
       "dependencies": {
         "@legendapp/spark-desktop-config": "0.0.3",
+        "@legendapp/spark-expo-compat": "0.0.3",
         "@legendapp/spark-window-options": "0.0.3",
         "cross-spawn": "7.0.6",
         "diff": "8.0.4",
@@ -472,6 +473,18 @@
       "version": "0.0.3",
       "dependencies": {
         "@legendapp/spark-desktop-app": "0.0.3",
+      },
+      "peerDependencies": {
+        "react": "^19.2.0",
+        "react-native": "0.83.10",
+      },
+    },
+    "packages/expo-compat": {
+      "name": "@legendapp/spark-expo-compat",
+      "version": "0.0.3",
+      "dependencies": {
+        "@legendapp/spark-clipboard": "0.0.3",
+        "base64-js": "1.5.1",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -1114,6 +1127,8 @@
     "@legendapp/spark-documents": ["@legendapp/spark-documents@workspace:packages/documents"],
 
     "@legendapp/spark-drag-drop": ["@legendapp/spark-drag-drop@workspace:packages/drag-drop"],
+
+    "@legendapp/spark-expo-compat": ["@legendapp/spark-expo-compat@workspace:packages/expo-compat"],
 
     "@legendapp/spark-file-dialog": ["@legendapp/spark-file-dialog@workspace:packages/file-dialog"],
 

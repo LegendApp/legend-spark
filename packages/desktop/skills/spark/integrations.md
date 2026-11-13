@@ -24,6 +24,8 @@ responses.remove();
 
 Expo Clipboard subset (`getStringAsync`, `setStringAsync`, `hasStringAsync`) works on desktop, mobile and web. `setStringAsync` resolves `false` when the platform declines. Desktop adds `readClipboard` / `writeClipboard` for HTML, PNG (`{ format: 'png', bytes: Uint8Array }`) and file lists; check `getRichClipboardAvailability()`.
 
+The original `expo-clipboard` import is redirected on macOS when declared by the app. It adds Expo-shaped PNG `setImageAsync`, `getImageAsync({ format: "png" })` and `hasImageAsync` to the text/HTML subset. JPEG/quality options, URL methods, listeners and synchronous writes reject with `ERR_UNAVAILABLE`; `isPasteButtonAvailable` is false.
+
 ## System (`/system`)
 
 - `preventSleep({ reason, kind })` returns a registration: always remove it in `finally`.
