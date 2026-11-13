@@ -20,7 +20,6 @@ test("upgrade accepts project/dry-run and rejects unrelated flags and positional
   for (const args of [["upgrade", "app"], ["upgrade", "--force"], ["upgrade", "--platform", "macos"], ["doctor", "--dry-run"]]) expect(() => cliArguments(args)).toThrow();
 });
 
-
 test("macOS prebuild accepts only a target and project, with no silently ignored build options", () => {
   expect(cliArguments(["prebuild", "--platform", "macos", "--project", "host"]).values).toEqual({ platform: "macos", project: "host" });
   for (const flag of ["--dev", "--release", "--preview", "--runner", "--force", "--no-install", "--device", "--port"]) {
@@ -28,4 +27,9 @@ test("macOS prebuild accepts only a target and project, with no silently ignored
     expect(() => cliArguments(args), args.join(" ")).toThrow();
   }
   expect(() => cliArguments(["prebuild", "host"])).toThrow("Invalid arguments");
+});
+
+test("migrate accepts installed-only options and rejects upgrade/install options", () => {
+  expect(cliArguments(["migrate", "--project", "generated", "--init", "--dry-run"]).values).toEqual({ project: "generated", init: true, "dry-run": true });
+  for (const args of [["migrate", "latest"], ["migrate", "--packages", "packages.json"], ["migrate", "--package-manager", "bun"], ["upgrade", "--init"], ["create", "app", "--init"]]) expect(() => cliArguments(args)).toThrow();
 });

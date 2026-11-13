@@ -25,6 +25,7 @@ import { findFramework, findProject, sparkHome, creationManifest, packageManifes
 import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
 import { devCommand } from "./dev-command.ts";
 import { optionalBackendIssues, printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
+import { migrate } from "./migrate.ts";
 import { upgrade } from "./upgrade.ts";
 import { patchLibrary, patchRoot } from "./patch.ts";
 import { ensureProjectVersion } from "./project-version.ts";
@@ -81,6 +82,7 @@ async function main() {
   spark prebuild      Generate a native project (macOS also installs Pods; no app build)
   spark package       Sign and notarize a distribution archive
   spark doctor        Check app dependency pins and native tooling (exits 1 on issues)
+  spark migrate       Apply installed-version migrations (--project <dir>, --dry-run; --init stamps a newly generated project)
   spark upgrade       Update Spark on its current release channel (--dry-run previews changes)
   spark patch <lib>   Copy a library with Spark's patch for editing; --done saves patches/<lib>@<version>.patch
                       in the nearest app or patches/ owner (--root: where it's installed, --out: where patches/ goes)
@@ -98,6 +100,10 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
     case "add": {
       if (positionals[1] !== "desktop") throw new Error("Usage: spark add desktop [--project <Expo app>]");
       await addDesktop(start, creationManifest(values.packages as string | undefined));
+      break;
+    }
+    case "migrate": {
+      migrate(projectOption ? start : project(), { dryRun: !!values["dry-run"], init: !!values.init });
       break;
     }
     case "create": {

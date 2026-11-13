@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { applyOverrides } from "../packages/cli/src/package-manager.ts";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -36,7 +36,11 @@ for (const folder of ["blank-typescript", "windows", "universal"]) {
         macos: { bundleIdentifier: "org.example.upstream", version: "0.0.1", buildNumber: "7" },
         windows: { projectGuid: "upstream-generated-guid", packageGuid: "upstream-package-guid", namespace: "org.example.upstream" },
       } }));
+      const version = JSON.parse(readFileSync("packages/cli/package.json", "utf8")).version;
+      mkdirSync(path.join(root, "node_modules/@legendapp/spark"), { recursive: true });
+      writeFileSync(path.join(root, "node_modules/@legendapp/spark/package.json"), JSON.stringify({ version }));
       initializeTemplate(root);
+      expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(version + "\n");
       const initialized = JSON.parse(readFileSync(path.join(root, "desktop.config.json"), "utf8"));
       expect(initialized.name).toBe("UpstreamName");
       expect(initialized.projectId).toBe("upstream-generated-guid");
@@ -101,4 +105,17 @@ test("Runner profile trusts enriched-markdown postinstall before installing with
     await prepareGoProfile(root, manifest, "macos", "bun");
     expect(run).toHaveBeenCalledTimes(1);
   } finally { vi.clearAllMocks(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("template identity failures and existing projects never get a new receipt", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-template-failure-"));
+  try {
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ platforms: ["macos"] }));
+    writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: {} }));
+    expect(() => initializeTemplate(root)).toThrow("identity is initialized");
+    expect(existsSync(path.join(root, ".spark/version"))).toBe(false);
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ projectId: "already-initialized" }));
+    initializeTemplate(root);
+    expect(existsSync(path.join(root, ".spark/version"))).toBe(false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -18,16 +18,31 @@ export interface DependencyPinIssue {
   missing?: boolean;
 }
 
+export function projectDependencies(root: string, inherited = false): Record<string, string> {
+  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  const dependencies = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies };
+  if (inherited) {
+    for (let directory = path.dirname(root); ; directory = path.dirname(directory)) {
+      const file = path.join(directory, "package.json");
+      if (existsSync(file)) {
+        const owner = JSON.parse(readFileSync(file, "utf8"));
+        for (const [name, spec] of Object.entries({ ...owner.dependencies, ...owner.devDependencies, ...owner.optionalDependencies })) dependencies[name] ??= spec;
+      }
+      if (path.dirname(directory) === directory) break;
+    }
+  }
+  return dependencies;
+}
+
 /** Optional feature backends belong to the app, even when Spark supplies the API. */
-export function optionalBackendIssues(root: string): DependencyPinIssue[] {
+export function optionalBackendIssues(root: string, inherited = false): DependencyPinIssue[] {
   const backends: Record<string, string> = {
     "@legendapp/spark/markdown": "react-native-enriched-markdown",
     "@legendapp/spark/html": "react-native-enriched-html",
     "@legendapp/spark/webview": "react-native-webview",
     "@legendapp/spark/sqlite": "@op-engineering/op-sqlite",
   };
-  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
-  const dependencies = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies };
+  const dependencies = projectDependencies(root, inherited);
   const platforms = supportedPlatforms(root);
   const req = createRequire(path.join(root, "package.json"));
   const issues = new Map<string, DependencyPinIssue>();

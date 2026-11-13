@@ -81,7 +81,7 @@ export async function upgrade(root: string, dryRun = false) {
     const updatedCLI = cliRoot(installed);
     const { initializeTemplate } = createRequire(path.join(updatedCLI, "package.json"))("./dist/init-template.cjs");
     const { recordProjectVersion, refreshPointers } = createRequire(path.join(updatedCLI, "package.json"))("./dist/migrations.cjs");
-    initializeTemplate(root);
+    initializeTemplate(root, false);
     refreshPointers(root);
     recordProjectVersion(root, version);
     console.log(`Updated Spark to ${version}.`);

@@ -1,4 +1,5 @@
 import { installWithEnrichedHtmlPins } from "./enriched-html-pins.ts";
+import { installedSparkVersion, migrateProject } from "./migrations.cjs";
 import { installedRelease, materializeReleasePackages, packageSources, verifyMaterializedReleasePackages } from "./release.ts";
 import { packageManager, localArchive } from "./package-manager.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -166,5 +167,7 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   for (const [file, content] of files) writeFileSync(path.join(root, file), content);
   if (release) verifyMaterializedReleasePackages(release, root);
   await installWithEnrichedHtmlPins(root, manager);
+  const sparkVersion = installedSparkVersion(root);
+  migrateProject(root, sparkVersion, true, { fromVersion: sparkVersion });
   console.log(`Added desktop support to ${root}. Existing entry point and mobile/web scripts are unchanged.\nRun spark build --dev --platform macos, then spark dev --platform macos. Windows native builds run on Windows.`);
 }

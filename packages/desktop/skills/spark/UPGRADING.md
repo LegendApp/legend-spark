@@ -29,6 +29,54 @@ history; do not use a moving main-branch document to decide an installed API.
    and tests. Rebuild custom runtimes (`spark build --dev`) for native changes and
    exercise affected desktop flows. Commit source/config and the lockfile.
 
+## Migrate at the installed version
+
+Use the app's installed CLI when Spark is already installed and dependency
+versions must stay fixed:
+
+```sh
+spark migrate --project <app-directory> --dry-run
+spark migrate --project <app-directory>
+```
+
+This command resolves Spark from the target project's `package.json`, including
+ancestor `node_modules` for generated consumers sharing a root install. It never
+queries the registry, changes dependency pins, or runs an installer. The preview
+prints every pending migration in semantic-version order, planned paths, and
+manual steps without writing anything. With no receipt, it considers all migration
+history through the installed version. Apply preserves user instructions and
+outstanding `.spark/upgrade-notes.md` entries. The receipt advances only after a
+successful apply; partial file-write failures keep the old receipt for retry.
+Running it again is safe. Malformed receipts and downgrades are rejected.
+
+If a migration needs dependency installation, install-input edits, template
+initialization, or configuration changes, apply refuses before writing any files.
+Resolve the reported requirements in their owning project, then retry; use
+`spark upgrade` when you intend to update release inputs and install. Manual
+API/native/data review remains recorded in `.spark/upgrade-notes.md`; a successful
+receipt does not certify those application decisions.
+
+### Generated projects
+
+`spark create` and direct Spark template initialization stamp the installed
+version after initialization succeeds. A new `spark add desktop` integration
+also establishes that baseline after installation succeeds.
+
+External generators must finish writing a project using the installed version's
+configuration/source, then call:
+
+```sh
+spark migrate --init --project <generated-directory>
+```
+
+`--init` explicitly attests that this is a newly generated baseline. It creates
+AI pointers and `.spark/version` without replaying historical migrations; do not
+use it to skip upgrades in an existing app. It accepts an absent receipt or the
+same installed version, rejects older/newer/malformed receipts, and supports
+`--dry-run`. Resolve `@legendapp/spark/cli` relative to the generated project's
+`package.json` and invoke that file with Node when the generator shares a root
+install rather than a local CLI binary. No consumer install is needed.
+
 ## 0.0.1-next.2
 
 Baseline preview for this history. Dependency archives now travel with the app

@@ -1,1 +1,1 @@
-export function initializeTemplate(root: string): void;
+export function initializeTemplate(root: string, recordVersion?: boolean): void;
