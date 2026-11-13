@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const libraries = ["clipboard"];
+const libraries = ["clipboard", "document-picker"];
 
 exports.withExpoCompat = config => {
   const root = path.resolve(config.projectRoot || process.cwd());

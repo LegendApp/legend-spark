@@ -6,7 +6,7 @@ import path from "node:path";
 
 const { withExpoCompat } = createRequire(import.meta.url)("../packages/expo-compat/metro.cjs");
 const temporary: string[] = [];
-const libraries = ["clipboard"];
+const libraries = ["clipboard", "document-picker"];
 afterEach(() => { temporary.splice(0).forEach(root => rmSync(root, { recursive: true, force: true })); });
 
 function fixture(dependencies: Record<string, string>) {
@@ -30,20 +30,22 @@ test.each(libraries)("redirects expo-%s on macOS only when the app declares it",
   expect(absent.resolve(absent.context, `expo-${name}`, "macos").filePath).toBe("upstream");
 });
 
-test.each(["packages/clipboard", "node_modules/@legendapp/spark-clipboard", "vendor/node_modules/@legendapp/spark-clipboard"])("leaves Spark's adapters at %s on the real library", directory => {
-  const { root, resolve, context } = fixture({ "expo-clipboard": "55.0.17" });
-  const backend = path.join(root, directory);
-  mkdirSync(path.join(backend, "src"), { recursive: true });
-  writeFileSync(path.join(backend, "package.json"), JSON.stringify({ name: "@legendapp/spark-clipboard" }));
-  expect(resolve({ ...context, originModulePath: path.join(backend, "src/expo.ts") }, "expo-clipboard", "macos").filePath).toBe("upstream");
-});
+for (const [library, backend] of [["clipboard", "clipboard"], ["document-picker", "file-dialog"]]) {
+  test.each([`packages/${backend}`, `node_modules/@legendapp/spark-${backend}`, `vendor/node_modules/@legendapp/spark-${backend}`])("leaves Spark's adapters at %s on the real library", directory => {
+    const { root, resolve, context } = fixture({ [`expo-${library}`]: "55.0.17" });
+    const location = path.join(root, directory);
+    mkdirSync(path.join(location, "src"), { recursive: true });
+    writeFileSync(path.join(location, "package.json"), JSON.stringify({ name: `@legendapp/spark-${backend}` }));
+    expect(resolve({ ...context, originModulePath: path.join(location, "src/expo.ts") }, `expo-${library}`, "macos").filePath).toBe("upstream");
+  });
+}
 
-test("preserves the application's resolver and opts in through optional dependencies", () => {
+test.each(libraries)("preserves the application's resolver and opts in through optional expo-%s", name => {
   const { root, context } = fixture({});
-  writeFileSync(path.join(root, "package.json"), JSON.stringify({ optionalDependencies: { "expo-clipboard": "55.0.17" } }));
+  writeFileSync(path.join(root, "package.json"), JSON.stringify({ optionalDependencies: { [`expo-${name}`]: "55.0.17" } }));
   const custom = vi.fn(() => ({ type: "empty" }));
   const config = withExpoCompat({ projectRoot: root, resolver: { resolveRequest: custom } });
-  expect(config.resolver.resolveRequest(context, "expo-clipboard", "macos").type).toBe("sourceFile");
+  expect(config.resolver.resolveRequest(context, `expo-${name}`, "macos").type).toBe("sourceFile");
   expect(config.resolver.resolveRequest(context, "other", "macos")).toEqual({ type: "empty" });
   expect(custom).toHaveBeenCalledWith(context, "other", "macos");
 });

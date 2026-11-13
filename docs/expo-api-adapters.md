@@ -2,6 +2,21 @@
 
 These adapters define deliberately selected Expo API subsets. Router, declarative windows, UI primitives, and a universal starter remain deferred. The framework stays on Expo SDK 54.
 
+## Original Expo imports on macOS
+
+Apps that declare `expo-document-picker` can keep their original imports. Spark's Metro
+configuration redirects the root import on macOS to the bundled
+`@legendapp/spark-expo-compat` package, which implements it on Spark's macOS backend.
+The app's dependency declaration opts the adapter in; installing Spark alone does not
+activate it. iOS, Android, web, Windows, deep imports and imports inside Spark's own
+implementation packages keep upstream resolution. The adapters add no Spark exports.
+The upstream native module has no macOS build, so keep it in the app's macOS
+`autolinking.exclude`.
+
+| Original import | macOS subset and limits |
+| --- | --- |
+| `expo-document-picker` | `getDocumentAsync` opens Spark's file dialog and returns `{ canceled, assets }`; copies default to a `DocumentPicker` folder in the app's Caches. Common MIME filters map to extensions; unknown filters, `base64` and other options reject with `ERR_UNAVAILABLE`. |
+
 ## Imports and implementations
 
 Use the individual framework packages when sharing these capabilities with mobile/web:
