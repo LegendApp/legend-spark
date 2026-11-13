@@ -29,3 +29,8 @@ test("macOS prebuild accepts only a target and project, with no silently ignored
   }
   expect(() => cliArguments(["prebuild", "host"])).toThrow("Invalid arguments");
 });
+
+test("migrate accepts installed-only options and rejects upgrade/install options", () => {
+  expect(cliArguments(["migrate", "--project", "generated", "--init", "--dry-run"]).values).toEqual({ project: "generated", init: true, "dry-run": true });
+  for (const args of [["migrate", "latest"], ["migrate", "--packages", "packages.json"], ["migrate", "--package-manager", "bun"], ["upgrade", "--init"], ["create", "app", "--init"]]) expect(() => cliArguments(args)).toThrow();
+});

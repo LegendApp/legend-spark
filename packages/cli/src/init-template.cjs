@@ -1,10 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { installedSparkVersion, planMigrations, applyMigrationPlan } = require('./migrations.cjs');
 const { prepareConfig, toExpo } = require('@legendapp/spark-desktop-config/config.cjs');
 
 // Expo Desktop assigns the application names and native IDs. Initialize only
 // spark-owned configuration, once, after its template dependencies are installed.
-function initializeTemplate(root) {
+function initializeTemplate(root, recordVersion = true) {
   const file = path.join(root, 'desktop.config.json');
   if (!fs.existsSync(file)) return;
   const config = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -13,6 +14,8 @@ function initializeTemplate(root) {
   if (!expo?.windows?.projectGuid || !expo.name || !expo.macos?.bundleIdentifier) {
     throw new Error('Create this template with expo-desktop create-app so its application identity is initialized.');
   }
+  const installed = recordVersion ? installedSparkVersion(root) : undefined;
+  const plan = installed ? planMigrations(root, installed, { automatic: true, fromVersion: installed }) : undefined;
   config.name = expo.name;
   config.projectId = expo.windows.projectGuid;
   config.expo = { ...expo, ...config.expo };
@@ -21,6 +24,7 @@ function initializeTemplate(root) {
   toExpo(config);
   fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n');
   prepareConfig(root);
+  if (plan) applyMigrationPlan(root, plan);
 }
 module.exports = { initializeTemplate };
 if (require.main === module) initializeTemplate(process.cwd());

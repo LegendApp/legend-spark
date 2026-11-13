@@ -8,7 +8,7 @@ const options = {
   packages: { type: "string" }, port: { type: "string" }, runner: { type: "boolean" },
   dev: { type: "boolean" }, release: { type: "boolean" }, preview: { type: "boolean" },
   root: { type: "string" }, out: { type: "string" },
-  force: { type: "boolean" }, done: { type: "boolean" }, "dry-run": { type: "boolean" }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
+  init: { type: "boolean" }, force: { type: "boolean" }, done: { type: "boolean" }, "dry-run": { type: "boolean" }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
 } as const;
 const commands: Record<string, { flags: readonly string[]; arguments: readonly [number, number] }> = {
   create: { flags: ["example", "package-manager", "bundle-id", "universal", "platform", "packages"], arguments: [1, 1] },
@@ -22,6 +22,7 @@ const commands: Record<string, { flags: readonly string[]; arguments: readonly [
   build: { flags: ["project", "platform", "device", "port", "runner", "dev", "release", "preview", "force"], arguments: [0, 0] },
   prebuild: { flags: ["project", "platform"], arguments: [0, 0] },
   doctor: { flags: ["project"], arguments: [0, 0] },
+  migrate: { flags: ["project", "dry-run", "init"], arguments: [0, 0] },
   upgrade: { flags: ["project", "dry-run"], arguments: [0, 0] },
   patch: { flags: ["project", "root", "out", "done", "force"], arguments: [1, 1] },
   "updates init": { flags: ["project", "platform"], arguments: [1, 1] },

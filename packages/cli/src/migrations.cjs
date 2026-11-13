@@ -51,24 +51,24 @@ function upgradeWindowConfig(context) {
     context.editJson(file, /** @param {{ window?: import('./migration-helpers.cjs').JsonObject; expo?: { extra?: { spark?: { window?: import('./migration-helpers.cjs').JsonObject } } } }} config */ config => {
       const options = file === 'desktop.config.json' ? config.window : config.expo?.extra?.spark?.window;
       if (!options) return;
-      if (typeof options !== 'object' || Array.isArray(options)) { context.manualStep(`Repair window configuration in ${file}; expected an object.`); return; }
+      if (typeof options !== 'object' || Array.isArray(options)) { context.manualStep(`Repair window configuration in ${file}; expected an object.`, 'configuration'); return; }
       for (const [nested, width, height] of [['size', 'width', 'height'], ['minSize', 'minWidth', 'minHeight'], ['maxSize', 'maxWidth', 'maxHeight']]) {
         if (!(width in options) && !(height in options)) continue;
         if (typeof options[width] !== 'number' || typeof options[height] !== 'number' || options[nested] !== undefined) {
-          context.manualStep(`Merge legacy ${width}/${height} into window.${nested} in ${file}; incomplete or conflicting dimensions need review.`);
+          context.manualStep(`Merge legacy ${width}/${height} into window.${nested} in ${file}; incomplete or conflicting dimensions need review.`, 'configuration');
         } else {
           options[nested] = { width: options[width], height: options[height] };
           delete options[width]; delete options[height];
         }
       }
       if ('restoreFrame' in options) {
-        if ('restoreBounds' in options && options.restoreBounds !== options.restoreFrame) context.manualStep(`Resolve window.restoreFrame/restoreBounds in ${file}.`);
+        if ('restoreBounds' in options && options.restoreBounds !== options.restoreFrame) context.manualStep(`Resolve window.restoreFrame/restoreBounds in ${file}.`, 'configuration');
         else { options.restoreBounds = options.restoreFrame; delete options.restoreFrame; }
       }
       for (const [legacy, nested] of [['material', 'backgroundMaterial'], ['trafficLights', 'titleBar']]) {
         if (!(legacy in options)) continue;
         const macos = /** @type {import('./migration-helpers.cjs').JsonObject} */ (options.macos ?? {});
-        if (typeof macos !== 'object' || Array.isArray(macos) || macos[nested] !== undefined) context.manualStep(`Merge window.${legacy} into window.macos.${nested} in ${file}.`);
+        if (typeof macos !== 'object' || Array.isArray(macos) || macos[nested] !== undefined) context.manualStep(`Merge window.${legacy} into window.macos.${nested} in ${file}.`, 'configuration');
         else {
           macos[nested] = legacy === 'trafficLights' ? { trafficLights: options[legacy] } : options[legacy];
           options.macos = macos; delete options[legacy];
@@ -114,13 +114,13 @@ function installedSparkVersion(root) {
 /** @type {typeof import('./migrations.cjs').planMigrations} */
 function planMigrations(root, version, { automatic = false, fromVersion } = {}) {
   const { compare, valid } = createRequire(resolveDependency(root, 'npm/package.json'))('semver');
-  const file = path.join(root, '.spark/version');
-  const previous = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : fromVersion;
+  const receipt = createMigrationContext(root, version, new Map(), []).readFile('.spark/version');
+  const previous = receipt === null ? fromVersion : receipt.trim();
   if (!valid(version) || (previous !== undefined && (!valid(previous) || compare(previous, version) > 0))) {
     throw new Error(`Spark project version ${previous ?? '(unrecorded)'} cannot migrate to ${version}. Run spark upgrade.`);
   }
   const pending = migrations.filter(step => (!previous || compare(step.version, previous) > 0) && compare(step.version, version) <= 0).sort((a, b) => compare(a.version, b.version));
-  if (automatic && pending.some(step => !step.automatic)) throw new Error('Spark has pending migrations that require an install or configuration changes. Run spark upgrade.');
+  if (automatic && pending.some(step => !step.automatic)) throw new Error('Spark has pending migrations. Run spark migrate --dry-run, then spark migrate to apply at the installed version. Run spark upgrade if an install or configuration changes are required.');
   const changes = new Map();
   /** @type {import('./migration-helpers.cjs').ManualStep[]} */
   const manualSteps = [];
@@ -165,8 +165,9 @@ function applyMigrationPlan(root, plan, recordVersion = true) {
 
 /** @type {typeof import('./migrations.cjs').recordProjectVersion} */
 function recordProjectVersion(root, version) {
+  const context = createMigrationContext(root, version, new Map(), []);
   const file = path.join(root, '.spark/version');
-  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === version + '\n') return;
+  if (context.readFile('.spark/version') === version + '\n') return;
   // Record only successful migrations. A failed/partial attempt is safe to retry.
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.tmp`;

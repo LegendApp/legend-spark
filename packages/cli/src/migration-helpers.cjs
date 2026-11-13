@@ -50,7 +50,7 @@ function createMigrationContext(root, version, changes, manualSteps) {
       try {
         const value = JSON.parse(before);
         if (!value || typeof value !== 'object' || Array.isArray(value)) {
-          context.manualStep(`Edit ${file} manually; expected a JSON object.`);
+          context.manualStep(`Edit ${file} manually; expected a JSON object.`, 'configuration');
           return;
         }
         const original = JSON.stringify(value);
@@ -62,7 +62,7 @@ function createMigrationContext(root, version, changes, manualSteps) {
         }
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
-        context.manualStep(`Edit ${file} manually; it is not valid JSON: ${error.message}`);
+        context.manualStep(`Edit ${file} manually; it is not valid JSON: ${error.message}`, 'configuration');
       }
     },
     renameFile(from, to) {
@@ -83,9 +83,9 @@ function createMigrationContext(root, version, changes, manualSteps) {
       if (content === null || content === previous) context.writeFile(file, next);
       else if (content !== next) context.manualStep(`Merge the new template for ${file}; the app has customized it.`);
     },
-    manualStep(message) {
+    manualStep(message, requires) {
       const notes = `${upgradeNotesPath}#${version.replaceAll('.', '')}`;
-      if (!manualSteps.some(step => step.version === version && step.message === message)) manualSteps.push({ version, message, notes });
+      if (!manualSteps.some(step => step.version === version && step.message === message)) manualSteps.push({ version, message, notes, ...(requires ? { requires } : {}) });
     },
     replaceImport(from, to, names = {}) {
       /** @type {typeof import('typescript')} */
