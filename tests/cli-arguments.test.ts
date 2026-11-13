@@ -20,6 +20,7 @@ test("upgrade accepts project/dry-run and rejects unrelated flags and positional
   for (const args of [["upgrade", "app"], ["upgrade", "--force"], ["upgrade", "--platform", "macos"], ["doctor", "--dry-run"]]) expect(() => cliArguments(args)).toThrow();
 });
 
+
 test("macOS prebuild accepts only a target and project, with no silently ignored build options", () => {
   expect(cliArguments(["prebuild", "--platform", "macos", "--project", "host"]).values).toEqual({ platform: "macos", project: "host" });
   for (const flag of ["--dev", "--release", "--preview", "--runner", "--force", "--no-install", "--device", "--port"]) {

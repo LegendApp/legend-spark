@@ -28,11 +28,16 @@ test.each([false, true])("desktop adoption stamps only after installation succee
   vi.mocked(installWithEnrichedHtmlPins).mockImplementation(async () => {
     expect(existsSync(path.join(root, ".spark/version"))).toBe(false);
     if (fail) throw new Error("install failed");
-    write(root, "node_modules/@legendapp/spark/package.json", { version });
+    const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+    for (const [name, installed] of Object.entries(pkg.dependencies)) write(root, `node_modules/${name}/package.json`, { version: name === "@legendapp/spark" ? version : installed });
   });
   if (fail) {
     await expect(addDesktop(root, path.join(root, "packages.json"))).rejects.toThrow("install failed");
     expect(existsSync(path.join(root, ".spark/version"))).toBe(false);
+    fail = false;
+    await addDesktop(root, path.join(root, "packages.json"));
+    expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(version + "\n");
+    ensureProjectVersion(root);
   } else {
     await addDesktop(root, path.join(root, "packages.json"));
     expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(version + "\n");
