@@ -301,3 +301,23 @@ test("doctor keeps stale versions visible when another declaration patches the s
     expect.stringContaining("old.patch patches plain-lib@0.9.0, but 1.0.0 is installed"),
   ]);
 });
+
+test("package.json spark.patches rejects malformed values and misspelled packages before patching", () => {
+  for (const patches of [null, [], "native-lib", { "native-lib": "false" }, { "native-lbi": false }]) {
+    const root = fixture({ spark: { patches } });
+    expect(() => prepareNativePatches(root)).toThrow(/spark.patches/);
+    expect(podspec(root, "native-lib")).toBe(upstream);
+    expect(receipt(root, "native-lib")).toBeUndefined();
+  }
+});
+
+test("package.json spark metadata rejects unknown fields and malformed dependency lists", () => {
+  for (const spark of [{ patchess: {} }, { sdk: "true" }, { requires: "native-lib" }, { nativeModuels: [] }, { entitlements: { maco: {} } }]) {
+    const root = fixture({ spark });
+    expect(() => prepareNativePatches(root)).toThrow(/package.json spark/);
+    expect(() => installedPackages(root)).toThrow(/package.json spark/);
+    expect(podspec(root, "native-lib")).toBe(upstream);
+  }
+  const root = fixture({ spark: { sdk: false, nativeModules: ["NativeApp"], requires: [], pod: "NativeApp", platforms: ["macos"] } });
+  expect(() => installedPackages(root)).not.toThrow();
+});

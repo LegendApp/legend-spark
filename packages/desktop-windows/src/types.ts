@@ -110,7 +110,7 @@ type ToolbarMenuItem =
   | (ToolbarMenuEntry & { type: "checkbox"; checked: boolean })
   | (ToolbarMenuEntry & { type: "slider"; min: number; max: number; value: number; suffix?: string });
 export type MacOSToolbarItem =
-  | (ToolbarEntry & { type: "button"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; monospacedDigits?: boolean; width?: number })
+  | (ToolbarEntry & { type: "button"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string })
   | (ToolbarEntry & { type: "menu"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; width?: number; items: readonly ToolbarMenuItem[] })
   | (ToolbarEntry & { type: "label"; text: string; width?: number })
   | (ToolbarEntry & { type: "search"; disabled?: boolean; collapses?: boolean; placeholder?: string; value?: string; width?: number })
@@ -136,7 +136,9 @@ export interface MacOSWindowOptions {
   level?: "normal" | "floating" | "modalPanel" | "mainMenu" | "status" | "screenSaver";
   titleBar?: MacOSTitleBarOptions;
   toolbar?: MacOSToolbarOptions;
+  /** Optional pre-React shell. Without the native split-view backend, startup uses the ordinary window content. */
   startupSplitView?: MacOSStartupSplitViewOptions | null;
+  /** Secondary windows only; the host always creates the main window. */
   restoreOnLaunch?: boolean;
 }
 /** Panel class and startup shell are fixed when the native window is created. */

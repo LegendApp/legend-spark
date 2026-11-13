@@ -100,6 +100,7 @@ export async function showMessage(options: MessageDialogOptions): Promise<Messag
   knownKeys(options, ["title", "message", "kind", "buttons", "defaultButtonId", "cancelButtonId", "windowId", "checkbox"], "dialog");
   const buttons = options.buttons ?? [{ id: "ok", label: "OK" }];
   if (!validString(options.title) || !Array.isArray(buttons) || !buttons.length || buttons.length > 4 || buttons.some(value => !value || !validString(value.id) || !validString(value.label))) throw new SparkError("E_INVALID_ARGUMENT", "Dialog needs a title and 1–4 buttons with IDs and labels");
+  for (const button of buttons) knownKeys(button, ["id", "label"], "dialog button");
   const ids = buttons.map(button => button.id);
   if (new Set(ids).size !== ids.length) throw new SparkError("E_INVALID_ARGUMENT", "Dialog button IDs must be unique");
   for (const id of [options.defaultButtonId, options.cancelButtonId]) if (id !== undefined && !ids.includes(id)) throw new SparkError("E_INVALID_ARGUMENT", "Dialog button ID must identify a button");

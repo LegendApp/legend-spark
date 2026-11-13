@@ -98,7 +98,7 @@ Do not expose `native`, `backend`, arbitrary `backendOptions`, upstream `Pick`/`
 - **Cancellation:** `AbortSignal` where underlying work can honor it; specify partial output and whether native work stops. Files retain `close()`, processes `terminate()`, sessions `dismiss()` where meaning differs from removing a listener.
 - **Units/data:** `timeoutMs`, `delaySeconds`, Unix timestamp milliseconds, audio seconds. Distinguish native paths, URIs, and bytes/base64. Normal binary IO uses `Uint8Array`; serialization is internal unless a format explicitly requires it.
 - **Updates:** omission means unchanged, `null` clears only declared nullable fields, arrays replace, documented object groups merge by supplied fields. Declare immutable fields. Validate the full request before side effects; do not promise native transactionality where none exists.
-- **Platform details:** typed `macos`/`windows` groups where relevant. Inactive-platform groups may be skipped by definition; unsupported requested behavior on the active target rejects. No smallest-common-subset requirement and no implied support for new OS targets.
+- **Platform details:** typed `macos`/`windows` groups where relevant. Runtime groups for another platform reject `E_UNSUPPORTED_OPTION`; project configuration may contain sections for multiple declared build targets. Unsupported requested behavior on the active target rejects. No smallest-common-subset requirement and no implied support for new OS targets.
 
 ## 4. Proposed API families
 
@@ -190,7 +190,7 @@ createTray(options: TrayOptions): Promise<Tray>; // menu?: readonly TrayMenuItem
 // Tray menus recurse through submenus and omit shortcuts, icons, targets, and placements.
 // macOS toolbar popup menus use ToolbarMenuItem: sliders are supported, but roles, submenus,
 // shortcuts, targets, and placements are not.
-// The macos presentation group is ignored on Windows.
+// Tray macos presentation options reject E_UNSUPPORTED_OPTION on Windows.
 
 // /shortcuts; /global-shortcuts
 registerShortcut(accelerator, handler, options?: { windowId?: string; repeat?: boolean }): Promise<AsyncRegistration>;
@@ -214,7 +214,7 @@ openFileDialog(options?: {
   selection?: 'files' | 'directories';
   multiple?: boolean;
   defaultPath?: string; // Electron-style: a directory starts the panel; for save it may name a file, suggesting defaultName.
-  filters?: readonly FileFilter[]; // { name?: string; extensions } — Windows labels each group; macOS flattens.
+  filters?: readonly FileFilter[]; // { name?: string; extensions } — name is Windows-only; macOS rejects it and flattens extensions.
   windowId?: string;
   title?: string;
   accessory?: readonly DialogAccessoryControl[]; // Data-driven checkboxes and pop-ups (macOS); values return with the result.

@@ -10,6 +10,7 @@ Exports: `@legendapp/spark/app`, `/app/documents`, `/links`.
 - One process runs per project. A second launch forwards to the running app: you get `reopen`, then `secondInstance`, then its files/URLs as ordinary open requests. `secondInstance` is live-only; files/URLs are replayed through `/app/documents`.
 - `relaunch()` runs the same quit guards and resolves `{ quitRequested: false, reason: 'vetoed' }` when vetoed.
 - Safe mode (`--spark-safe-mode` or Shift at launch) skips Spark's window restoration. Check `getAppContext().launch.safeMode` before restoring your own state (open documents, navigation).
+- Startup `macos.lifecycle.mainWindow.glass` uses plain React content before macOS 26 and the public `NSGlassEffectView` on newer systems.
 
 ```ts
 import { beforeQuit, quit } from '@legendapp/spark/app';

@@ -290,3 +290,12 @@ test("macOS main-window chrome uses the host window setter rather than the secon
   managed.setMainWindowOptions.mockRejectedValueOnce(Object.assign(new Error("Main window not found"), { code: "E_NOT_FOUND" }));
   await expect(windows.setWindowOptions("main", { macos: { titleBar: { trafficLights: true } } })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
 });
+
+test("main-window restoration options reject before either native adapter runs", async () => {
+  platform.OS = "macos";
+  for (const restoreOnLaunch of [true, false]) await expect(windows.setWindowOptions("main", { macos: { restoreOnLaunch } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(call).not.toHaveBeenCalled();
+  expect(managed.setMainWindowOptions).not.toHaveBeenCalled();
+  await windows.setWindowOptions("editor", { macos: { restoreOnLaunch: true } });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1])).toMatchObject({ restoreOnLaunch: true });
+});

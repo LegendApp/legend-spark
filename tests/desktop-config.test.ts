@@ -74,3 +74,19 @@ test("generated macOS versions use the canonical version and preserve build numb
   expect(toExpo({ ...base, expo: { ios: { buildNumber: "12" } } }).expo.macos).toMatchObject({ version: base.version, buildNumber: "12" });
   expect(toExpo({ ...base, macos: { ...base.macos, buildNumber: "23" }, expo: { ios: { buildNumber: "12" } } }).expo.macos).toMatchObject({ version: base.version, buildNumber: "23" });
 });
+
+test("direct Expo extra.spark rejects misspelled settings", () => fixture(root => {
+  writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { name: "Demo", extra: { spark: { projectId: "demo", windwo: {} } } } }));
+  expect(() => readAppConfig(root)).toThrow("windwo");
+}));
+
+test("initial Windows window configuration rejects macOS fields before native filtering", () => {
+  for (const window of [{ macos: { backgroundMaterial: "sidebar" } }, { macos: {} }, { titleBarStyle: "overlay" }]) {
+    expect(() => toExpo({ ...base, platforms: ["macos", "windows"], window }, "windows")).toThrow();
+    expect(() => toExpo({ ...base, platforms: ["macos", "windows"], window }, "macos")).not.toThrow();
+    fixture(root => {
+      writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { platforms: ["windows"], extra: { spark: { projectId: "demo", window } } } }));
+      expect(() => readAppConfig(root)).toThrow();
+    });
+  }
+});

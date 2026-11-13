@@ -1,6 +1,7 @@
 const { nativeWindowOptions } = require("@legendapp/spark-window-options");
 const { updatePlist } = require("./updates.cjs");
 function identity(config) {
+  require("./validation.cjs").validateSettings(config.extra?.spark, "macos");
   const projectId = config.extra?.spark?.projectId ?? config.macos?.bundleIdentifier;
   if (typeof projectId !== "string" || !projectId.length || projectId.length > 200) throw new Error("Set extra.spark.projectId to a stable project identifier");
   const schemes = config.scheme === undefined ? [] : Array.isArray(config.scheme) ? config.scheme : [config.scheme];

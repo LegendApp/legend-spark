@@ -33,4 +33,33 @@ function validateOwned(value) {
     }
   }
 }
-module.exports = { validateOwned, validatePlatforms };
+function validateSettings(value, platform) {
+  if (value === undefined) return;
+  object(value, "extra.spark", ["projectId", "window", "documentTypes", "menuBarOnly", "updates", "include", "signing", "helpers", "customize", "supportedPlatforms"]);
+  validateOwned(value);
+  require("@legendapp/spark-window-options").validateWindow(value.window ?? {});
+  if (platform === "windows" && value.window?.macos !== undefined) throw new Error("window.macos options require macOS");
+  if (platform === "windows" && value.window?.titleBarStyle === "overlay") throw new Error("Windows does not support overlay title bars");
+  if (value.include !== undefined && (!Array.isArray(value.include) || value.include.some(name => typeof name !== "string"))) throw new Error("include must be a list of package names");
+  if (value.supportedPlatforms !== undefined) validatePlatforms(value.supportedPlatforms);
+  require("./helpers.cjs").validateHelpers(value.helpers);
+  require("./customize.cjs").validateCustomize(value.customize);
+  require("./updates.cjs").updateConfiguration({ extra: { spark: value } });
+}
+function validatePackageSettings(value) {
+  if (value === undefined) return;
+  object(value, "package.json spark", ["sdk", "nativeModules", "pod", "platforms", "requires", "testOnly", "entitlements", "patches", "bundledModules", "bundledModuleRoot", "windowsAdapter", "patchHash", "upstreamIntegrity", "upstreamRevision", "workspacePatch", "dependencyPatch", "nativePatchRequirements"]);
+  for (const key of ["sdk", "testOnly", "windowsAdapter"]) if (value[key] !== undefined && typeof value[key] !== "boolean") throw new Error(`package.json spark.${key} must be boolean`);
+  for (const key of ["requires", "bundledModules"]) if (value[key] !== undefined && (!Array.isArray(value[key]) || value[key].some(name => typeof name !== "string" || !name.length))) throw new Error(`package.json spark.${key} must list nonempty strings`);
+  for (const key of ["pod", "bundledModuleRoot"]) if (value[key] !== undefined && (typeof value[key] !== "string" || !value[key].length)) throw new Error(`package.json spark.${key} must be a nonempty string`);
+  if (value.platforms !== undefined) validatePlatforms(value.platforms);
+  if (value.entitlements !== undefined) {
+    object(value.entitlements, "package.json spark.entitlements", ["macos"]);
+    if (value.entitlements.macos !== undefined) object(value.entitlements.macos, "package.json spark.entitlements.macos");
+  }
+  if (value.patches !== undefined) {
+    object(value.patches, "package.json spark.patches");
+    for (const [name, enabled] of Object.entries(value.patches)) if (typeof enabled !== "boolean") throw new Error(`package.json spark.patches.${name} must be boolean`);
+  }
+}
+module.exports = { validateOwned, validatePlatforms, validateSettings, validatePackageSettings };

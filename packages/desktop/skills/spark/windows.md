@@ -69,6 +69,10 @@ await guard.remove();
 
 AppKit features live in typed `macos` groups (`macos.titleBar`, `macos.toolbar`, `macos.level`, `macos.restoreOnLaunch`, `macos.startupSplitView`, `macos.representedUri`) and in `/windows/macos` (`setWindowBlur`, `focusToolbarSearch`, `setToolbarItemText`, `addMacOSWindowListener`). On Windows a requested `macos` behavior that the target cannot honor rejects `E_UNSUPPORTED_OPTION`; it is never silently ignored. Animated frames use `setWindowBounds(id, bounds, { macos: { durationMs } })`; there is no separate animate call.
 
+Plain toolbar buttons do not support `width` or `monospacedDigits`; these keys reject `E_UNSUPPORTED_OPTION`. Width is available on menu, label and search items. `toolbar.items` creates a toolbar, so combining it with `visible: false` rejects; hide the toolbar in a separate update without `items`. `macos.restoreOnLaunch` applies only to secondary windows and rejects for `main`, which the host creates. Lifecycle and focus hooks reject unknown option keys before subscribing.
+
+`macos.startupSplitView` is an optional pre-React placeholder. When the native split-view backend is pruned, the window uses ordinary content until React mounts.
+
 Per-window appearance is a window option (`appearance: 'system' | 'light' | 'dark'`). Content that should show a native material through needs a transparent React background.
 
 `macos.titleBar.tintColor` (`'#RRGGBBAA'` or `{ light, dark }`) lays a color over the titlebar `material` and follows the window's effective appearance; alpha below `ff` keeps the blur showing through. Without `material` in the same call it uses `titlebar`; with `material: 'none'` it is rejected. `blendingMode` and `materialState` need a `material` other than `none` or `glass` (or a `tintColor`) in the same call, or validation throws.

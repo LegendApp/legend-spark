@@ -54,6 +54,7 @@ export async function getDisplays(): Promise<DisplayInfo[]> { return getNativeDi
 export async function getCursorPoint(): Promise<CursorPoint> { return windowCall("cursorPoint", {}, (value): value is CursorPoint => record(value) && typeof value.displayId === "string" && Number.isFinite(value.x) && Number.isFinite(value.y)); }
 export async function setWindowOptions(id: string, options: WindowUpdateOptions): Promise<void> {
   windowId(id); validateOptions(options, Platform.OS, false);
+  if (id === "main" && options.macos?.restoreOnLaunch !== undefined) throw new SparkError("E_UNSUPPORTED_OPTION", "The host creates the main window; macos.restoreOnLaunch only applies to secondary windows");
   const snapshot = JSON.parse(JSON.stringify(options)) as WindowUpdateOptions;
   if (!snapshot.macos || Object.keys(snapshot).some(key => key !== "macos")) {
     await windowCommand("options", { id, options: snapshot });

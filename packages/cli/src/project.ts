@@ -19,6 +19,8 @@ import path from "node:path";
 import { readJson, writeJson } from "./json.ts";
 export { readJson, writeJson };
 
+const { validatePackageSettings } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/validation.cjs");
+
 export const VERSION = "0.0.3";
 export type Package = { name: string; root: string; json: any };
 export type NativePackage = Package & {
@@ -58,6 +60,7 @@ export function installedPackages(root: string): Package[] {
   const visited = new Set<string>();
   while (queue.length) {
     const current = queue.shift()!;
+    validatePackageSettings(current.json.spark);
     const contextualRequire = createRequire(path.join(current.root, current.json.spark?.bundledModuleRoot ?? ".", "package.json"));
     const bundled = current.json.spark?.bundledModules ?? current.json.bundledDependencies ?? current.json.bundleDependencies;
     const names = Object.keys({

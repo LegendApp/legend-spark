@@ -145,3 +145,8 @@ test("the About panel forwards only supplied overrides", async () => {
   reply = () => 1;
   await expect(messages.showAboutPanel()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
 });
+
+test("message button options reject misspelled keys before showing a dialog", async () => {
+  for (const extra of [{ disabled: true }, { lable: undefined }]) await expect(messages.showMessage({ title: "Save", buttons: [{ id: "save", label: "Save", ...extra }] } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
+});

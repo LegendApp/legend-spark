@@ -146,7 +146,7 @@ if (paths) await load(paths[0]);
 ```
 After:
 ```ts
-const result = await openFileDialog({ selection: "files", multiple: true, filters: [{ name: "Text", extensions: ["txt"] }] });
+const result = await openFileDialog({ selection: "files", multiple: true, filters: [{ extensions: ["txt"] }] });
 if (!result.canceled) await load(result.paths[0]);
 // saveFileDialog likewise returns { canceled: true } or { canceled: false, path }.
 ```

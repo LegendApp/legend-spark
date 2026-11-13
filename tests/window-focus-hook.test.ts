@@ -55,3 +55,9 @@ test("focus callback remains committed through suspended renders and updates aft
   await act(async () => { rendered.unmount(); rendered = undefined; });
   expect(remove!).toHaveBeenCalledOnce();
 });
+
+test("window focus options reject misspellings before subscribing", async () => {
+  function Invalid() { useWindowFocusEffect(() => {}, { onErorr: undefined } as never); return null; }
+  await expect(act(async () => { rendered = create(React.createElement(WindowProvider, { id: "main", children: null }, React.createElement(Invalid))); })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(mocks.subscribe).not.toHaveBeenCalled();
+});

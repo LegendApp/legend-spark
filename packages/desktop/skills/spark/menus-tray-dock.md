@@ -20,7 +20,7 @@ Shortcuts use accelerator strings such as `CmdOrCtrl+S`, `Cmd+Shift+N`.
 
 - Top-level items are submenus. Target native roots with `target: { menu: 'file' | 'edit' | 'view' | 'window' | 'help' | 'app' }`; contributions merge by ID, never by label.
 - Owners stack: a later or updated owner overrides matching items, and removing it restores earlier ones. A focused document can publish its commands and remove them on blur.
-- In components use `useMenu` and keep the `items` array stable (memoize it); callback changes don't republish.
+- In components use `useMenu` and keep the `items` array stable (memoize it); callback changes don't republish. Unknown hook options reject before creating a menu.
 - A published shortcut takes over the key from a host menu item that has it (for example the template's `Ctrl+Cmd+S` Show Sidebar). Pick shortcuts that don't collide.
 - `type: 'role'` items keep native responder-chain behavior and emit no JS action. To run your own code for a native command, use an action with `target: { role: 'copy' }`.
 

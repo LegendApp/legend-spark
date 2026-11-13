@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { dialogOptions } from "../packages/file-dialog/src/options.ts";
 test("file picker has portable selection with a scoped macOS mixed-selection extension", () => {
   expect(dialogOptions({ macos: { mixedSelection: true } }, "open", "macos")).toMatchObject({ canChooseFiles: true, canChooseDirectories: true });
-  expect(dialogOptions({ macos: { mixedSelection: true } }, "open", "windows")).toMatchObject({ canChooseFiles: true, canChooseDirectories: false });
+  for (const macos of [{ mixedSelection: true }, { mixedSelection: false }, {}]) expect(() => dialogOptions({ macos }, "open", "windows")).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
   expect(dialogOptions({ selection: "directories" }, "open", "windows")).toMatchObject({ canChooseFiles: false, canChooseDirectories: true });
   expect(() => dialogOptions({ selection: "mixed" as never }, "open", "macos")).toThrow();
 });
@@ -28,4 +28,13 @@ test("save defaultPath forwards a file-naming path for native splitting", () => 
   expect(() => dialogOptions({ defaultPath: "relative" }, "save", "macos")).toThrow();
   // Open dialogs treat defaultPath as the starting directory unchanged.
   expect(dialogOptions({ defaultPath: "/tmp/notes/draft.md" }, "open", "macos")).toMatchObject({ directoryURL: "/tmp/notes/draft.md" });
+});
+
+test("file filters reject where the panel cannot honor them", () => {
+  for (const platform of ["macos", "windows"]) {
+    expect(() => dialogOptions({ selection: "directories", filters: [{ extensions: ["txt"] }] }, "open", platform)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+    expect(() => dialogOptions({ selection: "directories", filters: [] }, "open", platform)).not.toThrow();
+  }
+  for (const kind of ["open", "save"] as const) expect(() => dialogOptions({ filters: [{ name: "Text", extensions: ["txt"] }] }, kind, "macos")).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+  expect(dialogOptions({ selection: "directories", macos: { mixedSelection: true }, filters: [{ extensions: ["txt"] }] }, "open", "macos")).toMatchObject({ canChooseFiles: true, allowedFileTypes: ["txt"] });
 });

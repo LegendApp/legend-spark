@@ -19,3 +19,7 @@ test.each([
   { mainWindow: { hidden: "yes" } }, { mainWindow: { closeBehavior: "quit" } },
   { mainWindow: { backgroundColors: { light: "white", dark: "black" } } },
 ])("rejects invalid lifecycle policy %j", value => { expect(() => validateLifecycle(value)).toThrow(); });
+
+test("direct Expo identity rejects unknown Spark settings even when undefined", () => {
+  expect(() => identity({ extra: { spark: { projectId: "demo", windwo: undefined } } })).toThrow("windwo");
+});

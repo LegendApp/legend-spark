@@ -257,3 +257,8 @@ test("adding and removing lifecycle observation replaces its owner without leaki
   expect(listeners.size).toBe(1);
   expect(publish).toHaveBeenCalledTimes(5);
 });
+
+test("menu hook rejects unknown options before allocating a native menu", async () => {
+  await expect(act(async () => { rendered = create(React.createElement(Component, { id: "invalid", items, onActon: undefined } as never)); })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(publish).not.toHaveBeenCalled();
+});

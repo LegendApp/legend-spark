@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { createPrimaryWindowLifecycle, type PrimaryWindowLifecycleOptions } from "./primaryWindowLifecycle";
+import { createPrimaryWindowLifecycle, validatePrimaryWindowLifecycleOptions, type PrimaryWindowLifecycleOptions } from "./primaryWindowLifecycle";
 export type UsePrimaryWindowLifecycleOptions = PrimaryWindowLifecycleOptions;
 
 export function usePrimaryWindowLifecycle(options: UsePrimaryWindowLifecycleOptions): void {
+  validatePrimaryWindowLifecycleOptions(options);
   const latest = useRef(options);
   useLayoutEffect(() => { latest.current = options; });
   useEffect(() => {

@@ -28,6 +28,7 @@ function patchHost(source, core, metadata, defaults = {}) {
   return source.replace(include, `${include}\n// BEGIN SPARK CORE\n${core.replace('__SPARK_METADATA__', JSON.stringify(metadata)).replace('__SPARK_PROJECT_CONFIG__', JSON.stringify({ ...defaults, SPARK_RUNTIME_MODE: metadata.mode }).replaceAll(')', '\\u0029').replace(/[^\x00-\x7F]/g, char => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')))}\n// END SPARK CORE\n`);
 }
 module.exports = config => {
+  require("./validation.cjs").validateSettings(config.extra?.spark, "windows");
   const { withAppCpp } = require('expo-desktop-config-plugins');
   config = withAppCpp(config, mod => {
     const root = mod.modRequest.projectRoot;

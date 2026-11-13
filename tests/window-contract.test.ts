@@ -49,3 +49,14 @@ test("toolbar menus use shared menu IDs and numeric slider values", () => {
   expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "menu", id: "view", items: [{ type: "action", id: "a", label: "A", shortcut: "Cmd+A" }] }] } } } as unknown as Parameters<typeof validateOptions>[0], "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
   expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "segmented", id: "view", value: "", segments: [{ value: "", label: "Empty" }, { value: "", label: "Duplicate" }] }] } } }, "macos", false)).toThrow();
 });
+
+test("toolbar buttons reject unsupported sizing and digit styling before native effects", () => {
+  for (const option of [{ width: 100 }, { width: undefined }, { monospacedDigits: true }, { monospacedDigits: false }]) {
+    for (const opening of [true, false]) expect(() => validateOptions({ ...(opening ? base : {}), macos: { toolbar: { items: [{ type: "button", id: "button", ...option }] } } } as never, "macos", opening)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+  }
+  expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "menu", id: "menu", width: 100, items: [] }, { type: "label", id: "label", text: "Text", width: 100 }, { type: "search", id: "search", width: 100 }] } } }, "macos", false)).not.toThrow();
+});
+test("toolbar visibility cannot be undone by an items update in the same call", () => {
+  for (const items of [[], [{ type: "button", id: "button" }]]) expect(() => validateOptions({ macos: { toolbar: { visible: false, items } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => validateOptions({ macos: { toolbar: { visible: false } } }, "macos", false)).not.toThrow();
+});

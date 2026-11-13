@@ -33,7 +33,8 @@ the supported default range. Restoration constrains saved dimensions to current
 limits. AppKit content background materials are explicitly
 `window.macos.backgroundMaterial`; traffic lights are
 `window.macos.titleBar.trafficLights`. Private flat native transport fields are not
-accepted in public configuration.
+accepted in public configuration. Windows rejects `window.macos` and
+`titleBarStyle: "overlay"` before native startup, including in direct Expo configuration.
 
 `macos.testDriverInRelease: true` compiles the in-app test driver into release builds too; Debug
 builds always have it. It is off by default, and `spark build` then fails a release build that contains
@@ -43,7 +44,14 @@ the Kitchen Sink ([test driver](test-driver.md#builds)).
 Spark owns project identity, initial window settings, document associations,
 update signing, helper bundles and desktop lifecycle policy. Expo owns its plugins
 and mobile/web settings: put those under `expo`, or `expoByPlatform.<target>`.
-Those objects retain Expo's model rather than a renamed Spark facade.
+Those objects retain Expo's model rather than a renamed Spark facade. Direct Expo
+`extra.spark` settings use the same Spark validation; unknown keys reject, including
+keys explicitly set to `undefined` in JavaScript configuration.
+
+`macos.lifecycle.mainWindow.glass` uses the plain React content view before macOS 26;
+on macOS 26 and later it wraps content in the public `NSGlassEffectView`. Similarly,
+the optional runtime `macos.startupSplitView` placeholder falls back to ordinary
+window content when the native split-view backend is not included.
 
 ## Existing Expo projects
 
@@ -92,3 +100,11 @@ from an asynchronous config wrapper. `withDesktop(config, { runtimes?, watch? })
 is the lower-level composition helper for an already configured desktop Metro
 instance. It is not needed in either ordinary recipe above. Other backend-specific
 configuration belongs to the upstream tool; unknown Spark options reject.
+
+## Package metadata
+
+Application settings live in `desktop.config.json` or Expo's `extra.spark`, rather
+than `package.json.spark`. The latter holds native-package metadata and patch
+selection. Unknown metadata keys and malformed dependency lists reject during
+package discovery. `spark.patches` maps Spark-patched package names to booleans;
+misspelled package names and nonboolean values reject before patch files change.

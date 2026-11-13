@@ -131,11 +131,12 @@ export function validateMacOS(value: MacOSWindowOptions) {
   if (value.toolbar !== undefined) {
     object(value.toolbar, "toolbar"); keys(value.toolbar, ["visible", "style", "items"]); flags(value.toolbar, ["visible"]);
     enumValue(value.toolbar.style, ["automatic", "expanded", "preference", "unified", "unifiedCompact"], "toolbar style");
+    if (value.toolbar.visible === false && value.toolbar.items !== undefined) throw new SparkError("E_INVALID_ARGUMENT", "toolbar.items creates a toolbar; omit items when setting visible to false");
     if (value.toolbar.items !== undefined) for (const item of entries(value.toolbar.items, "toolbar item")) {
-      const fields: Record<string, string[]> = { button: ["disabled", "bordered", "symbol", "tooltip", "monospacedDigits", "width"], menu: ["disabled", "bordered", "symbol", "tooltip", "width", "items"], label: ["text", "width"], search: ["disabled", "collapses", "placeholder", "value", "width"], segmented: ["segments", "value"] };
+      const fields: Record<string, string[]> = { button: ["disabled", "bordered", "symbol", "tooltip"], menu: ["disabled", "bordered", "symbol", "tooltip", "width", "items"], label: ["text", "width"], search: ["disabled", "collapses", "placeholder", "value", "width"], segmented: ["segments", "value"] };
       if (typeof item.type !== "string" || !Object.hasOwn(fields, item.type)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown toolbar item type");
       keys(item, ["id", "label", "placement", "type", ...fields[item.type]]);
-      flags(item, ["disabled", "bordered", "monospacedDigits", "collapses"]);
+      flags(item, ["disabled", "bordered", "collapses"]);
       enumValue(item.placement, ["leading", "trailing"], "toolbar placement");
       for (const field of ["label", "symbol", "tooltip", "text", "placeholder"]) if (item[field] !== undefined) text(item[field], field);
       if (item.width !== undefined) number(item.width, "toolbar width", 1, 20000);
