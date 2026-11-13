@@ -47,8 +47,8 @@ report each phase's log path and elapsed time. Each mode's build receipt records
 the native contents, configuration, and package locations used to build its app.
 An unchanged cached dev app can be reused after a release build, even when that
 build changed the shared generated project. Older receipts rebuild once to record
-this provenance. Missing or stale CocoaPods state and missing XCFramework inputs trigger a pod
-reinstall before cached app reuse or compilation.
+this provenance. Missing or stale CocoaPods state and missing XCFramework inputs
+trigger a pod reinstall before cached app reuse or compilation.
 Codegen and podspec edits refresh Pods without regenerating the native project.
 Configuration, host, package metadata, and package location changes regenerate
 the project while preserving installed Pods, the lockfile, and Hermes downloads.

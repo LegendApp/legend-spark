@@ -394,8 +394,11 @@ async function prepareMacOS(root: string, chosen: { included: NativePackage[]; e
     pkg.expo.autolinking.exclude = excludedNames;
     writeJson(path.join(root, "package.json"), pkg);
   }
-  const inputs = nativePreparationInputs(root, chosen.included);
-  const preparation = { fingerprint: digest(JSON.stringify(inputs)), inputs, projectFingerprint: nativeProjectFingerprint(inputs, chosen.included) };
+  const currentPreparation = () => {
+    const inputs = nativePreparationInputs(root, chosen.included);
+    return { fingerprint: digest(JSON.stringify(inputs)), inputs, projectFingerprint: nativeProjectFingerprint(inputs, chosen.included) };
+  };
+  let preparation = currentPreparation();
   const preparedFile = stateFile(root, "native-preparation.json");
   const prepared: NativePreparation | undefined = existsSync(preparedFile) ? readJson(preparedFile) : undefined;
   const nativeRoot = path.join(root, "macos");
@@ -466,6 +469,9 @@ async function prepareMacOS(root: string, chosen: { included: NativePackage[]; e
   );
   if (!workspace)
     throw new Error("Prebuild did not produce a macOS workspace.");
-  if (needsPreparation || missing.length) writeJson(preparedFile, preparation);
+  if (needsPreparation || missing.length) {
+    preparation = currentPreparation();
+    writeJson(preparedFile, preparation);
+  }
   return { preparation, nativeConfig, nativeRoot, workspace };
 }
