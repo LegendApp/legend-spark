@@ -178,12 +178,14 @@ export async function build(
   mode: "go" | "dev" | "preview" | "release",
   force = false,
 ): Promise<{ app: string; runtime: Runtime }> {
-  const result = await withBuildLock(root, () => buildUnlocked(root, mode, force));
-  if (mode === "go") {
-    registerRuntime(result.app);
-    console.log("Spark Runner registered. Apps will discover it automatically.");
-  }
-  return result;
+  return withBuildLock(root, async () => {
+    const result = await buildUnlocked(root, mode, force);
+    if (mode === "go") {
+      registerRuntime(result.app);
+      console.log("Spark Runner registered. Apps will discover it automatically.");
+    }
+    return result;
+  });
 }
 
 export async function prebuild(root: string): Promise<void> {
