@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import os from "node:os";
 import path from "node:path";
 import { spawnProcess } from "../packages/cli/src/process.ts";
-import { claudePointer, mergePointer, migrateProject, migrations, pointer, refreshPointers } from "../packages/cli/src/migrations.cjs";
+import { claudePointer, mergePointer, migrateProject, migrations, planMigrations, pointer, refreshPointers } from "../packages/cli/src/migrations.cjs";
 import { ensureProjectVersion } from "../packages/cli/src/project-version.ts";
 
 const version = JSON.parse(readFileSync("packages/cli/package.json", "utf8")).version;
@@ -144,4 +144,18 @@ test("camera removal requires manual upgrade steps and records them once", () =>
   expect(readFileSync(path.join(root, "App.tsx"), "utf8")).toContain("@legendapp/spark/camera");
   expect(migrateProject(root, target, false)).toEqual([]);
   expect(readFileSync(path.join(root, ".spark/upgrade-notes.md"), "utf8")).toBe(notes);
+});
+
+test("0.0.4 records the breaking native-data review without changing app dependencies", () => {
+  const root = app("0.0.4");
+  stamp(root, "0.0.3");
+  const file = path.join(root, "package.json"), before = readFileSync(file, "utf8");
+  const planned = planMigrations(root, "0.0.4");
+  expect(planned.versions).toEqual(["0.0.4"]);
+  expect(migrations.find(step => step.version === "0.0.4")).toMatchObject({ breaking: true, automatic: false });
+  expect(planned.manualSteps[0].message).toContain("ambiguous sources");
+  expect(planned.manualSteps[0].notes).toContain("UPGRADING.md#004");
+  migrateProject(root, "0.0.4", false);
+  expect(readFileSync(file, "utf8")).toBe(before);
+  expect(planMigrations(root, "0.0.4").versions).toEqual([]);
 });

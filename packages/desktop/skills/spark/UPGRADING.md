@@ -490,7 +490,18 @@ native compatibility inputs between dev refreshes to reduce idle CPU work
 
 ## 0.0.4
 
-macOS clones with a changed `CFBundleIdentifier` have independent launch locks and Spark file/MMKV stores under `~/Library/Application Support/<bundle id>/Spark`. Rebuild custom hosts to embed the configured default ID in `SparkDefaultBundleIdentifier`. When the new store is absent, startup atomically renames a legacy project-hash or display-name folder only when its owner marker matches the running bundle, or it is unmarked and the running ID equals the configured default. Foreign folders remain untouched; ambiguous sources and IO errors stop startup. Existing destinations are never overwritten. Quit older builds and back up data before upgrading.
+Breaking: yes.
+
+Quit older builds, back up app data, keep bundle identifiers stable, and rebuild
+custom hosts before upgrading. Persistent macOS file and MMKV stores move to
+`~/Library/Application Support/<bundle id>/Spark` (#541). First launch
+atomically migrates an owned legacy project-hash or display-name folder when the
+new destination is absent. Unmarked data migrates only for the configured default
+bundle ID; foreign folders remain untouched and existing destinations are never
+overwritten. Ambiguous legacy sources and IO errors stop startup; resolve the
+reported ownership/data conflict before retrying. App clones use independent
+launch locks and stores; custom hosts embed the default ID in
+`SparkDefaultBundleIdentifier`.
 
 The default MMKV store therefore moves from `<Spark namespace>/mmkv` (0.0.3) to
 `~/Library/Application Support/<bundle id>/Spark/mmkv`, using the same
@@ -507,3 +518,12 @@ patch`.
 Run `spark upgrade`, `spark doctor`, and the app's typecheck and tests. Rebuild
 custom hosts with `spark build --dev`, then verify settings/file/MMKV data and
 relaunch persistence on each app target.
+
+`expo-clipboard` original imports work on macOS for text, HTML and PNG images
+(#547). Unsupported JPEG/quality options, URL methods, listeners and synchronous
+writes reject explicitly. `spark doctor` reports stale/missing/conflicting app
+patches with fixes (#545); source/package CI runs only on macOS (#544).
+
+The DocumentPicker original-import adapter (#546), SecureStore original-import
+adapter and expanded option validation (#548) are held for verification and are
+not included in 0.0.4.

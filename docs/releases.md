@@ -95,6 +95,11 @@ must include both SKILL.md and UPGRADING.md. Run `bun run typecheck` and the ful
 suite before release. Rebuilding native runtimes and affected app acceptance are
 separate checks from source migrations.
 
+0.0.4 is **BREAKING**: #541 moves persistent macOS file and default MMKV stores to
+`<bundle id>/Spark` automatically and stops startup on ambiguous legacy data.
+Back up data, rebuild custom hosts, and follow the packaged
+[0.0.4 migration notes](../packages/desktop/skills/spark/UPGRADING.md#004).
+
 Legend Spark currently identifies itself as `0.0.4` and publishes through
 the `latest` npm channel. That identity remains experimental until the
 [release readiness matrix](release-readiness.md) and a completed
