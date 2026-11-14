@@ -36,7 +36,7 @@ for (const entry of await list(directory)) console.log(entry.name, await readTex
 import { openFileDialog } from '@legendapp/spark/dialogs';
 import { readText } from '@legendapp/spark/files';
 
-const result = await openFileDialog({ windowId: 'main', filters: [{ name: 'Markdown', extensions: ['md'] }] });
+const result = await openFileDialog({ windowId: 'main', filters: [{ extensions: ['md'] }] });
 if (!result.canceled) console.log(await readText(result.paths[0]!));
 ```
 

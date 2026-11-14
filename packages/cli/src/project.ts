@@ -1,3 +1,4 @@
+import { SparkError, validatePackageSettings } from "@legendapp/spark-desktop-config/validation.cjs";
 import { assertEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { nativeWindowOptions } from "@legendapp/spark-window-options";
 import { prepareNativePatches, removeExpoApplicationAlias } from "@legendapp/spark-desktop-config/native-patches.cjs";
@@ -18,8 +19,6 @@ import path from "node:path";
 
 import { readJson, writeJson } from "./json.ts";
 export { readJson, writeJson };
-
-const { SparkError, validatePackageSettings } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/validation.cjs");
 
 export const VERSION = "0.0.3";
 export type Package = { name: string; root: string; json: any };
