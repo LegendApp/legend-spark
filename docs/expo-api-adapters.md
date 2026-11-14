@@ -77,3 +77,7 @@ On this host, Bun execution in Documents can stall; the saved project environmen
 Execution used `/tmp/spark-api-clean`, synchronized from this checkout. Evidence JSON is a local generated artifact under the ignored `docs/evidence` directory. Mobile device execution and Windows native backends are not covered by these results.
 
 Windows backends await native acceptance via `bun run test:windows:features`. Live URL events, association registration, recent documents, and rich clipboard parity are tracked in [Windows issues](windows-issues.md).
+
+## Original Expo Clipboard imports on macOS
+
+Apps declaring `expo-clipboard@55.0.17` can keep `import * as Clipboard from "expo-clipboard"`. Spark redirects the root import on macOS to its native clipboard backend; mobile/web/Windows and Spark-owned imports retain upstream resolution. Text/HTML calls preserve the existing Expo-shaped contract. PNG images accept raw base64 on write and return a data URI with actual dimensions on read. JPEG/quality options, URL-specific methods, listeners and synchronous writes reject with `ERR_UNAVAILABLE`; `isPasteButtonAvailable` is false. Deep imports are not redirected.

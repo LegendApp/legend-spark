@@ -19,7 +19,8 @@
     "cross-spawn": "7.0.6",
     "@legendapp/spark-window-options": "0.0.3",
     "diff": "8.0.4",
-    "yaml": "2.9.1"
+    "yaml": "2.9.1",
+    "@legendapp/spark-expo-compat": "0.0.3"
   },
   "private": true
 }

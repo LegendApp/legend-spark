@@ -1,6 +1,16 @@
 area: system-integration
 prefix: SYS
 checks:
+  SYS-EXPOCLIPBOARD-01:
+    title: expo-clipboard imports round-trip text, HTML and PNG through the macOS clipboard
+    platforms: [macos]
+    blocking: true
+    covers:
+      - ./clipboard#getStringAsync
+      - ./clipboard#setStringAsync
+      - ./clipboard#hasStringAsync
+      - ./clipboard#readClipboard
+      - ./clipboard#writeClipboard
   SYS-DOCKAVAIL-01:
     title: "getSystemAvailability reports the system module, app badge, app progress, attention and the Dock menu available on macOS, and the taskbar menu unsupported-platform"
     platforms: [macos]

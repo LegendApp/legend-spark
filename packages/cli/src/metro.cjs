@@ -31,6 +31,7 @@ function withDesktop(config, options = {}) {
     // spark dev found Watchman unresponsive; crawl and watch with Node instead.
     ...(process.env.SPARK_METRO_NO_WATCHMAN === "1" ? { useWatchman: false } : {}) } };
   const root = path.resolve(config.projectRoot || process.cwd());
+  config = require("@legendapp/spark-expo-compat/metro.cjs").withExpoCompat(config);
   // Keep the configured workspace root so lazy imports outside the app have
   // valid URLs. Only the prebuilt host's fixed entry URLs are app-relative.
   const serverRoot = path.resolve(config.server?.unstable_serverRoot || root);
