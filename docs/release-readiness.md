@@ -80,10 +80,10 @@ read them before marking any native row complete.
 ## Portable CI gate
 
 `.github/workflows/portable.yml` runs source typecheck and the full Vitest suite
-on Linux and macOS with the Node version in `.nvmrc`.
+on macOS with the Node version in `.nvmrc`.
 All jobs install from the frozen Bun lockfile. A separate macOS job packs the
 local SDK and creator, scaffolds a fresh npm app, installs it, and runs TypeScript.
-The source jobs run the complete Vitest suite under Bun; on macOS it includes the Foundation and
+The source job runs the complete Vitest suite under Bun, including the Foundation and
 Codex compiler-backed fixtures guarded for Darwin. This catches source, manifest,
 archive, peer, patch-inventory, update-policy, and package-manager regressions.
 These focused native fixtures do not claim a complete app build, UI acceptance,
