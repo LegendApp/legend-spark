@@ -175,22 +175,26 @@ describe("cli", () => {
   }, cliTimeoutMs);
 });
 
-test("dialog acceptance flows do not block the gate until the black-box backend is available", () => {
+test("dialog flows declare manual acceptance only for the document picker", () => {
   const flows = collect(path.resolve(import.meta.dirname, "../e2e/flows/dialogs"));
-  expect(flows).toHaveLength(6);
+  expect(flows).toHaveLength(7);
   for (const [file] of flows) {
     const flow = checkFlow(readFileSync(file, "utf8"), file);
     expect(flow.diagnostics).toEqual([]);
-    expect(flow.value!.header.manual, file).toBeUndefined();
+    expect(flow.value!.header.manual, file).toBe(file.endsWith("/expo-document-picker.yaml") ? "partial" : undefined);
   }
 });
 
-test("the release gate keeps other flows blocking while dialog flows are non-blocking", () => {
+test("the release gate blocks the document picker and keeps legacy dialogs non-blocking", () => {
   for (const host of [{ os: "macos-15", arch: "arm64" }, { os: "windows-11", arch: "x64" }] as const) {
     const gate = plan(path.resolve(import.meta.dirname, "../e2e"), host);
     const dialogs = gate.flows.filter(flow => flow.path.startsWith("flows/dialogs/"));
-    expect(dialogs).toHaveLength(host.os === "macos-15" ? 5 : 2);
-    expect(dialogs.every(flow => !flow.blocking && !flow.manual)).toBe(true);
+    expect(dialogs).toHaveLength(host.os === "macos-15" ? 6 : 2);
+    for (const flow of dialogs) {
+      const documentPicker = flow.path === "flows/dialogs/expo-document-picker.yaml";
+      expect(flow.blocking, flow.path).toBe(documentPicker);
+      expect(flow.manual, flow.path).toBe(documentPicker ? "partial" : false);
+    }
     expect(gate.flows.filter(flow => !flow.path.startsWith("flows/dialogs/")).every(flow => flow.blocking)).toBe(true);
   }
 });

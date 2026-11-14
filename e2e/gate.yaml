@@ -14,7 +14,7 @@ targets:
   - { os: windows-11, arch: x64 }
   - { os: windows-11, arch: arm64 }
 include: [flows/**]
-# Checks opt into blocking; dialog checks wait for the black-box backend in #50.
+# Checks opt into blocking; legacy dialog checks wait for the black-box backend in #50.
 blocking: { tags: [blocking], default: false }
 retries: 0
 timeBudget: 45m
