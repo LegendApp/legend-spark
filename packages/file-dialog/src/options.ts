@@ -59,6 +59,7 @@ export function dialogOptions(options: OpenFileDialogOptions | SaveFileDialogOpt
     filters = [];
     for (const filter of options.filters) {
       if (!filter || Object.keys(filter).some(key => key !== "name" && key !== "extensions") || (filter.name !== undefined && (typeof filter.name !== "string" || !filter.name.trim() || filter.name.includes("\0"))) || !Array.isArray(filter.extensions) || !filter.extensions.length || filter.extensions.some((ext: unknown) => typeof ext !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(ext))) throw new SparkError("E_INVALID_ARGUMENT", "Filters need file extensions without dots, MIME types, or wildcards, and a name without NULs when given");
+      if (platform === "macos" && filter.name !== undefined) throw new SparkError("E_UNSUPPORTED_OPTION", "macOS file dialogs do not display filter names; omit filters[].name");
       filters.push({ ...(filter.name === undefined ? {} : { name: filter.name }), extensions: [...filter.extensions] });
     }
   }
@@ -68,7 +69,9 @@ export function dialogOptions(options: OpenFileDialogOptions | SaveFileDialogOpt
   const open = options as OpenFileDialogOptions;
   if (open.selection !== undefined && !["files", "directories"].includes(open.selection)) throw new SparkError("E_INVALID_ARGUMENT", "selection must be files or directories");
   if (open.multiple !== undefined && typeof open.multiple !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "multiple must be boolean");
-  if (platform === "macos" && open.macos !== undefined && (!open.macos || typeof open.macos !== "object" || Object.keys(open.macos).some(key => key !== "mixedSelection") || (open.macos.mixedSelection !== undefined && typeof open.macos.mixedSelection !== "boolean"))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid macOS dialog options");
-  const mixed = platform === "macos" && open.macos?.mixedSelection === true;
+  if (open.macos !== undefined && platform !== "macos") throw new SparkError("E_UNSUPPORTED_OPTION", "macos dialog options require macOS");
+  if (open.macos !== undefined && (!open.macos || typeof open.macos !== "object" || Object.keys(open.macos).some(key => key !== "mixedSelection") || (open.macos.mixedSelection !== undefined && typeof open.macos.mixedSelection !== "boolean"))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid macOS dialog options");
+  const mixed = open.macos?.mixedSelection === true;
+  if (open.selection === "directories" && !mixed && filters?.length) throw new SparkError("E_UNSUPPORTED_OPTION", "Directory-only dialogs cannot apply file filters; omit filters");
   return { windowId, directoryURL: directory, filters, allowedFileTypes, canChooseFiles: mixed || open.selection !== "directories", canChooseDirectories: mixed || open.selection === "directories", allowsMultipleSelection: open.multiple ?? false, title: open.title, message: open.message, prompt: open.prompt, accessory };
 }

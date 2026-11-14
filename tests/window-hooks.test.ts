@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({ addWindowListener: vi.fn(), app: new Map<strin
 vi.mock("react-native", () => ({ Platform: { OS: "macos" }, AppRegistry: { registerComponent: (name: string, factory: () => React.ComponentType<any>) => mocks.roots.set(name, factory) } }));
 vi.mock("../packages/desktop-windows/src/api", () => ({ addWindowListener: mocks.addWindowListener, openWindow: mocks.openWindow, closeWindow: vi.fn(), showWindow: vi.fn() }));
 vi.mock("@legendapp/spark-desktop-app", () => ({ addAppListener: (type: string, listener: (event: any) => void) => { let listeners = mocks.app.get(type); if (!listeners) mocks.app.set(type, listeners = new Set()); listeners.add(listener); return { remove: () => listeners.delete(listener) }; } }));
+import { createPrimaryWindowLifecycle } from "../packages/desktop-windows/src/windows/primaryWindowLifecycle";
 import { usePrimaryWindowLifecycle } from "../packages/desktop-windows/src/windows/usePrimaryWindowLifecycle";
 import { useWindowFocusEffect } from "../packages/desktop-windows/src/windows/useWindowFocusEffect";
 import { useWindowId, WindowProvider } from "../packages/desktop-windows/src/windows/WindowProvider";
@@ -98,4 +99,16 @@ test("restarted surfaces report loader failures and explicit opens can retry", a
   expect(load).toHaveBeenCalledTimes(2);
   await act(async () => rendered.update(React.createElement(factory())));
   expect(rendered.root.findByType("Editor").props.owner).toBe("failed-restart-editor");
+});
+
+test("primary lifecycle rejects unknown options and invalid callbacks before subscribing", async () => {
+  const base = { windowId: "main", onInitialOpen: vi.fn(), onError: vi.fn() };
+  for (const extra of [{ onReopneRequested: undefined }, { unknown: true }]) {
+    expect(() => createPrimaryWindowLifecycle({ ...base, ...extra } as never)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+    function Root() { usePrimaryWindowLifecycle({ ...base, ...extra } as never); return null; }
+    await expect(mount(React.createElement(Root))).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  }
+  for (const extra of [{ onInitialOpen: undefined }, { onError: undefined }, { onReopenRequested: true }, { onWindowClosed: "yes" }]) expect(() => createPrimaryWindowLifecycle({ ...base, ...extra } as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(mocks.app.size).toBe(0);
+  expect(base.onInitialOpen).not.toHaveBeenCalled();
 });

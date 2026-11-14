@@ -26,13 +26,7 @@
   },
   "spark": {
     "sdk": true,
-    "nativeModules": [
-      "NativeDesktopUpdates"
-    ],
-    "pod": "RNDesktopUpdates",
-    "platforms": [
-      "macos"
-    ],
+    "nativeModules": true,
     "requires": [
       "@legendapp/spark-desktop-app"
     ]

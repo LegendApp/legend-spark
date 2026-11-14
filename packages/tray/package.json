@@ -27,14 +27,7 @@
   },
   "spark": {
     "sdk": true,
-    "nativeModules": [
-      "NativeDesktopTray"
-    ],
-    "pod": "RNDesktopTray",
-    "platforms": [
-      "macos",
-      "windows"
-    ],
+    "nativeModules": true,
     "requires": [
       "@legendapp/spark-desktop-app"
     ]

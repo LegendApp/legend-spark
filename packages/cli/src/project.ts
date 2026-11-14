@@ -1,3 +1,4 @@
+import { SparkError, validatePackageSettings } from "@legendapp/spark-desktop-config/validation.cjs";
 import { assertEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { nativeWindowOptions } from "@legendapp/spark-window-options";
 import { prepareNativePatches, removeExpoApplicationAlias } from "@legendapp/spark-desktop-config/native-patches.cjs";
@@ -58,6 +59,7 @@ export function installedPackages(root: string): Package[] {
   const visited = new Set<string>();
   while (queue.length) {
     const current = queue.shift()!;
+    validatePackageSettings(current.json.spark, current.root);
     const contextualRequire = createRequire(path.join(current.root, current.json.spark?.bundledModuleRoot ?? ".", "package.json"));
     const bundled = current.json.spark?.bundledModules ?? current.json.bundledDependencies ?? current.json.bundleDependencies;
     const names = Object.keys({
@@ -97,6 +99,7 @@ export function installedPackages(root: string): Package[] {
         } catch {}
       }
       if (!file || !existsSync(file)) {
+        if (current.json.spark?.bundledModules?.includes(name)) throw new SparkError(`package.json spark.bundledModules includes missing package ${name}`);
         if (current.app &&
           (current.json.dependencies?.[name] || current.json.devDependencies?.[name]))
           throw new Error(`Dependency ${name} is not installed yet. Finish the package installation, then retry.`);

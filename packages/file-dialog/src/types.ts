@@ -1,6 +1,6 @@
 /** Filters accept extensions without a dot (for example "txt"). MIME types and UTIs are not supported. */
 export interface FileFilter {
-  /** Display label for the filter group. Windows presents one labeled group per filter; macOS combines all extensions into one allowed set, so the label is ignored there. */
+  /** Display label for a Windows filter group. macOS rejects names; omit this field there. */
   name?: string;
   extensions: readonly string[];
 }
@@ -22,7 +22,7 @@ export interface FileDialogOptions {
   windowId?: string;
   /** Absolute starting path. A directory starts there; for save it may name a file, which also suggests `defaultName`. */
   defaultPath?: string;
-  /** macOS combines filters into one allowed-extension set; Windows keeps each labeled group. An empty array allows all files. */
+  /** macOS combines filters into one allowed-extension set; Windows keeps each labeled group. An empty array allows all files. Nonempty filters reject for directory-only selection. */
   filters?: readonly FileFilter[];
   /** 1–8 controls shown below the file browser (macOS). Check `getFileDialogAvailability("accessory")`; other targets reject E_UNSUPPORTED_OPTION. */
   accessory?: readonly DialogAccessoryControl[];
@@ -33,7 +33,7 @@ export interface OpenFileDialogOptions extends FileDialogOptions {
   title?: string;
   message?: string;
   prompt?: string;
-  /** macOS can select files and directories in the same panel. Ignored on other targets. */
+  /** macOS can select files and directories in the same panel. Other targets reject E_UNSUPPORTED_OPTION. */
   macos?: { mixedSelection?: boolean };
 }
 export interface SaveFileDialogOptions extends FileDialogOptions { defaultName?: string }

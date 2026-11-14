@@ -29,15 +29,7 @@
   },
   "spark": {
     "sdk": true,
-    "nativeModules": [
-      "NativeDesktopFileSystem",
-      "NativeFileScanner"
-    ],
-    "pod": "RNDesktopFileSystem",
-    "platforms": [
-      "macos",
-      "windows"
-    ],
+    "nativeModules": true,
     "requires": [
       "@legendapp/spark-desktop-app"
     ]

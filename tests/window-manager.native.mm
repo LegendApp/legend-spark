@@ -161,6 +161,24 @@ int main() { @autoreleasepool {
     styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
   window.releasedWhenClosed = NO;
   MainWindowOwner *owner = [MainWindowOwner new]; owner.window = window; NSApp.delegate = owner;
+  for (NSDictionary *style in @[
+    @{ @"titlebarControls": @[@{ @"systemImageName": @"spark.missing.symbol" }] },
+    @{ @"toolbarItems": @[@{ @"systemImageName": @"spark.missing.symbol" }] },
+    @{ @"toolbarItems": @[@{ @"segments": @[@{ @"systemImageName": @"spark.missing.symbol" }] }] },
+    @{ @"toolbarItems": @[@{ @"menuItems": @[@{ @"systemImageName": @"spark.missing.symbol" }] }] }
+  ]) {
+    NSString *options = SparkJSON(@{ @"windowStyle": style });
+    for (NSInteger operation = 0; operation < 3; operation++) {
+      error = nil;
+      RCTPromiseResolveBlock resolved = ^(id) { assert(false); };
+      RCTPromiseRejectBlock rejected = ^(NSString *code, NSString *message, NSError *) { error = code; assert([message containsString:@"spark.missing.symbol"]); };
+      if (operation == 0) [manager openWindow:options resolve:resolved reject:rejected];
+      else if (operation == 1) [manager setMainWindowOptions:options resolve:resolved reject:rejected];
+      else [manager setWindowOptions:@"main" optionsJson:options resolve:resolved reject:rejected];
+      assert([error isEqual:@"E_INVALID_ARGUMENT"]);
+      assert(window.toolbar == nil);
+    }
+  }
   // The host owns "main": it reaches the registry only after a window module call, so early calls must not depend on it.
   assert(manager.windows[@"main"] == nil);
   [manager setWindowOptions:@"main" optionsJson:SparkJSON(@{ @"title": @"Early" }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];

@@ -30,13 +30,7 @@
   ],
   "spark": {
     "sdk": true,
-    "nativeModules": [
-      "NativeMenu"
-    ],
-    "pod": "RNNativeMenu",
-    "platforms": [
-      "macos"
-    ],
+    "nativeModules": true,
     "requires": []
   },
   "private": true,

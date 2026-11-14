@@ -48,7 +48,7 @@ test("Windows includes host-provided SDK modules without separate native project
   const f = fixture();
   try {
     const names = ["@legendapp/spark-desktop-app", "@legendapp/spark-desktop-windows", "@legendapp/spark-desktop-shortcuts", "@legendapp/spark-native-menu", "@legendapp/spark-updates"];
-    for (const name of names) writeJson(path.join(f.root, "node_modules", name, "package.json"), { name, version: "1", spark: { nativeModules: [name] } });
+    for (const name of names) writeJson(path.join(f.root, "node_modules", name, "package.json"), { name, version: "1", spark: { nativeModules: true } });
     writeJson(path.join(f.root, "package.json"), { dependencies: Object.fromEntries(names.map(name => [name, "1"])) });
     expect(nativePackages(f.root).map(pkg => pkg.name).sort()).toEqual(names.sort());
   } finally { f.close(); }

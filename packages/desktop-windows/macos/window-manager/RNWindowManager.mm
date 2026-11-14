@@ -47,6 +47,26 @@ static BOOL LegendTestDriverActive(void) { return NO; }
 @end
 
 #if TARGET_OS_OSX
+static NSString *LegendInvalidWindowSymbol(id value)
+{
+  if ([value isKindOfClass:NSDictionary.class]) {
+    id symbol = value[@"systemImageName"];
+    if (symbol && (![symbol isKindOfClass:NSString.class] || ![symbol length] || ![NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil])) {
+      return [NSString stringWithFormat:@"Unknown SF Symbol: %@", symbol];
+    }
+    for (id child in [value allValues]) {
+      NSString *error = LegendInvalidWindowSymbol(child);
+      if (error) return error;
+    }
+  } else if ([value isKindOfClass:NSArray.class]) {
+    for (id child in value) {
+      NSString *error = LegendInvalidWindowSymbol(child);
+      if (error) return error;
+    }
+  }
+  return nil;
+}
+
 static char LegendManagedFullscreenPresentationKey;
 static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
 static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMainWindowCloseRequestedNotification";
@@ -2177,6 +2197,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSDictionary *options = [self parseObjectJSON:optionsJson];
+    NSString *symbolError = LegendInvalidWindowSymbol(options[@"windowStyle"]);
+    if (symbolError) { reject(@"E_INVALID_ARGUMENT", symbolError, nil); return; }
     NSString *identifier = [options[@"identifier"] isKindOfClass:NSString.class] ? options[@"identifier"] : nil;
     NSString *moduleName = [options[@"moduleName"] isKindOfClass:NSString.class] ? options[@"moduleName"] : nil;
     NSAppearance *darkAppearance = LegendDarkAppearance();
@@ -2753,6 +2775,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
 
     NSDictionary *options = [self parseObjectJSON:optionsJson];
+    NSString *symbolError = LegendInvalidWindowSymbol(options[@"windowStyle"]);
+    if (symbolError) { reject(@"E_INVALID_ARGUMENT", symbolError, nil); return; }
     // Safe and driver modes save no window chrome.
     id startupSplitView = (LegendSafeMode() || LegendTestDriverActive()) ? nil : options[@"windowStyle"][@"startupSplitView"];
     if ([startupSplitView isKindOfClass:NSDictionary.class]) {
@@ -2783,6 +2807,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
     NSDictionary *options = [self parseObjectJSON:optionsJson];
+    NSString *symbolError = LegendInvalidWindowSymbol(options[@"windowStyle"]);
+    if (symbolError) { reject(@"E_INVALID_ARGUMENT", symbolError, nil); return; }
     NSWindow *window = [self windowForIdentifier:targetIdentifier];
     if (!window) {
       reject(@"E_NOT_FOUND", @"Window not found", nil);

@@ -58,6 +58,7 @@ export async function writeClipboard(content: ClipboardWriteContent): Promise<vo
   const files = content.files?.map(path => nativePath(path, Platform.OS));
   const { image, ...rest } = content;
   if (image !== undefined && (!image || image.format !== "png" || !(image.bytes instanceof Uint8Array))) throw new SparkError("E_INVALID_ARGUMENT", "Expected PNG image bytes");
+  if (image !== undefined) for (const key of Object.keys(image)) if (key !== "format" && key !== "bytes") throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported clipboard image option: ${key}`);
   const response = await invokeNative(() => callBinary(native(), "__sparkClipboardBinary", "write", { ...rest, files }, image?.bytes));
   if (response !== null) throw new SparkError("E_INVALID_DATA", "Invalid native clipboard response");
 }

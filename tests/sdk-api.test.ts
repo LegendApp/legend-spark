@@ -701,10 +701,14 @@ test("tray snapshots accepted updates, filters actions and keeps last successful
   await expect(item.update({ id: "other" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   await item.remove();
 });
-test("Windows tray ignores inactive macOS presentation and duplicate creation never removes its owner", async () => {
+test("Windows tray rejects macOS presentation and duplicate creation never removes its owner", async () => {
   platform.OS = "windows";
-  const original = await tray.createTray({ id: "original", title: "Test", macos: { symbol: "star", unexpected: true } } as any);
-  expect(calls[0]).toMatchObject({ native: "NativeDesktopTray", method: "create", args: { id: "original", title: "Test", symbol: "" } });
+  for (const macos of [{ symbol: "star" }, {}, { symbol: null }, { typo: undefined }]) await expect(tray.createTray({ id: "original", title: "Test", macos } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
+  const original = await tray.createTray({ id: "original", title: "Test" });
+  const count = calls.length;
+  await expect(original.update({ macos: { symbol: "star" } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(count);
   await original.remove(); calls.length = 0;
   handlers.set("NativeDesktopTray.create", () => { throw nativeError("E_ALREADY_EXISTS"); });
   await expect(tray.createTray({ id: "test", title: "Test" })).rejects.toMatchObject({ code: "E_ALREADY_EXISTS" });
@@ -897,4 +901,9 @@ test("tray image inputs are portable and delayed actions cannot reach a reused I
   await next.remove(); expect(calls.at(-1)!.args).toEqual({ id: "image", instanceId: current });
   platform.OS = "windows";
   const windows = await tray.createTray({ id: "windows", image: { path: "C:\\Icons\\tray.png" } }); await windows.remove();
+});
+
+test("clipboard image options reject unknown keys before replacing the clipboard", async () => {
+  await expect(clipboard.writeClipboard({ image: { format: "png", bytes: new Uint8Array([1]), quality: undefined } } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
 });

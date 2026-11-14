@@ -23,6 +23,7 @@ function fixture(app: Record<string, unknown> = {}) {
   roots.push(root);
   const spark = path.join(root, "node_modules/@legendapp/spark");
   mkdirSync(path.join(spark, "patches"), { recursive: true });
+  mkdirSync(path.join(spark, "vendor"), { recursive: true });
   writeFileSync(path.join(spark, "package.json"), JSON.stringify({ name: "@legendapp/spark", version: "1.0.0", spark: { bundledModuleRoot: "vendor" } }));
   writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ "native-lib": { version: "1.0.0", integrity: "sha512-fixture", patch: "native-lib.patch" } }));
   writeFileSync(path.join(spark, "patches/native-lib.patch"), diff(upstream, sparkPatched));
@@ -300,4 +301,40 @@ test("doctor keeps stale versions visible when another declaration patches the s
   expect(appPatchIssues(root)).toEqual([
     expect.stringContaining("old.patch patches plain-lib@0.9.0, but 1.0.0 is installed"),
   ]);
+});
+
+test("package.json spark.patches rejects malformed values and misspelled packages before patching", () => {
+  for (const patches of [null, [], "native-lib", { "native-lib": "false" }, { "native-lbi": false }]) {
+    const root = fixture({ spark: { patches } });
+    expect(() => prepareNativePatches(root)).toThrow(/spark.patches/);
+    expect(podspec(root, "native-lib")).toBe(upstream);
+    expect(receipt(root, "native-lib")).toBeUndefined();
+  }
+});
+
+test("package.json spark metadata rejects unknown fields and malformed dependency lists", () => {
+  for (const spark of [{ patchess: {} }, { sdk: "true" }, { requires: "native-lib" }, { nativeModuels: [] }, { entitlements: { maco: {} } }]) {
+    const root = fixture({ spark });
+    expect(() => prepareNativePatches(root)).toThrow(/package.json spark/);
+    expect(() => installedPackages(root)).toThrow(/package.json spark/);
+    expect(podspec(root, "native-lib")).toBe(upstream);
+  }
+  const root = fixture({ spark: { sdk: false, nativeModules: true, requires: [] } });
+  expect(() => installedPackages(root)).not.toThrow();
+});
+
+test("package metadata rejects unused fields and malformed retained values with SparkError", () => {
+  for (const spark of [
+    { pod: "Unused" }, { platforms: ["macos"] }, { windowsAdapter: true },
+    { nativeModules: ["MissingBinding"] }, { nativeModules: false },
+    { patchHash: 42 }, { upstreamRevision: "" }, { bundledModules: [false] },
+    { bundledModuleRoot: "../outside" }, { bundledModuleRoot: "missing" },
+    { workspacePatch: { schema: 2 } }, { dependencyPatch: { typo: true } },
+    { nativePatchRequirements: { schema: 1, frameworkVersion: "1", packages: { missing: { version: 1, patchHash: "hash" } } } },
+  ]) {
+    const root = fixture({ spark });
+    expect(() => installedPackages(root)).toThrow(expect.objectContaining({ name: "SparkError" }));
+    expect(() => prepareNativePatches(root)).toThrow(expect.objectContaining({ name: "SparkError" }));
+    expect(podspec(root, "native-lib")).toBe(upstream);
+  }
 });

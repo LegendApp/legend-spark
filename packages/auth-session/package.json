@@ -27,13 +27,6 @@
   },
   "spark": {
     "sdk": true,
-    "platforms": [
-      "macos",
-      "windows",
-      "ios",
-      "android",
-      "web"
-    ],
     "requires": [
       "@legendapp/spark-desktop-links"
     ]

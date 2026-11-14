@@ -2,14 +2,13 @@ diff --git a/package.json b/package.json
 index 7310e4e..46dd0b7 100644
 --- a/package.json
 +++ b/package.json
-@@ -114,5 +114,10 @@
+@@ -114,5 +114,9 @@
    "rn-docs": {
      "title": "Webview",
      "type": "Component"
 +  },
 +  "spark": {
 +    "sdk": true,
-+    "windowsAdapter": true,
 +    "upstreamIntegrity": "sha512-KIg5Yhy04lQfHdXC1JQPM+0kftMfPnH6AqDH7v6YskQ9kzfUacooofOFRmbaZHASq/0WY87Fx0peiFETFjOcCg=="
    }
  }

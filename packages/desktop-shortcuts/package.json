@@ -27,14 +27,7 @@
   },
   "spark": {
     "sdk": true,
-    "nativeModules": [
-      "NativeDesktopShortcuts",
-      "NativeKeyboardManager"
-    ],
-    "pod": "RNDesktopShortcuts",
-    "platforms": [
-      "macos"
-    ],
+    "nativeModules": true,
     "requires": [
       "@legendapp/spark-desktop-app"
     ]

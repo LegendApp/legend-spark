@@ -28,7 +28,7 @@ App patches are pinned to the installed version. When Spark moves a pin, native 
 
 patch-package (`patches/<lib>+<version>.patch`) and Bun/pnpm `patchedDependencies` keep working. For a library Spark also patches, Spark treats that patch as the app layer and warns; prefer `spark patch` there, because package-manager patches are made against the unpatched library.
 
-To drop Spark's patch for one library, set `"spark": { "patches": { "<lib>": false } }` in the app's `package.json`. The app's patch still applies alone; native preparation warns that desktop support for that library isn't guaranteed.
+To drop Spark's patch for one library, set `"spark": { "patches": { "<lib>": false } }` in the app's `package.json`. The app's patch still applies alone; native preparation warns that desktop support for that library isn't guaranteed. `spark.patches` must be an object of booleans keyed by Spark-patched package names; unknown names and malformed values reject before patching. Unknown `package.json.spark` metadata keys also reject during discovery. App settings belong in `desktop.config.json` or Expo's `extra.spark`, where unknown keys also reject.
 
 [external-libraries.md](external-libraries.md) lists every integrated library with the version Spark tested and its per-library limits on desktop.
 
@@ -56,3 +56,9 @@ Synchronous subscriptions return `{ remove(): void }`; async registrations (`cre
 ## Platforms
 
 macOS: shipped. Windows: development builds; external library integrations are implemented in source but not yet verified on hardware. Mobile/web: Expo owns the runtime; Spark's desktop APIs don't apply there except the Expo-shaped adapters.
+
+Build metadata uses `nativeModules: true` as a marker, not a list of binding names;
+codegen owns those names. Remove unused `spark.pod`, `spark.platforms` and
+`spark.windowsAdapter`. Every build validates retained fields and patch receipts,
+even when output is cached. Known patch settings for inactive libraries or targets
+remain valid and take effect when that library is built.

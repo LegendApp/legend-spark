@@ -28,13 +28,7 @@
   },
   "spark": {
     "sdk": false,
-    "nativeModules": [
-      "NativeDesktopApp"
-    ],
-    "pod": "RNDesktopApp",
-    "platforms": [
-      "macos"
-    ],
+    "nativeModules": true,
     "requires": []
   },
   "private": true

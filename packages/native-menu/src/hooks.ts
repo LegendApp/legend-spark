@@ -1,3 +1,4 @@
+import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createMenu, type Menu, type MenuOptions, type MenuAction, type MenuLifecycleEvent } from "./api";
 export interface UseMenuOptions extends MenuOptions { onError?: (error: unknown) => void; onCleanupError?: (error: unknown, menu: Menu) => void }
@@ -6,6 +7,9 @@ interface Lifetime { menu?: Menu; removing?: Promise<void>; blocker?: Lifetime; 
 const lifetimes = new Map<string, Lifetime>();
 /** Callback changes do not recreate native menus. Structural updates use the same handle. */
 export function useMenu(options: UseMenuOptions): MenuState {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected menu options");
+  for (const key of Object.keys(options)) if (!["id", "items", "onAction", "onOpen", "onClose", "onError", "onCleanupError"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported menu option: ${key}`);
+  for (const key of ["onAction", "onOpen", "onClose", "onError", "onCleanupError"] as const) if (options[key] !== undefined && typeof options[key] !== "function") throw new SparkError("E_INVALID_ARGUMENT", `Expected ${key} callback`);
   const [state, setState] = useState<MenuState>({ status: "loading" });
   const callbacks = useRef(options);
   useLayoutEffect(() => { callbacks.current = options; });

@@ -39,9 +39,9 @@ library project and `ReactPackageProvider`. The new `packages/audio` demonstrate
 both using the pinned RNW Composition target.
 
 Declare real native dependencies in `dependencies` and in `spark.requires` where
-needed for desktop selection. `spark.platforms` describes implementations; it is
-not proof of platform acceptance. `spark.nativeModules` names actual native
-bindings. Internal curated packages set `spark.sdk`; third-party packages should
+needed for desktop selection. `spark.nativeModules: true` marks a native package when it has no codegen,
+podspec or Expo module configuration. Binding names belong in the native specs;
+Spark does not accept descriptive `spark.pod` or `spark.platforms` fields. Internal curated packages set `spark.sdk`; third-party packages should
 not claim that flag just to bypass a custom build. Native libraries also need to
 be included in the package's `files` list so installed consumers receive source.
 

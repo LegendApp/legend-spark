@@ -17,7 +17,7 @@ const configure = (include: string[] = []) => writeJson(path.join(root, "desktop
   expo: { autolinking: { exclude: [excluded] } },
 });
 const module = (name: string, metadata = {}) => writeJson(path.join(root, "node_modules", name, "package.json"), {
-  name, version: "1.0.0", spark: { sdk: true, nativeModules: ["Fixture"] }, ...metadata,
+  name, version: "1.0.0", spark: { sdk: true, nativeModules: true }, ...metadata,
 });
 const report = () => readJson(path.join(root, ".spark/selection-report.json"));
 
@@ -52,7 +52,7 @@ test.each(["release", "preview"] as const)("%s rejects excluded bundled native m
 test.each(["dependencies", "peerDependencies", "spark.requires"])("rejects excluded %s of a transitively included native package", async edge => {
   module("feature", { dependencies: { dependency: "1" } });
   module("dependency", edge === "spark.requires"
-    ? { spark: { sdk: true, nativeModules: ["Fixture"], requires: [excluded] } }
+    ? { spark: { sdk: true, nativeModules: true, requires: [excluded] } }
     : { [edge]: { [excluded]: "1" } });
   commands.sources = ["node_modules/feature/src/index.ts"];
   await expect(analyze(root)).rejects.toThrow(`required by included dependency (${edge})`);
@@ -92,7 +92,7 @@ test("checks excluded native packages available only through the shared parent i
   renameSync(path.join(root, "desktop.config.json"), path.join(app, "desktop.config.json"));
   writeJson(path.join(app, "package.json"), { main: "index.ts", dependencies: { feature: "1" } });
   module(excluded, { dependencies: { dependency: "1" } });
-  module("dependency", { spark: { nativeModules: ["Conservative"] } });
+  module("dependency", { spark: { nativeModules: true } });
   expect(nativePackages(app).map(pkg => pkg.name)).toEqual(["feature"]);
   expect(nativePackages(app, { applyExcludes: false }).map(pkg => pkg.name)).toEqual([excluded, "feature"]);
   commands.sources = [`../node_modules/${excluded}/src/index.ts`];
@@ -101,7 +101,7 @@ test("checks excluded native packages available only through the shared parent i
 });
 
 test("unused excluded packages pass and optional native edges do not fail the release check", async () => {
-  module(excluded, { spark: { nativeModules: ["Fixture"] } });
+  module(excluded, { spark: { nativeModules: true } });
   module("feature", { dependencies: { [excluded]: "1" }, optionalDependencies: { [excluded]: "1" }, peerDependencies: { [excluded]: "1" }, peerDependenciesMeta: { [excluded]: { optional: true } } });
   commands.sources = ["node_modules/feature/src/index.ts"];
   expect((await analyze(root)).included.map(pkg => pkg.name)).toEqual(["feature"]);
