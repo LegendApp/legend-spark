@@ -524,6 +524,18 @@ relaunch persistence on each app target.
 writes reject explicitly. `spark doctor` reports stale/missing/conflicting app
 patches with fixes (#545); source/package CI runs only on macOS (#544).
 
-The DocumentPicker original-import adapter (#546), SecureStore original-import
-adapter and expanded option validation (#548) are held for verification and are
-not included in 0.0.4.
+`expo-document-picker` original imports also work on macOS (#546). Picks return
+Expo-shaped assets and copy to app Caches by default; use
+`copyToCacheDirectory: false` to keep the original file URI. Common MIME filters
+and multiple selection are supported; unsupported MIME filters and options reject.
+
+Unsupported runtime options and invalid package metadata now reject explicitly
+(#548). From `package.json.spark`, remove unused `pod`, `platforms` and
+`windowsAdapter` fields; `nativeModules` accepts only `true`, with binding names owned by codegen.
+Review toolbar/dialog combinations, nested keys and hook options against the
+packaged references. Unavailable AppKit symbols reject instead of falling back to
+labels. Platform-specific values still override shared settings, and valid
+inactive-target configuration remains accepted.
+
+The SecureStore original-import adapter remains held for verification and is not
+included in 0.0.4.

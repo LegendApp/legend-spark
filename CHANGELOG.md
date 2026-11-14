@@ -13,7 +13,9 @@ macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 - cli: Report stale, missing and conflicting app patches with actionable fixes in `spark doctor` (#545).
 - clipboard: Keep original `expo-clipboard` imports working on macOS for text, HTML and PNG images; fix the native binary-write response (#547).
 - ci: Run source/package gates and the packed creator smoke on macOS only (#544).
-- Not included: the original-import DocumentPicker adapter (#546), SecureStore adapter, and expanded option validation (#548) remain held for verification.
+- dialogs: Keep original `expo-document-picker` imports working on macOS with Expo-shaped assets and cache copies; unsupported MIME filters and options reject (#546).
+- validation: Reject unsupported runtime options, invalid package metadata and unavailable AppKit symbols instead of silently dropping or substituting them. Keep the standalone creator self-contained (#548).
+- Not included: the SecureStore original-import adapter remains held for verification.
 
 ## 0.0.3
 
