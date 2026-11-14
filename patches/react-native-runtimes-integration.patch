@@ -44,6 +44,17 @@ index 364b9a5..187b9ed 100644
    const seenNames = new Map();
    const seenRuntimeFunctionIds = new Map();
  
+@@ -598,7 +599,9 @@ function renderGeneratedEntry({
+     `${runtimeEntryDispatch}` +
+     `${runtimeFunctionRegistrations}` +
+     `${registrations}\n\n` +
+-    `AppRegistry.registerComponent('ThreadedRuntimeHost', () => ThreadedRuntimeHost);\n`
++    `AppRegistry.registerComponent('ThreadedRuntimeHost', () => ThreadedRuntimeHost);\n` +
++    // A worker edit reaching this non-boundary entry would otherwise reload every runtime, not just the worker.
++    `module.hot?.accept();\n`
+   );
+ }
+ 
 diff --git a/packages/core/src/ThreadedRuntime.tsx b/packages/core/src/ThreadedRuntime.tsx
 --- a/packages/core/src/ThreadedRuntime.tsx
 +++ b/packages/core/src/ThreadedRuntime.tsx
