@@ -118,6 +118,7 @@
         "expo-desktop-stubs": "55.0.2",
         "expo-desktop-template-bare-minimum": "55.83.10",
         "expo-device": "55.0.21",
+        "expo-document-picker": "55.0.17",
         "expo-font": "55.0.8",
         "expo-glass-effect": "55.0.11",
         "expo-haptics": "55.0.18",
@@ -485,6 +486,8 @@
       "dependencies": {
         "@legendapp/spark-clipboard": "0.0.3",
         "base64-js": "1.5.1",
+        "@legendapp/spark-file-dialog": "0.0.3",
+        "@legendapp/spark-file-system": "0.0.3",
       },
       "peerDependencies": {
         "react": "^19.2.0",

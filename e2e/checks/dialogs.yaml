@@ -68,3 +68,8 @@ checks:
     covers:
       - ./dialogs#getFileDialogAvailability().available
       - ./dialogs#getMessageDialogAvailability().available
+  DLG-EXPODOCUMENT-01:
+    title: expo-document-picker imports on macOS, finds the native dialog and rejects unsupported MIME filters
+    platforms: [macos]
+    blocking: true
+    spec: "docs/expo-api-adapters.md"

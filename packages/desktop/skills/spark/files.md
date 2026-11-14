@@ -28,6 +28,7 @@ for (const entry of await list(directory)) console.log(entry.name, await readTex
 ## Dialogs (`/dialogs`)
 
 - `openFileDialog` / `saveFileDialog` return `{ canceled: true }` or the paths; always check `canceled`. Filters are extensions without dots.
+- A direct `expo-document-picker` import (declared in the app) also works on macOS: Spark redirects `getDocumentAsync` to this open panel and copies picks into the app's Caches unless `copyToCacheDirectory: false`. Unsupported MIME filters and options reject.
 - Pass `windowId` to attach as a sheet to that window; omit it for an app-modal dialog.
 - `showMessage` returns the chosen button ID (`null` on dismissal); `confirm` and `showPrompt` cover the common cases. `showAboutPanel` shows the standard About panel.
 

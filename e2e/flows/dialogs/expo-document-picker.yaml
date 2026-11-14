@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: expo-document-picker original import on macOS
+intent: >
+  The original expo-document-picker import exposes getDocumentAsync, finds the native file-dialog backend,
+  and rejects an unsupported MIME filter rather than silently permitting every file. Accepting or cancelling
+  the open panel is manual; focused tests cover returned assets, cancellation and copying into app caches.
+checks: [DLG-EXPODOCUMENT-01]
+tags: [dialogs]
+platforms: [macos]
+manual: partial
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://dialogs/expo-document-picker" }
+- extendedWaitUntil: { visible: { id: dialogs-expo-document-picker-passed }, timeout: 10s }

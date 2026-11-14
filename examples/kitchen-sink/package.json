@@ -109,7 +109,8 @@
     "react-native-keyboard-controller": "1.22.9",
     "@sentry/react-native": "8.32.0",
     "expo-router": "55.0.18",
-    "react-native-graph": "1.4.0"
+    "react-native-graph": "1.4.0",
+    "expo-document-picker": "55.0.17"
   },
   "expo": {
     "install": {

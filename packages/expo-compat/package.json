@@ -9,7 +9,9 @@
   ],
   "dependencies": {
     "@legendapp/spark-clipboard": "0.0.3",
-    "base64-js": "1.5.1"
+    "base64-js": "1.5.1",
+    "@legendapp/spark-file-dialog": "0.0.3",
+    "@legendapp/spark-file-system": "0.0.3"
   },
   "peerDependencies": {
     "react": "^19.2.0",
