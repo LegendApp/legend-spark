@@ -4,12 +4,16 @@
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
-- Isolate macOS app-clone launch locks and Spark file/MMKV stores by bundle identifier, with ownership-checked migration of legacy namespaced data. Rebuild custom hosts; see the packaged upgrade guide (#541).
+- [Breaking] Move persistent macOS file and default MMKV data to `~/Library/Application Support/<bundle id>/Spark` with automatic ownership-checked migration. Ambiguous legacy data and IO errors stop startup; rebuild custom hosts and back up data before upgrading (#541).
 - cli: Add `spark migrate` to preview and apply migrations at the app's installed Spark version without installing; `spark create`, template initialization and `spark add desktop` stamp `.spark/version`, and external generators can call `spark migrate --init` (#542).
 - cli: Add `spark prebuild --platform macos` to generate the macOS project and install or repair Pods without compiling the app (#543).
 - patches: Apps can layer their own `patches/<lib>@<version>.patch` on Spark's native patches; `spark patch <lib> [--done]` saves one, including from a monorepo root, and `spark.patches.<lib>: false` skips Spark's patch with a warning (#538, #539).
 - windows: Add `macos.titleBar.tintColor` (one color or a light/dark pair) over the titlebar material (#540) and a `showWindow` `activate` option that activates an inactive macOS app before focusing (#536).
 - docs: Add agent API reference skills (#537).
+- cli: Report stale, missing and conflicting app patches with actionable fixes in `spark doctor` (#545).
+- clipboard: Keep original `expo-clipboard` imports working on macOS for text, HTML and PNG images; fix the native binary-write response (#547).
+- ci: Run source/package gates and the packed creator smoke on macOS only (#544).
+- Not included: the original-import DocumentPicker adapter (#546), SecureStore adapter, and expanded option validation (#548) remain held for verification.
 
 ## 0.0.3
 
