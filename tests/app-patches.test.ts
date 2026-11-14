@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import os from "node:os";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
-import { prepareNativePatches } from "../packages/config-plugin/native-patches.cjs";
+import { appPatchIssues, prepareNativePatches } from "../packages/config-plugin/native-patches.cjs";
 import { validateAppPatches } from "../packages/cli/src/native-patch-preflight.ts";
 import { installedPackages } from "../packages/cli/src/project.ts";
 import { patchLibrary, patchRoot } from "../packages/cli/src/patch.ts";
@@ -232,4 +232,72 @@ test("editing or removing an app patch undoes the old layer without a reinstall"
     expect(validateAppPatches(root, installedPackages(root))).toEqual([]);
   }
   expect(JSON.parse(readFileSync(path.join(root, "node_modules/plain-lib/package.json"), "utf8")).spark).toBeUndefined();
+});
+
+test("doctor reports all stale and missing app patches with fixes, including package-manager declarations", () => {
+  const root = fixture({ patchedDependencies: { "plain-lib@0.9.0": "custom.patch", "missing-lib@1.0.0": "missing.patch" } });
+  writeFileSync(path.join(root, "patches/native-lib@0.9.0.patch"), diff(sparkPatched, both));
+  for (const file of ["custom.patch", "missing.patch"]) writeFileSync(path.join(root, file), diff(upstream, both));
+  const message = appPatchIssues(root).join("\n");
+  expect(message).toContain(`${path.join("patches", "native-lib@0.9.0.patch")} patches native-lib@0.9.0, but 1.0.0 is installed`);
+  expect(message).toContain("custom.patch patches plain-lib@0.9.0, but 1.0.0 is installed");
+  expect(message).toContain("missing.patch patches missing-lib, which isn't installed");
+  expect(message.match(/Fix:/g)).toHaveLength(3);
+  expect(message).toContain("patchedDependencies");
+  expect(message).toContain("spark patch native-lib");
+  expect(podspec(root, "native-lib")).toBe(upstream);
+  expect(receipt(root, "native-lib")).toBeUndefined();
+});
+
+test.each(["convention", "bun", "pnpm", "patch-package"])("doctor detects %s patches that conflict with Spark without changing the install", source => {
+  const file = path.join("patches", source === "patch-package" ? "native-lib+1.0.0.patch" : "native-lib@1.0.0.patch");
+  const declaration = { patchedDependencies: { "native-lib@1.0.0": file } };
+  const root = fixture(source === "bun" ? declaration : source === "pnpm" ? { pnpm: declaration } : {});
+  // The package manager's patch applies to upstream, but cannot follow Spark's change to the same line.
+  const own = diff(upstream, upstream.replace("one", "APP"), source === "patch-package" ? "node_modules/native-lib/" : "");
+  writeFileSync(path.join(root, file), own);
+  install(root, "native-lib", source === "convention" ? upstream : upstream.replace("one", "APP"));
+  const before = podspec(root, "native-lib");
+  const issues = appPatchIssues(root);
+  expect(issues).toHaveLength(1);
+  expect(issues[0]).toContain(`${file} conflicts with Spark's native-lib patch at Native.podspec`);
+  expect(issues[0]).toContain("Fix:");
+  expect(podspec(root, "native-lib")).toBe(before);
+  expect(receipt(root, "native-lib")).toBeUndefined();
+});
+
+test("doctor patch checks accept compatible layers, edited receipts, opt-outs, and scoped hoisted libraries", () => {
+  const root = fixture();
+  const file = path.join(root, "patches/native-lib@1.0.0.patch");
+  writeFileSync(file, diff(sparkPatched, both));
+  expect(appPatchIssues(root)).toEqual([]);
+  expect(podspec(root, "native-lib")).toBe(upstream);
+  prepareNativePatches(root);
+  const manifest = readFileSync(path.join(root, "node_modules/native-lib/package.json"), "utf8");
+  writeFileSync(file, diff(sparkPatched, sparkPatched.replace("seven", "Seven")));
+  expect(appPatchIssues(root)).toEqual([]);
+  expect(podspec(root, "native-lib")).toBe(both);
+  expect(readFileSync(path.join(root, "node_modules/native-lib/package.json"), "utf8")).toBe(manifest);
+  const app = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  writeFileSync(path.join(root, "package.json"), JSON.stringify({ ...app, spark: { patches: { "native-lib": false } } }));
+  writeFileSync(file, diff(upstream, upstream.replace("one", "APP")));
+  expect(appPatchIssues(root)).toEqual([]);
+  install(root, "@scope/lib");
+  writeFileSync(path.join(root, "node_modules/@scope/lib/package.json"), JSON.stringify({ name: "@scope/lib", version: "1.0.0", exports: { ".": "./index.js" } }));
+  const child = path.join(root, "apps/child");
+  mkdirSync(path.join(child, "patches"), { recursive: true });
+  writeFileSync(path.join(child, "package.json"), "{}");
+  writeFileSync(path.join(child, "patches/@scope+lib@0.9.0.patch"), diff(upstream, both));
+  expect(appPatchIssues(child)[0]).toContain("@scope/lib@0.9.0, but 1.0.0 is installed");
+});
+
+
+test("doctor keeps stale versions visible when another declaration patches the same library", () => {
+  const root = fixture({ patchedDependencies: {
+    "plain-lib@0.9.0": "old.patch", "plain-lib@1.0.0": "current.patch",
+  } });
+  for (const file of ["old.patch", "current.patch"]) writeFileSync(path.join(root, file), diff(upstream, both));
+  expect(appPatchIssues(root)).toEqual([
+    expect.stringContaining("old.patch patches plain-lib@0.9.0, but 1.0.0 is installed"),
+  ]);
 });

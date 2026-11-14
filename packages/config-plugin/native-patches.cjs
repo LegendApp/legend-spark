@@ -30,13 +30,10 @@ function warnOnce(message) {
 
 // App patches by convention: patches/<name>@<version>.patch, with + for / in scoped names. patch-package's
 // <name>+<version>.patch files and bun/pnpm patchedDependencies are third-party: the package manager installs them.
-function appPatches(root, app) {
-  const patches = {};
+function appPatchEntries(root, app) {
+  const patches = [];
   const add = (name, version, file, thirdParty) => {
-    const error = patches[name] && `Both ${patches[name].file} and ${file} patch ${name}; combine them into one.`;
-    // patch-package may split one library's patch in several files; that only matters where Spark layers it.
-    if (error && !(thirdParty && patches[name].thirdParty)) throw new Error(error);
-    patches[name] = { version, file, thirdParty, error, bytes: fs.readFileSync(path.join(root, file)) };
+    patches.push([name, { version, file, thirdParty, bytes: fs.readFileSync(path.join(root, file)) }]);
   };
   const listed = { ...app.pnpm?.patchedDependencies, ...app.patchedDependencies };
   for (const [key, file] of Object.entries(listed)) {
@@ -52,6 +49,17 @@ function appPatches(root, app) {
     const own = /^(.+?)@([^@]+)\.patch$/.exec(entry);
     const match = own ?? /^((?:@[^+]+\+)?[^+@]+)\+([^+]+?)(?:\.dev)?(?:\+.*)?\.patch$/.exec(entry);
     if (match && !files.has(file)) add(match[1].replace("+", "/"), match[2], file, !own);
+  }
+  return patches;
+}
+
+function appPatches(root, app) {
+  const patches = {};
+  for (const [name, own] of appPatchEntries(root, app)) {
+    const error = patches[name] && `Both ${patches[name].file} and ${own.file} patch ${name}; combine them into one.`;
+    // patch-package may split one library's patch in several files; that only matters where Spark layers it.
+    if (error && !(own.thirdParty && patches[name].thirdParty)) throw new Error(error);
+    patches[name] = { ...own, error };
   }
   return patches;
 }
@@ -72,7 +80,7 @@ function withoutReceipt(text) {
 // layer's text the package may hold when it differs from text. A file may hold both layers, Spark's alone,
 // the app's alone (installed by a package manager) or neither: undo what it holds, then apply the enabled
 // layers. Every file is verified before any is written.
-function layerPatches(packageRoot, name, layers) {
+function layerPatches(packageRoot, name, layers, { dryRun = false } = {}) {
   const { parsePatch, applyPatch, reversePatch } = require("diff");
   const files = new Map();
   const add = (text, index, kind) => {
@@ -108,6 +116,7 @@ function layerPatches(packageRoot, name, layers) {
     });
     if (next !== current) writes.push([target, next === "" && [...held, ...patches].some(created) ? null : next]);
   }
+  if (dryRun) return;
   // Rename rather than mutate package-manager cache hardlinks.
   for (const [target, next] of writes) {
     if (next === null) { fs.rmSync(target, { force: true }); continue; }
@@ -131,24 +140,11 @@ function stamp(file, installed, update) {
   }
 }
 
-function prepareNativePatches(root, installed = []) {
-  const manifestFile = path.join(root, "package.json");
-  if (!fs.existsSync(manifestFile)) return {};
-  const app = readManifest(manifestFile);
-  if (app.name !== "@legendapp/spark" && !app.dependencies?.["@legendapp/spark"] && !app.devDependencies?.["@legendapp/spark"]) return {};
-  const appRequire = createRequire(manifestFile);
-  let sparkFile;
-  try { sparkFile = appRequire.resolve("@legendapp/spark/package.json"); }
-  catch (error) { if (error.code === "MODULE_NOT_FOUND") return {}; throw error; }
+function nativePatchInventory(sparkFile, hasCamera) {
   const spark = readManifest(sparkFile);
   const directory = path.dirname(sparkFile);
   const patchesRoot = spark.spark?.bundledModuleRoot
     ? path.join(directory, "patches") : path.resolve(__dirname, "../../patches");
-  const dependencies = { ...spark.dependencies, ...app.dependencies, ...app.devDependencies };
-  for (const name of [...cameraPackages, ...optionalBackends]) {
-    if (app.optionalDependencies?.[name] || installed.some(pkg => pkg.name === name)) dependencies[name] = true;
-  }
-  const hasCamera = cameraPackages.some(name => dependencies[name]);
   const pins = {};
   if (hasCamera) {
     const cameraPins = JSON.parse(fs.readFileSync(path.join(patchesRoot, "camera/upstream.json"), "utf8"));
@@ -159,6 +155,77 @@ function prepareNativePatches(root, installed = []) {
   }
   const integrations = path.join(patchesRoot, "dependencies.json");
   if (fs.existsSync(integrations)) Object.assign(pins, JSON.parse(fs.readFileSync(integrations, "utf8")));
+  return { pins, patchesRoot };
+}
+
+// Use the same file checks as preparation, but never write patches or receipts into node_modules.
+function appPatchIssues(root) {
+  const manifestFile = path.join(root, "package.json");
+  if (!fs.existsSync(manifestFile)) return [];
+  const app = readManifest(manifestFile);
+  if (app.name === "@legendapp/spark") return [];
+  const ownPatches = appPatchEntries(root, app);
+  if (!ownPatches.length) return [];
+  const req = createRequire(manifestFile);
+  let inventory;
+  try {
+    const sparkFile = req.resolve("@legendapp/spark/package.json");
+    const dependencies = { ...readManifest(sparkFile).dependencies, ...app.dependencies, ...app.devDependencies, ...app.optionalDependencies };
+    inventory = nativePatchInventory(sparkFile, cameraPackages.some(name => dependencies[name]));
+  } catch (error) { if (error.code !== "MODULE_NOT_FOUND") throw error; }
+  const issues = [];
+  for (const [name, own] of ownPatches) {
+    const remove = `Remove ${own.file}${own.thirdParty ? " and its package-manager patch declaration (patchedDependencies, if listed)" : ""}`;
+    const redo = `${remove}, reinstall ${name}, then run spark patch ${name} to recreate the app patch.`;
+    let file;
+    try { file = resolveManifest(req, name); }
+    catch (error) {
+      if (error.code !== "MODULE_NOT_FOUND") throw error;
+      issues.push(`${own.file} patches ${name}, which isn't installed.\n  Fix: ${remove}, or install ${name}${own.version ? `@${own.version}` : ""}.`);
+      continue;
+    }
+    const manifest = readManifest(file);
+    if (own.version && own.version !== manifest.version) {
+      issues.push(`${own.file} patches ${name}@${own.version}, but ${manifest.version} is installed.\n  Fix: ${redo}`);
+      continue;
+    }
+    const candidate = inventory?.pins[name];
+    const pin = candidate?.version === manifest.version ? candidate : undefined;
+    // Package-manager patches on other libraries remain the package manager's responsibility.
+    if (own.thirdParty && !pin) continue;
+    const packageRoot = fs.realpathSync(path.dirname(file));
+    const enabled = !!pin && app.spark?.patches?.[name] !== false;
+    const kept = path.join(packageRoot, ".spark-app.patch");
+    try {
+      layerPatches(packageRoot, name, [
+        pin ? {
+          text: fs.readFileSync(path.join(inventory.patchesRoot, pin.patch), "utf8"), apply: enabled,
+          error: relative => `${own.file} conflicts with Spark's ${name} patch at ${relative}.`,
+        } : undefined,
+        { text: own.bytes.toString("utf8"), applied: fs.existsSync(kept) ? fs.readFileSync(kept, "utf8") : undefined, apply: true,
+          error: relative => `${own.file} ${enabled ? `conflicts with Spark's ${name} patch` : "cannot apply"} at ${relative}.` },
+      ], { dryRun: true });
+    } catch (error) { issues.push(`${error.message}\n  Fix: ${redo}`); }
+  }
+  return issues;
+}
+
+function prepareNativePatches(root, installed = []) {
+  const manifestFile = path.join(root, "package.json");
+  if (!fs.existsSync(manifestFile)) return {};
+  const app = readManifest(manifestFile);
+  if (app.name !== "@legendapp/spark" && !app.dependencies?.["@legendapp/spark"] && !app.devDependencies?.["@legendapp/spark"]) return {};
+  const appRequire = createRequire(manifestFile);
+  let sparkFile;
+  try { sparkFile = appRequire.resolve("@legendapp/spark/package.json"); }
+  catch (error) { if (error.code === "MODULE_NOT_FOUND") return {}; throw error; }
+  const spark = readManifest(sparkFile);
+  const dependencies = { ...spark.dependencies, ...app.dependencies, ...app.devDependencies };
+  for (const name of [...cameraPackages, ...optionalBackends]) {
+    if (app.optionalDependencies?.[name] || installed.some(pkg => pkg.name === name)) dependencies[name] = true;
+  }
+  const hasCamera = cameraPackages.some(name => dependencies[name]);
+  const { pins, patchesRoot } = nativePatchInventory(sparkFile, hasCamera);
   const active = Object.keys(pins).filter(name => dependencies[name] ||
     (hasCamera && name === "react-native-nitro-modules") ||
     (dependencies["react-native-vision-camera"] && name === "react-native-nitro-image"));
@@ -286,4 +353,4 @@ function removeExpoApplicationAlias(rn, expo) {
   fs.renameSync(temporary, file); // Preserve package-manager cache hardlinks.
 }
 
-module.exports = { prepareNativePatches, removeExpoApplicationAlias, appPatches, layerPatches, resolveManifest, withoutReceipt };
+module.exports = { appPatchIssues, prepareNativePatches, removeExpoApplicationAlias, appPatches, layerPatches, resolveManifest, withoutReceipt };

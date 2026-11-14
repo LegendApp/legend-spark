@@ -59,7 +59,7 @@ Native macOS builds need full Xcode (license/first-launch setup and selected dev
 
 ## Diagnose and upgrade
 
-- Run `spark doctor` for dependency pins and native tooling; it exits 1 on issues.
+- Run `spark doctor` for dependency pins, stale/missing/conflicting app patches, and native tooling; it exits 1 on issues and prints patch fixes without changing installed files.
 - Direct `react`, `react-native`, `expo`, and (for macOS apps) `react-native-macos` specs must match the installed CLI's exact template pins. Ranges are drift even when they include the expected version. Check npm/Bun `overrides`, Yarn `resolutions`, and `pnpm.overrides` too. Do not upgrade React/Expo independently of Spark's tested matrix.
 - `catalog:` and `workspace:` baseline specs are left to their owner; validate their resolved versions yourself. Only the app manifest is checked, not workspace-root overrides. Workspace-managed Spark versions need updating at their owner.
 - `spark upgrade --dry-run` previews the newest release on the installed version's channel (`next` or `latest`), target pins, install command, and migrations without modifying the app. `spark upgrade` updates Spark and its release inputs, runs the detected manager's install, then applies versioned migrations and refreshes the AI pointers. Both support `--project <directory>`.
