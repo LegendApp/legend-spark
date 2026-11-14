@@ -12,7 +12,7 @@
 namespace facebook::react {
 struct Props {using Shared=std::shared_ptr<const Props>;virtual ~Props()=default;};
 struct SidebarSplitViewProps:Props {
- std::string appearance="system",contentTitlebarMaterial="none",contentTitlebarOverlayColor,sidebarTitlebarOverlayColor;
+ std::string appearance="system",contentLayout="pane",contentScrollEdgeEffect="none",contentTitlebarMaterial="none",contentTitlebarOverlayColor,sidebarTitlebarOverlayColor;
  double sidebarWidth=180,sidebarMinWidth=180,contentMinWidth=320,listWidth=240,listMinWidth=240,contentTitlebarHeight=0,contentTitlebarOverlayOpacity=0,sidebarTitlebarOverlayOpacity=0;
  bool hasList=false,sidebarCollapsed=false;
 };
@@ -110,6 +110,64 @@ int main(){@autoreleasepool{
  [v mountChildComponentView:sidebar index:0];[v mountChildComponentView:content index:1];
  [v layout];spin();
  NSSplitViewController *controller=[v valueForKey:@"splitViewController"];
+ if (@available(macOS 26.1,*)) {
+  NSSplitViewItem *item=controller.splitViewItems.lastObject;
+  assert(item.topAlignedAccessoryViewControllers.count==0);
+  auto soft=std::make_shared<SidebarSplitViewProps>(*props);soft->contentScrollEdgeEffect="soft";
+  [v updateProps:soft oldProps:v->_props];[v layout];spin();
+  assert(item.topAlignedAccessoryViewControllers.count==1);
+  auto accessory=item.topAlignedAccessoryViewControllers.firstObject;
+  assert(!accessory.automaticallyAppliesContentInsets);
+  assert(accessory.preferredScrollEdgeEffectStyle==NSScrollEdgeEffectStyle.softStyle);
+  [v updateProps:soft oldProps:v->_props];[v layout];spin();
+  assert(item.topAlignedAccessoryViewControllers.count==1);
+  assert(item.topAlignedAccessoryViewControllers.firstObject==accessory);
+  // Check actual SDK underlay/accessory coordinates with a native scroll view.
+  // This is a coverage regression, not an offscreen assertion of rendered blur.
+  auto scrolling=std::make_shared<SidebarSplitViewProps>(*soft);scrolling->contentLayout="underlay";
+  [v updateProps:scrolling oldProps:v->_props];[v layout];spin();
+  NSScrollView *scroll=[[NSScrollView alloc]initWithFrame:content.bounds];
+  scroll.automaticallyAdjustsContentInsets=YES;
+  NSView *document=[[NSView alloc]initWithFrame:NSMakeRect(0,0,NSWidth(content.bounds),1800)];
+  scroll.documentView=document;[content addSubview:scroll];
+  [w.contentView.superview layoutSubtreeIfNeeded];spin();
+  auto covered=[&](){return [scroll convertRect:accessory.view.bounds fromView:accessory.view];};
+  assert(NSContainsRect(scroll.bounds,covered()));
+  NSRect paneInContent=[content convertRect:accessory.view.bounds fromView:accessory.view];
+  assert(NSWidth(paneInContent)>8);
+  NSRect paneViewport=NSMakeRect(NSMinX(paneInContent),0,NSWidth(paneInContent),NSHeight(content.bounds));
+  scroll.frame=paneViewport;[scroll layoutSubtreeIfNeeded];
+  assert(NSContainsRect(scroll.bounds,covered()));
+  NSRect insetViewport=paneViewport;insetViewport.origin.x+=4;insetViewport.size.width-=4;
+  scroll.frame=insetViewport;[scroll layoutSubtreeIfNeeded];
+  assert(!NSIsEmptyRect(NSIntersectionRect(scroll.bounds,covered())));
+  assert(!NSContainsRect(scroll.bounds,covered()));
+  // Moving that clearance into the document restores complete viewport coverage.
+  scroll.frame=content.bounds;
+  NSView *documentContent=[[NSView alloc]initWithFrame:NSMakeRect(NSMinX(paneInContent)+4,0,NSWidth(paneViewport)-4,1800)];
+  [document addSubview:documentContent];[scroll layoutSubtreeIfNeeded];
+  assert(NSContainsRect(scroll.bounds,covered()));
+  [scroll removeFromSuperview];
+  [v updateProps:soft oldProps:v->_props];[v layout];spin();
+  puts("PASS soft-edge full/pane viewport coverage and document-side clearance; partial overlap is insufficient");
+  [v updateProps:props oldProps:v->_props];[v layout];spin();
+  assert(item.topAlignedAccessoryViewControllers.count==0);
+  puts("PASS public soft-edge opt-in, stable accessory identity, and disable cleanup");
+ }
+ auto underlay=std::make_shared<SidebarSplitViewProps>(*props);underlay->contentLayout="underlay";
+ [v updateProps:underlay oldProps:v->_props];[v layout];spin();
+ NSRect underlayFrame=[content convertRect:content.bounds toView:v];
+ assert(fabs(underlayFrame.origin.x)<1 && fabs(underlayFrame.size.width-NSWidth(v.bounds))<1);
+ assert(resizes.back().contentX==0 && fabs(resizes.back().contentWidth-NSWidth(v.bounds))<1);
+ RNSidebarSplitViewNativeSplitView *nativeSplit=(RNSidebarSplitViewNativeSplitView *)controller.splitView;
+ NSPoint bodyPoint=[v convertPoint:NSMakePoint(700,200) toView:nativeSplit.superview];
+ NSView *bodyHit=[nativeSplit hitTest:bodyPoint];
+ assert(bodyHit==content || [bodyHit isDescendantOf:content]);
+ NSPoint sidebarPoint=[v convertPoint:NSMakePoint(50,200) toView:nativeSplit.superview];
+ NSView *sidebarHit=[nativeSplit hitTest:sidebarPoint];
+ assert(sidebarHit!=content && ![sidebarHit isDescendantOf:content]);
+ [v updateProps:props oldProps:v->_props];[v layout];spin();
+ assert(nativeSplit.contentUnderlayHost==nil && nativeSplit.contentUnderlayViewport==nil);
  [controller.splitView setPosition:260 ofDividerAtIndex:0];[v layout];spin();
  // AppKit can report an animation target origin before its width catches up. Do not replace owned frames.
  NSView *contentContainer=[v valueForKey:@"contentContainer"], *sidebarContainer=[v valueForKey:@"sidebarContainer"];
@@ -240,5 +298,35 @@ int main(){@autoreleasepool{
    assert(NSEqualPoints([placedContent convertRect:placedContent.bounds toView:placed].origin,contentOrigin));
    puts("PASS panes report their AppKit origins and stay there when Fabric applies current or stale origins");
  }
+ for (bool rtl : {false,true}) {
+   resizes.clear();
+   RNSidebarSplitViewComponent *canvas=[[RNSidebarSplitViewComponent alloc]initWithFrame:NSMakeRect(0,0,1000,600)];
+   NSWindow *canvasWindow=[[NSWindow alloc]initWithContentRect:NSMakeRect(0,0,1000,600) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+   canvasWindow.contentView=canvas;
+   [canvas updateEventEmitter:std::make_shared<SidebarSplitViewEventEmitter>()];
+   LayoutMetrics canvasMetrics{};canvasMetrics.frame=facebook::react::Rect{facebook::react::Point{0,0},facebook::react::Size{1000,600}};
+   canvasMetrics.layoutDirection=rtl?LayoutDirection::RightToLeft:LayoutDirection::LeftToRight;
+   [canvas updateLayoutMetrics:canvasMetrics oldLayoutMetrics:EmptyLayoutMetrics];
+   auto canvasProps=std::make_shared<SidebarSplitViewProps>();canvasProps->contentLayout="underlay";canvasProps->hasList=true;
+   [canvas updateProps:canvasProps oldProps:canvas->_props];
+   RCTViewComponentView *navigation=[RCTViewComponentView new],*body=[RCTViewComponentView new],*middle=[RCTViewComponentView new];
+   [canvas mountChildComponentView:navigation index:0];[canvas mountChildComponentView:body index:1];[canvas mountChildComponentView:middle index:2];
+   [canvas layout];spin();
+   NSRect bodyFrame=[body convertRect:body.bounds toView:canvas];
+   assert(fabs(bodyFrame.origin.x)<1 && fabs(bodyFrame.size.width-1000)<1);
+   assert(resizes.back().contentX==0 && resizes.back().contentWidth==1000 && resizes.back().listWidth>0);
+   NSView *viewport=[canvas valueForKey:@"contentContainer"],*contentHost=[canvas valueForKey:@"contentHost"];
+   NSSplitViewController *canvasController=[canvas valueForKey:@"splitViewController"];
+   RNSidebarSplitViewNativeSplitView *canvasSplit=(RNSidebarSplitViewNativeSplitView *)canvasController.splitView;
+   NSPoint visiblePoint=[viewport convertPoint:NSMakePoint(NSMidX(viewport.bounds),NSMidY(viewport.bounds)) toView:canvasSplit.superview];
+   NSView *visibleHit=[canvasSplit hitTest:visiblePoint];assert(visibleHit==body || [visibleHit isDescendantOf:body]);
+   auto collapsedCanvas=std::make_shared<SidebarSplitViewProps>(*canvasProps);collapsedCanvas->sidebarCollapsed=true;
+   [canvas updateProps:collapsedCanvas oldProps:canvas->_props];[canvas layout];spin();
+   assert(resizes.back().sidebarWidth==0 && resizes.back().contentWidth==1000);
+   [canvas prepareForRecycle];
+   assert(contentHost.superview==viewport && !((RNSidebarSplitViewPaneView *)viewport).transparent);
+   assert(canvasSplit.contentUnderlayHost==nil && canvasSplit.contentUnderlayViewport==nil);
+ }
+ puts("PASS underlay preserves full render coordinates, body input and recycled ownership in LTR/RTL three-pane layouts");
  puts("Full source AppKit component probe passed (generated event declarations; Fabric superclass shim)");
 }}

@@ -27,7 +27,7 @@ const LayoutMetrics EmptyLayoutMetrics{};
 struct Props { using Shared = std::shared_ptr<Props const>; virtual ~Props() = default; };
 // Codegen defaults: empty strings, zero numbers, false booleans.
 struct SidebarSplitViewProps : Props {
-  std::string appearance, contentTitlebarMaterial, contentTitlebarOverlayColor, sidebarTitlebarOverlayColor;
+  std::string appearance, contentLayout, contentScrollEdgeEffect, contentTitlebarMaterial, contentTitlebarOverlayColor, sidebarTitlebarOverlayColor;
   double contentTitlebarHeight = 0, contentTitlebarOverlayOpacity = 0, contentMinWidth = 0, listMinWidth = 0, listWidth = 0;
   double sidebarMinWidth = 0, sidebarTitlebarOverlayOpacity = 0, sidebarWidth = 0;
   bool hasList = false, sidebarCollapsed = false;

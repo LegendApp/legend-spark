@@ -5,6 +5,8 @@ import { useControl } from "../control";
 import { appearance, callback, finite, macosViewAvailability, type SpecializedViewProps } from "../specialized";
 import NativeSplitView from "./SidebarSplitViewNativeComponent";
 export type SidebarSplitViewAppearance = "system" | "light" | "dark";
+export type SidebarSplitViewContentLayout = "pane" | "underlay";
+export type SidebarSplitViewScrollEdgeEffect = "none" | "soft";
 export type SidebarSplitViewTitlebarMaterial = "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
 export interface SidebarSplitViewPaneMetrics { contentHeight: number; contentWidth: number; sidebarHeight: number; sidebarWidth: number; listHeight?: number; listWidth?: number }
 export interface SidebarSplitViewPaneOrigins { sidebarX: number; sidebarY: number; contentX: number; contentY: number; listX: number; listY: number }
@@ -21,6 +23,10 @@ export interface SidebarSplitViewProps extends Omit<SpecializedViewProps, "child
   list?: ReactNode;
   children?: never;
   appearance?: SidebarSplitViewAppearance;
+  /** `underlay` renders content across the split view behind the other panes. Resize content metrics describe that render area; pane sizing still reserves contentMinWidth. */
+  contentLayout?: SidebarSplitViewContentLayout;
+  /** Native content-pane soft edge on macOS 26.1+. Does not paint a glass header. Defaults to none. */
+  contentScrollEdgeEffect?: SidebarSplitViewScrollEdgeEffect;
   contentMinWidth?: number;
   sidebarMinWidth?: number;
   sidebarWidth?: number;
@@ -52,8 +58,10 @@ function overlay(value?: SplitViewTitleBarOverlay) {
   if (typeof value.color !== "string" || !/^#(?:[\da-f]{6}|[\da-f]{8})$/i.test(value.color)) throw new SparkError("E_INVALID_ARGUMENT", "Expected #RRGGBB or #RRGGBBAA title-bar color");
   if (value.opacity !== undefined) finite(value.opacity, "overlay opacity", 0, 1);
 }
-export function SidebarSplitView({ sidebar, content, list, children, appearance: theme = "system", contentMinWidth = 320, sidebarMinWidth = 180, sidebarWidth, listMinWidth = 240, listWidth, sidebarCollapsed = false, initialPaneMetrics, titleBar = {}, onResize, onSidebarCollapsedChange, ref, onError, ...props }: SidebarSplitViewProps) {
+export function SidebarSplitView({ sidebar, content, list, children, appearance: theme = "system", contentLayout = "pane", contentScrollEdgeEffect = "none", contentMinWidth = 320, sidebarMinWidth = 180, sidebarWidth, listMinWidth = 240, listWidth, sidebarCollapsed = false, initialPaneMetrics, titleBar = {}, onResize, onSidebarCollapsedChange, ref, onError, ...props }: SidebarSplitViewProps) {
   appearance(theme); finite(contentMinWidth, "minimum content width"); finite(sidebarMinWidth, "minimum sidebar width"); finite(listMinWidth, "minimum list width");
+  if (contentLayout !== "pane" && contentLayout !== "underlay") throw new SparkError("E_INVALID_ARGUMENT", "Invalid split-view content layout");
+  if (contentScrollEdgeEffect !== "none" && contentScrollEdgeEffect !== "soft") throw new SparkError("E_INVALID_ARGUMENT", "Invalid split-view scroll edge effect");
   if (sidebarWidth !== undefined) finite(sidebarWidth, "sidebar width", sidebarMinWidth);
   if (listWidth !== undefined) finite(listWidth, "list width", listMinWidth);
   const hasList = list !== undefined && list !== null && typeof list !== "boolean" && list !== "";
@@ -86,11 +94,11 @@ export function SidebarSplitView({ sidebar, content, list, children, appearance:
     onSidebarCollapsedChange?.(collapsed);
   }
   if (control.failed) return <View {...props} ref={control.ref} style={[{ flexDirection: "row" }, props.style]}>{sidebarCollapsed ? null : sidebar}{list}{content}</View>;
-  return <NativeSplitView {...props} ref={control.ref} appearance={theme} contentMinWidth={contentMinWidth} sidebarMinWidth={sidebarMinWidth} sidebarWidth={sidebarWidth} hasList={hasList} listMinWidth={listMinWidth} listWidth={listWidth} sidebarCollapsed={sidebarCollapsed} onSplitViewDidResize={resize} onSidebarCollapsedChange={collapsedChange}
+  return <NativeSplitView {...props} ref={control.ref} appearance={theme} contentLayout={contentLayout} contentScrollEdgeEffect={contentScrollEdgeEffect} contentMinWidth={contentMinWidth} sidebarMinWidth={sidebarMinWidth} sidebarWidth={sidebarWidth} hasList={hasList} listMinWidth={listMinWidth} listWidth={listWidth} sidebarCollapsed={sidebarCollapsed} onSplitViewDidResize={resize} onSidebarCollapsedChange={collapsedChange}
     contentTitlebarHeight={titleBar.content?.height ?? 0} contentTitlebarMaterial={material} contentTitlebarOverlayColor={titleBar.content?.overlay?.color} contentTitlebarOverlayOpacity={titleBar.content?.overlay?.opacity ?? (titleBar.content?.overlay ? 1 : 0)}
     sidebarTitlebarOverlayColor={titleBar.sidebar?.overlay?.color} sidebarTitlebarOverlayOpacity={titleBar.sidebar?.overlay?.opacity ?? (titleBar.sidebar?.overlay ? 1 : 0)}>
-    <View key="sidebar" style={{ position: "absolute", top: paneMetrics?.sidebarY ?? 0, left: paneMetrics?.sidebarX ?? 0, minWidth: 0, height: paneMetrics?.sidebarHeight, width: paneMetrics?.sidebarWidth ?? (sidebarCollapsed ? 0 : sidebarWidth ?? sidebarMinWidth) }}>{sidebar}</View>
-    <View key="content" style={{ position: "absolute", top: paneMetrics?.contentY ?? 0, left: paneMetrics?.contentX ?? 0, minWidth: 0, overflow: "hidden", height: paneMetrics?.contentHeight, width: paneMetrics?.contentWidth }}>{content}</View>
-    {hasList ? <View key="list" style={{ position: "absolute", top: paneMetrics?.listY ?? 0, left: paneMetrics?.listX ?? 0, minWidth: 0, height: paneMetrics?.listHeight, width: paneMetrics?.listWidth ?? listWidth ?? listMinWidth }}>{list}</View> : null}
+    <View key="sidebar" collapsable={false} style={{ position: "absolute", top: paneMetrics?.sidebarY ?? 0, left: paneMetrics?.sidebarX ?? 0, minWidth: 0, height: paneMetrics?.sidebarHeight, width: paneMetrics?.sidebarWidth ?? (sidebarCollapsed ? 0 : sidebarWidth ?? sidebarMinWidth) }}>{sidebar}</View>
+    <View key="content" collapsable={false} style={{ position: "absolute", top: paneMetrics?.contentY ?? 0, left: paneMetrics?.contentX ?? 0, minWidth: 0, overflow: "hidden", height: paneMetrics?.contentHeight, width: paneMetrics?.contentWidth }}>{content}</View>
+    {hasList ? <View key="list" collapsable={false} style={{ position: "absolute", top: paneMetrics?.listY ?? 0, left: paneMetrics?.listX ?? 0, minWidth: 0, height: paneMetrics?.listHeight, width: paneMetrics?.listWidth ?? listWidth ?? listMinWidth }}>{list}</View> : null}
   </NativeSplitView>;
 }

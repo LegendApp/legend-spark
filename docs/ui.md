@@ -74,6 +74,42 @@ An optional `list` pane adds AppKit's content-list column between sidebar and co
 
 Preferred widths (`sidebarWidth`, `listWidth`) seed the dividers on the first layout with enough room for them and again when those props, `list` presence or `sidebarCollapsed` change. Afterwards a divider stays where the user dragged it across window resizes and re-layouts. Each native layout pass publishes one resize event with its final pane sizes. Content and list pane backgrounds are opaque in the semantic window background color (including the content pane in two-pane layouts); content is clipped to its pane. Pane content still receives its new React layout on the next commit.
 
+`contentLayout` defaults to `'pane'`, preserving that behavior. On macOS, opt in to `'underlay'` for a continuous content surface behind translucent sidebars: the existing content subtree fills the split view and renders below its native panes. Sidebar/list widths, minimum visible content width, divider ownership and collapse behavior are unchanged; the list pane remains opaque. The native content viewport forwards body input to the underlay while retaining native divider and sidebar hit testing. Switching modes keeps the React content mounted.
+
+In underlay mode, `contentX`/`contentY` are zero and `contentWidth`/`contentHeight` describe the full split-view render area, not just the unobscured content viewport. The other pane metrics retain their ordinary meaning. Apps inset interactive content using those pane metrics while allowing backgrounds/shelves to extend beneath the native material. Use initial content metrics consistent with the selected mode, or omit that optional hint until native measurements arrive. The ordinary unavailable-host fallback remains a row layout; it is not native underlay support. A native rebuild is required when adding this capability to an existing runtime.
+
+`contentScrollEdgeEffect` defaults to `'none'`. Set it to `'soft'` to request AppKit's native content-pane scroll edge on macOS 26.1 and later. The split view manages a transparent top-aligned accessory and its lifecycle; it does not paint a fixed glass strip or replace the window's content controller. With underlay enabled, content remains inside the native split hierarchy for safe-area/edge registration. Earlier macOS versions retain the existing layout without this optional effect, following `GlassView`'s existing older-system presentation fallback.
+
+Opt scroll views into their existing `contentInsetAdjustmentBehavior` (`'automatic'`, `'always'`, or `'scrollableAxes'`) for native clearance. With `'scrollableAxes'`, an explicitly bouncing axis retains clearance even for short documents. The RN macOS 0.83.0 compatibility patch filters applied document insets, never `NSView.safeAreaInsets`; AppKit needs the latter's real geometry for native edge masks. No effect is promised for a non-scrolling view. Native styling and extent remain owned by AppKit, not caller-specified blur layers or accessory dimensions.
+
+Keep the scrolling **viewport** stretched across the underlay, and put sidebar clearance and gutters in its scrolling **document**. Do not wrap the scroll view in leading padding/margins to clear the sidebar: that shrinks the viewport relative to the native content-pane edge registration. On macOS 26.7.2, a viewport starting just 4 points inside the pane reproduced an empty native pocket mask on first appearance even though scrolling and a nonempty accessory intersection both worked. Exact pane coverage or full-underlay coverage worked. Navigating away and back can hide this composition problem, so test first appearance too.
+
+```tsx
+<SidebarSplitView
+  style={{ flex: 1 }}
+  contentLayout="underlay"
+  contentScrollEdgeEffect="soft"
+  sidebar={sidebar}
+  content={
+    <ScrollView
+      style={{ flex: 1 }}
+      contentInsetAdjustmentBehavior="scrollableAxes"
+      contentContainerStyle={{
+        paddingStart: sidebarCollapsed ? 16 : sidebarWidth + 16,
+        paddingEnd: 16,
+        paddingVertical: 16,
+      }}
+    >
+      {content}
+    </ScrollView>
+  }
+/>
+```
+
+Here `ScrollView` is from `react-native`; `sidebarWidth` and `sidebarCollapsed` are the app's current pane state, updated through the split-view events. The example applies to a two-pane layout; include list-pane clearance when present. Virtualized lists should likewise keep the viewport full-width and apply the leading inset to their content container/header, deriving column widths from the remaining usable document width. This is layout guidance, not a promise that arbitrary partially overlapping scroll-view frames receive a native effect. The native geometry regression checks coverage; consumer rendering still needs a mounted first-appearance check.
+
+For a full-size window that also extends beneath its title bar, React Native scroll views can opt into AppKit's safe-area management with their existing `contentInsetAdjustmentBehavior` prop. The pinned RN macOS compatibility module keeps `never` unchanged, supports `automatic`/`always`, and limits `scrollableAxes` to axes that overflow or explicitly allow bounce. RN's `alwaysBounceVertical` therefore preserves top clearance for a short vertical document, while a non-scrolling/non-bouncing horizontal axis gains no phantom range. Recycled views reset to `never`. This enables the inset prerequisite for native scroll-edge presentation; it does not promise that arbitrary application chrome automatically registers every desired edge effect.
+
 AppKit can collapse the sidebar itself (View > Hide Sidebar, the sidebar toolbar button, `toggleSidebar:`). The component adopts that state, publishes a resize with the sidebar at width zero, and calls `onSidebarCollapsedChange(collapsed)`; it is not called for changes you make through `sidebarCollapsed`. Uncontrolled use needs nothing more: the sidebar stays as AppKit left it. A controlled app sets `sidebarCollapsed` from the callback, which is then a no-op natively. Only a change of the `sidebarCollapsed` value is applied: an unchanged prop never undoes a native toggle, and when a prop change arrives before a native toggle is observed, the prop change wins and no event is sent for that toggle.
 
 `onResize` reports owned pane dimensions, each pane's origin in split-view coordinates (`sidebarX`/`sidebarY`, `contentX`/`contentY`, `listX`/`listY`; exported as `SidebarSplitViewPaneOrigins`), total `height`, and `phase: 'provisional' | 'ready'`. Panes are laid out at those origins, so `measure()` matches the screen once React layout catches up; a pane's content stays at its AppKit position even while a commit still carries an older origin. Both phases update layout. Zero dimensions remain zero, so collapsed panes cannot inherit stale sizes. Initial metrics are a mount-time hint; readiness comes from native layout. Title-bar overlay colors use `#RRGGBB` or `#RRGGBBAA`, with opacity in `[0, 1]` (default 1 when an overlay is supplied). Application-specific chrome presets are not exported.
