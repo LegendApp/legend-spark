@@ -456,13 +456,11 @@ to fix it.
 
 ## 0.0.3
 
-macOS clones with a changed `CFBundleIdentifier` have independent launch locks and Spark file/MMKV stores under `~/Library/Application Support/<bundle id>/Spark`. Rebuild custom hosts to embed the configured default ID in `SparkDefaultBundleIdentifier`. When the new store is absent, startup atomically renames a legacy project-hash or display-name folder only when its owner marker matches the running bundle, or it is unmarked and the running ID equals the configured default. Foreign folders remain untouched; ambiguous sources and IO errors stop startup. Existing destinations are never overwritten. Quit older builds and back up data before upgrading.
-
 Breaking: yes. Spark's macOS patch for app-installed `react-native-mmkv@4.3.2`
 changes its default storage location. Other MMKV versions are not patched.
 
 Before: `~/Documents/mmkv` (shared by apps using the upstream default).
-After: `~/Library/Application Support/<bundle id>/Spark/mmkv` (scoped to the app).
+After: `~/Library/Application Support/<Spark namespace>/mmkv` (scoped to the app).
 An explicit custom MMKV path is unaffected. Existing default-store files are not
 moved automatically, so an upgraded app can appear to have empty storage.
 
@@ -489,3 +487,43 @@ custom runtimes with `spark build --dev`, then exercise installed desktop-librar
 flows, permissions and storage persistence on each app target. The CLI now caches
 native compatibility inputs between dev refreshes to reduce idle CPU work
 (#535); no app source change is required for that cache.
+
+## 0.0.4
+
+Breaking: yes.
+
+Quit older builds, back up app data, keep bundle identifiers stable, and rebuild
+custom hosts before upgrading. Persistent macOS file and MMKV stores move to
+`~/Library/Application Support/<bundle id>/Spark` (#541). First launch
+atomically migrates an owned legacy project-hash or display-name folder when the
+new destination is absent. Unmarked data migrates only for the configured default
+bundle ID; foreign folders remain untouched and existing destinations are never
+overwritten. Ambiguous legacy sources and IO errors stop startup; resolve the
+reported ownership/data conflict before retrying. App clones use independent
+launch locks and stores; custom hosts embed the default ID in
+`SparkDefaultBundleIdentifier`.
+
+The default MMKV store therefore moves from `<Spark namespace>/mmkv` (0.0.3) to
+`~/Library/Application Support/<bundle id>/Spark/mmkv`, using the same
+ownership-checked migration. An explicit custom MMKV path is unaffected.
+
+New CLI commands need no app change: `spark migrate` applies pending migrations at
+the installed version (see "Migrate at the installed version" above), `spark
+prebuild --platform macos` installs or repairs Pods without building, and `spark
+patch <lib>` saves an app patch layered on Spark's patch. Existing
+patch-package or Bun/pnpm `patchedDependencies` patches for Spark-patched
+libraries now apply after Spark's patch; regenerate any that fail with `spark
+patch`.
+
+Run `spark upgrade`, `spark doctor`, and the app's typecheck and tests. Rebuild
+custom hosts with `spark build --dev`, then verify settings/file/MMKV data and
+relaunch persistence on each app target.
+
+`expo-clipboard` original imports work on macOS for text, HTML and PNG images
+(#547). Unsupported JPEG/quality options, URL methods, listeners and synchronous
+writes reject explicitly. `spark doctor` reports stale/missing/conflicting app
+patches with fixes (#545); source/package CI runs only on macOS (#544).
+
+The DocumentPicker original-import adapter (#546), SecureStore original-import
+adapter and expanded option validation (#548) are held for verification and are
+not included in 0.0.4.
