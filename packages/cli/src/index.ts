@@ -203,11 +203,16 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
           pinIssues = true;
         }
       }
-      const patchIssues = appPatchIssues(root ?? start);
-      if (patchIssues.length) {
-        console.error(`App patch issues:\n${patchIssues.map(issue => `- ${issue}`).join("\n")}`);
+      try {
+        const patchIssues = appPatchIssues(root ?? start);
+        if (patchIssues.length) {
+          console.error(`App patch issues:\n${patchIssues.map(issue => `- ${issue}`).join("\n")}`);
+          process.exitCode = 1;
+          break;
+        }
+      } catch (error) {
+        console.error(`App patch check failed: ${error instanceof Error ? error.message : String(error)}`);
         process.exitCode = 1;
-        break;
       }
       await doctor(root ?? start);
       console.log("Native toolchain available.");

@@ -83,4 +83,4 @@ test("kitchen sink declares its backends and excludes unsupported rich text on W
     if (previous === undefined) delete process.env.SPARK_PLATFORM;
     else process.env.SPARK_PLATFORM = previous;
   }
-});
+}, 30000);

@@ -287,6 +287,7 @@ test.each(["no app", "malformed", "duplicate", "mismatched", "matching"])("docto
     expect(log).toHaveBeenCalledWith("Native toolchain available.");
     if (["malformed", "duplicate", "mismatched"].includes(manifest)) {
       if (manifest !== "mismatched") expect(error).toHaveBeenCalledWith(expect.stringContaining("Dependency pin check failed:"));
+      if (manifest === "malformed") expect(error).toHaveBeenCalledWith(expect.stringContaining("App patch check failed:"));
       expect(process.exitCode).toBe(1);
       expect(log.mock.calls.slice(-2).map(call => call[0])).toEqual(["Native toolchain available.", "Dependency pin issues found; run spark upgrade."]);
     } else {
