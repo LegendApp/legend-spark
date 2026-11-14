@@ -177,7 +177,7 @@ index b30a29d..23a1dc6 100644
    ],
    "scripts": {
      "test:node": "yarn workspace node test",
-@@ -137,5 +138,10 @@
+@@ -137,5 +138,9 @@
      "type": "turbo-module",
      "version": "0.52.1"
    },
@@ -185,7 +185,6 @@ index b30a29d..23a1dc6 100644
 +  "packageManager": "yarn@4.11.0",
 +  "spark": {
 +    "sdk": true,
-+    "windowsAdapter": true,
 +    "upstreamIntegrity": "sha512-atVOtXyFzO0e454eVS27AMwRs515URCKrkvLLG+mGKcyiF5UPfC53oukpNp2UmVzlLebyTEXNkTYs6n0dVGd0g=="
 +  }
  }

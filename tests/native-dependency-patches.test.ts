@@ -14,6 +14,7 @@ function fixture(nested = false) {
   const packages = path.join(nested ? spark : root, "node_modules");
   const patches = path.join(spark, "patches/camera");
   mkdirSync(patches, { recursive: true });
+  mkdirSync(path.join(spark, "vendor"), { recursive: true });
   writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "app", dependencies: { "@legendapp/spark": "1.0.0" } }));
   writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { platforms: ["macos"] } }));
   writeFileSync(path.join(spark, "package.json"), JSON.stringify({ name: "@legendapp/spark", version: "1.0.0",
@@ -242,7 +243,7 @@ test("workspace Nitro adapters and automatic camera patch receipts survive repea
     const { createPatch } = require("diff");
     const file = path.join(packages, name, "package.json");
     const original = readFileSync(file, "utf8");
-    const patched = JSON.stringify({ ...JSON.parse(original), spark: { sdk: true, windowsAdapter: true } }, null, 2) + "\n";
+    const patched = JSON.stringify({ ...JSON.parse(original), spark: { sdk: true } }, null, 2) + "\n";
     const relative = "patches/workspace/nitro.patch";
     mkdirSync(path.join(root, "patches/workspace"), { recursive: true });
     writeFileSync(path.join(root, relative), createPatch("package.json", original, patched));
@@ -255,7 +256,7 @@ test("workspace Nitro adapters and automatic camera patch receipts survive repea
     const first = readFileSync(file, "utf8");
     installWorkspaceAdapters(root);
     expect(readFileSync(file, "utf8")).toBe(first);
-    expect(JSON.parse(first).spark).toMatchObject({ windowsAdapter: true, dependencyPatch: { version: "1.0.0" }, workspacePatch: { version: "1.0.0" } });
+    expect(JSON.parse(first).spark).toMatchObject({ sdk: true, dependencyPatch: { version: "1.0.0" }, workspacePatch: { version: "1.0.0" } });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

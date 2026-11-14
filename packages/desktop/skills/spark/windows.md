@@ -82,3 +82,10 @@ Per-window appearance is a window option (`appearance: 'system' | 'light' | 'dar
 ## Platforms
 
 macOS: shipped. Windows: development builds only; the same commands exist, `macos` groups reject. Mobile/web: not covered; do not call `/windows` from shared mobile code.
+
+Portable window chrome applies first; explicit `macos` fields then override the
+corresponding settings, including `macos.level` over `alwaysOnTop`. Contradictory
+settings inside a group still reject, such as `toolbar.visible: false` with
+`toolbar.items`, or `titleBar.material: 'none'` with a tint. AppKit validates
+requested titlebar/toolbar/menu symbols before applying the macOS chrome;
+missing symbols reject `E_INVALID_ARGUMENT` rather than showing a text fallback.

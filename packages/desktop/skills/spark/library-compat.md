@@ -56,3 +56,9 @@ Synchronous subscriptions return `{ remove(): void }`; async registrations (`cre
 ## Platforms
 
 macOS: shipped. Windows: development builds; external library integrations are implemented in source but not yet verified on hardware. Mobile/web: Expo owns the runtime; Spark's desktop APIs don't apply there except the Expo-shaped adapters.
+
+Build metadata uses `nativeModules: true` as a marker, not a list of binding names;
+codegen owns those names. Remove unused `spark.pod`, `spark.platforms` and
+`spark.windowsAdapter`. Every build validates retained fields and patch receipts,
+even when output is cached. Known patch settings for inactive libraries or targets
+remain valid and take effect when that library is built.

@@ -28,14 +28,7 @@
   },
   "spark": {
     "sdk": true,
-    "nativeModules": [
-      "NativeDesktopSecureStorage"
-    ],
-    "pod": "RNDesktopSecureStorage",
-    "platforms": [
-      "macos",
-      "windows"
-    ],
+    "nativeModules": true,
     "requires": [
       "@legendapp/spark-desktop-app"
     ]

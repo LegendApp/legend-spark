@@ -112,7 +112,7 @@ export async function packWindowsLibraries(output: string) {
     // Registry archives already contain built JS/types. Producer lifecycle hooks
     // must not invoke Bun or Yarn when a consumer installs our patched archive.
     for (const script of ["prepare", "prepack", "prepublish", "prepublishOnly"]) if (pkg.scripts) delete pkg.scripts[script];
-    pkg.spark = { ...pkg.spark, sdk: true, windowsAdapter: true, upstreamIntegrity: pin.integrity, patchHash: windowsPatchHash(name, pin) }; writeJson(path.join(stage, "package.json"), pkg);
+    pkg.spark = { ...pkg.spark, sdk: true, upstreamIntegrity: pin.integrity, patchHash: windowsPatchHash(name, pin) }; writeJson(path.join(stage, "package.json"), pkg);
     const temporary = path.join(output, "windows-library.tgz");
     await packArchive(stage, temporary);
     const hash = createHash("sha256").update(readFileSync(temporary)).digest("hex").slice(0, 12);

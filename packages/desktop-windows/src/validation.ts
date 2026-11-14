@@ -71,7 +71,6 @@ export function validateOptions(options: WindowOpenOptions | WindowUpdateOptions
     if (platform !== "macos") throw new SparkError("E_UNSUPPORTED_OPTION", "macos window options require macOS");
     validateMacOS(options.macos);
     if (!opening && "panelStyle" in options.macos) throw new SparkError("E_UNSUPPORTED_OPTION", "panelStyle is fixed when opening a window");
-    if (options.alwaysOnTop !== undefined && options.macos.level !== undefined) throw new SparkError("E_INVALID_ARGUMENT", "Choose alwaysOnTop or a macOS window level");
   }
   if (opening) {
     const value = options as WindowOpenOptions;
@@ -125,7 +124,7 @@ export function validateMacOS(value: MacOSWindowOptions) {
     if (title.controls !== undefined) for (const control of entries(title.controls, "titlebar control")) {
       keys(control, ["id", "label", "placement", "disabled", "selected", "symbol", "tooltip"]); flags(control, ["disabled", "selected"]);
       enumValue(control.placement, ["left", "right"], "control placement");
-      for (const field of ["label", "symbol", "tooltip"]) if (control[field] !== undefined) text(control[field], field);
+      for (const field of ["label", "symbol", "tooltip"]) if (control[field] !== undefined) text(control[field], field, field !== "symbol");
     }
   }
   if (value.toolbar !== undefined) {
@@ -138,7 +137,7 @@ export function validateMacOS(value: MacOSWindowOptions) {
       keys(item, ["id", "label", "placement", "type", ...fields[item.type]]);
       flags(item, ["disabled", "bordered", "collapses"]);
       enumValue(item.placement, ["leading", "trailing"], "toolbar placement");
-      for (const field of ["label", "symbol", "tooltip", "text", "placeholder"]) if (item[field] !== undefined) text(item[field], field);
+      for (const field of ["label", "symbol", "tooltip", "text", "placeholder"]) if (item[field] !== undefined) text(item[field], field, field !== "symbol");
       if (item.width !== undefined) number(item.width, "toolbar width", 1, 20000);
       if (item.type === "label") text(item.text, "toolbar text");
       if (item.type === "search" && item.value !== undefined) text(item.value, "search value");

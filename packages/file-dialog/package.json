@@ -31,14 +31,7 @@
   ],
   "spark": {
     "sdk": true,
-    "nativeModules": [
-      "NativeFileDialog"
-    ],
-    "pod": "RNFileDialog",
-    "platforms": [
-      "macos",
-      "windows"
-    ],
+    "nativeModules": true,
     "requires": [
       "@legendapp/spark-desktop-app"
     ]

@@ -28,14 +28,7 @@
   },
   "spark": {
     "sdk": true,
-    "nativeModules": [
-      "NativeContextMenu"
-    ],
-    "pod": "RNContextMenu",
-    "platforms": [
-      "macos",
-      "windows"
-    ],
+    "nativeModules": true,
     "requires": [
       "@legendapp/spark-desktop-app"
     ]

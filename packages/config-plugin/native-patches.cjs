@@ -1,3 +1,4 @@
+const { SparkError, validatePackageSettings } = require("./validation.cjs");
 const { createHash } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -215,7 +216,7 @@ function prepareNativePatches(root, installed = []) {
   if (!fs.existsSync(manifestFile)) return {};
   const app = readManifest(manifestFile);
   if (app.name !== "@legendapp/spark" && !app.dependencies?.["@legendapp/spark"] && !app.devDependencies?.["@legendapp/spark"]) return {};
-  require("./validation.cjs").validatePackageSettings(app.spark);
+  validatePackageSettings(app.spark, root);
   const appRequire = createRequire(manifestFile);
   let sparkFile;
   try { sparkFile = appRequire.resolve("@legendapp/spark/package.json"); }
@@ -227,7 +228,7 @@ function prepareNativePatches(root, installed = []) {
   }
   const hasCamera = cameraPackages.some(name => dependencies[name]);
   const { pins, patchesRoot } = nativePatchInventory(sparkFile, hasCamera);
-  for (const name of Object.keys(app.spark?.patches ?? {})) if (!Object.hasOwn(pins, name)) throw new Error(`Unknown package.json spark.patches package: ${name}`);
+  for (const name of Object.keys(app.spark?.patches ?? {})) if (!Object.hasOwn(pins, name)) throw new SparkError(`Unknown package.json spark.patches package: ${name}`, "E_UNSUPPORTED_OPTION");
   const active = Object.keys(pins).filter(name => dependencies[name] ||
     (hasCamera && name === "react-native-nitro-modules") ||
     (dependencies["react-native-vision-camera"] && name === "react-native-nitro-image"));

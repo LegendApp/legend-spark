@@ -108,3 +108,26 @@ than `package.json.spark`. The latter holds native-package metadata and patch
 selection. Unknown metadata keys and malformed dependency lists reject during
 package discovery. `spark.patches` maps Spark-patched package names to booleans;
 misspelled package names and nonboolean values reject before patch files change.
+
+`nativeModules: true` is a native-package marker; codegen owns binding names.
+Unused `pod`, `platforms`, and `windowsAdapter` metadata are not accepted. Retained
+metadata, including generated patch receipts, is validated on every build, even
+when native output can be reused. Unknown fields throw `SparkError` with
+`E_UNSUPPORTED_OPTION`; malformed values throw `E_INVALID_ARGUMENT`.
+
+### Precedence and inactive targets
+
+Shared `expo` values are merged first, then `expoByPlatform[buildTarget]` overrides
+them. Spark's canonical fields (including name, version, selected platforms and
+`extra.spark`) take precedence over both. Other platform overrides remain inactive.
+Valid `window.macos` configuration is retained but has no effect on Windows builds;
+put shared portable settings in `window`. Runtime requests for a macOS capability
+on Windows still reject `E_UNSUPPORTED_OPTION`.
+
+For macOS window updates, portable chrome is applied first and explicit `macos`
+fields replace the corresponding value, including `macos.level` over `alwaysOnTop`.
+These overrides are intentional. Contradictions within one group, such as hidden
+toolbars with supplied items or tint over `material: 'none'`, throw `SparkError`.
+Unknown OS symbols and images reject instead of falling back to labels.
+Known `spark.patches` selections apply only to matching installed libraries; an
+inactive library or target does not make its patch selection an error.

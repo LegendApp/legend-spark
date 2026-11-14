@@ -23,6 +23,7 @@ function fixture(app: Record<string, unknown> = {}) {
   roots.push(root);
   const spark = path.join(root, "node_modules/@legendapp/spark");
   mkdirSync(path.join(spark, "patches"), { recursive: true });
+  mkdirSync(path.join(spark, "vendor"), { recursive: true });
   writeFileSync(path.join(spark, "package.json"), JSON.stringify({ name: "@legendapp/spark", version: "1.0.0", spark: { bundledModuleRoot: "vendor" } }));
   writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ "native-lib": { version: "1.0.0", integrity: "sha512-fixture", patch: "native-lib.patch" } }));
   writeFileSync(path.join(spark, "patches/native-lib.patch"), diff(upstream, sparkPatched));
@@ -318,6 +319,22 @@ test("package.json spark metadata rejects unknown fields and malformed dependenc
     expect(() => installedPackages(root)).toThrow(/package.json spark/);
     expect(podspec(root, "native-lib")).toBe(upstream);
   }
-  const root = fixture({ spark: { sdk: false, nativeModules: ["NativeApp"], requires: [], pod: "NativeApp", platforms: ["macos"] } });
+  const root = fixture({ spark: { sdk: false, nativeModules: true, requires: [] } });
   expect(() => installedPackages(root)).not.toThrow();
+});
+
+test("package metadata rejects unused fields and malformed retained values with SparkError", () => {
+  for (const spark of [
+    { pod: "Unused" }, { platforms: ["macos"] }, { windowsAdapter: true },
+    { nativeModules: ["MissingBinding"] }, { nativeModules: false },
+    { patchHash: 42 }, { upstreamRevision: "" }, { bundledModules: [false] },
+    { bundledModuleRoot: "../outside" }, { bundledModuleRoot: "missing" },
+    { workspacePatch: { schema: 2 } }, { dependencyPatch: { typo: true } },
+    { nativePatchRequirements: { schema: 1, frameworkVersion: "1", packages: { missing: { version: 1, patchHash: "hash" } } } },
+  ]) {
+    const root = fixture({ spark });
+    expect(() => installedPackages(root)).toThrow(expect.objectContaining({ name: "SparkError" }));
+    expect(() => prepareNativePatches(root)).toThrow(expect.objectContaining({ name: "SparkError" }));
+    expect(podspec(root, "native-lib")).toBe(upstream);
+  }
 });

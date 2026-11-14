@@ -55,7 +55,7 @@ test("packaging entitlements follow the release binary even when the last genera
     writeJson(path.join(root, "package.json"), { name: "test", dependencies: { used: "1.0.0", unused: "1.0.0" } });
     writeJson(path.join(root, "app.json"), { expo: {} });
     for (const name of ["used", "unused"]) writeJson(path.join(root, "node_modules", name, "package.json"), {
-      name, version: "1.0.0", spark: { nativeModules: [name], sdk: true, entitlements: { macos: { [name]: true } } },
+      name, version: "1.0.0", spark: { nativeModules: true, sdk: true, entitlements: { macos: { [name]: true } } },
     });
     const all = nativePackages(root);
     writeJson(path.join(root, ".spark/native-selection.json"), { included: all });
@@ -261,7 +261,7 @@ test("feed-signing retries receive the same verified ZIP without repackaging or 
 test("configured updates must survive production pruning before packaging", async () => {
   const h = harness();
   try {
-    const config = readJson(path.join(h.root, "app.json")); config.expo.extra = { spark: { updates: { feedURL: "https://example.com/appcast.xml" } } }; writeJson(path.join(h.root, "app.json"), config);
+    const config = readJson(path.join(h.root, "app.json")); config.expo.extra = { spark: { updates: { feedURL: "https://example.com/appcast.xml", publicKey: Buffer.alloc(32).toString("base64") } } }; writeJson(path.join(h.root, "app.json"), config);
     await expect(packageApp(h.root, {}, h.dependencies)).rejects.toThrow("module was pruned");
     expect(h.state.submits).toBe(0);
   } finally { h.cleanup(); }

@@ -38,6 +38,8 @@ macOS is the shipped target; Windows is development-only; Spark's desktop APIs d
 
 Edit `desktop.config.json` when present; single-target starters generate `app.json` from it. Universal starters use a managed `app.config.js`. Existing Expo apps can use `spark add desktop`; preserve their Expo entry point and compose configuration as the integration guide requires.
 
+Configuration precedence is shared `expo`, then `expoByPlatform[buildTarget]`, then Spark-owned canonical fields. Other target overrides stay inactive; valid `window.macos` config has no effect on a Windows build. Runtime macOS capability calls on Windows still reject. Native-package metadata is checked on every build, including cache reuse: use `nativeModules: true` as a marker, keep binding names in codegen, and remove unused `pod`, `platforms` and `windowsAdapter` fields. Unknown keys or invalid values throw a clear `SparkError`.
+
 Install native dependencies with the app's manager and use their documented imports. JavaScript changes Fast Refresh; native code, native configuration, or plugins require a custom build. Press `b`, or run `spark build --dev` then `spark dev`. Use `--force` only when regeneration/compilation must be forced. Put durable native changes in packages/config plugins, not disposable generated native projects.
 
 `spark analyze` reports native production selection in `.spark/selection-report.json`. Only SDK modules are pruned automatically; unknown third-party native dependencies stay included. Use package names in `expo.extra.spark.include` for native-only requirements; custom native configuration can require a custom runtime even without extra modules.

@@ -40,7 +40,7 @@ test("manifest patches survive receipt stamping, interruption, and repeated inst
   const f = fixture();
   try {
     const original = { name: "probe", version: "1.0.0", files: ["index.js"] };
-    const adapted = { ...original, files: ["index.js", "windows"], spark: { sdk: true, windowsAdapter: true } };
+    const adapted = { ...original, files: ["index.js", "windows"], spark: { sdk: true } };
     const manifestFile = path.join(f.pkg, "package.json");
     const upstream = JSON.stringify(original, null, 2) + "\n";
     writeFileSync(manifestFile, upstream);
@@ -65,10 +65,10 @@ test("manifest patches survive receipt stamping, interruption, and repeated inst
     expect(readFileSync(path.join(f.pkg, "index.js"), "utf8")).toBe("new\n");
     expect(readFileSync(manifestFile, "utf8")).toBe(firstInstall);
 
-    const changed = JSON.parse(firstInstall); changed.spark.windowsAdapter = false;
+    const changed = JSON.parse(firstInstall); changed.spark.sdk = false;
     writeFileSync(manifestFile, JSON.stringify(changed, null, 2) + "\n");
     expect(() => installWorkspaceAdapters(f.root)).toThrow("Cannot apply");
-    expect(JSON.parse(readFileSync(manifestFile, "utf8")).spark.windowsAdapter).toBe(false);
+    expect(JSON.parse(readFileSync(manifestFile, "utf8")).spark.sdk).toBe(false);
   } finally { f.close(); }
 });
 

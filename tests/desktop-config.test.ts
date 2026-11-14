@@ -80,13 +80,19 @@ test("direct Expo extra.spark rejects misspelled settings", () => fixture(root =
   expect(() => readAppConfig(root)).toThrow("windwo");
 }));
 
-test("initial Windows window configuration rejects macOS fields before native filtering", () => {
-  for (const window of [{ macos: { backgroundMaterial: "sidebar" } }, { macos: {} }, { titleBarStyle: "overlay" }]) {
-    expect(() => toExpo({ ...base, platforms: ["macos", "windows"], window }, "windows")).toThrow();
-    expect(() => toExpo({ ...base, platforms: ["macos", "windows"], window }, "macos")).not.toThrow();
+test("Windows builds retain valid inactive macOS configuration and reject shared unsupported chrome", () => {
+  for (const window of [{ macos: { backgroundMaterial: "sidebar" } }, { macos: {} }]) {
+    expect(toExpo({ ...base, platforms: ["macos", "windows"], window }, "windows").expo.extra.spark.window).toEqual(window);
     fixture(root => {
       writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { platforms: ["windows"], extra: { spark: { projectId: "demo", window } } } }));
-      expect(() => readAppConfig(root)).toThrow();
+      expect(readAppConfig(root).expo.extra?.spark?.window).toEqual(window);
     });
   }
+  expect(() => toExpo({ ...base, platforms: ["macos", "windows"], window: { titleBarStyle: "overlay" } }, "windows")).toThrow("overlay");
+});
+
+test("platform Expo overrides replace shared values before Spark-owned canonical fields", () => {
+  const result = toExpo({ ...base, platforms: ["macos", "windows"], expo: { name: "ignored", extra: { custom: { value: "shared", retained: true } } }, expoByPlatform: { windows: { extra: { custom: { value: "windows" } } }, macos: { extra: { custom: { value: "macos" } } } } }, "windows").expo;
+  expect(result.name).toBe(base.name);
+  expect(result.extra.custom).toEqual({ value: "windows", retained: true });
 });

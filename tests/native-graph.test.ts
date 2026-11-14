@@ -169,7 +169,7 @@ test.each([{}, { sdk: true, requires: ["other"], upstreamIntegrity: "sha512-upst
       writeFileSync(source, "native source");
       writeFileSync(file, JSON.stringify({ ...manifest, version: "2.0.0", spark }));
       expect(nativePackages(root)[0]!.signature).not.toBe(workspace);
-      writeFileSync(file, JSON.stringify({ ...manifest, spark: { ...spark, nativeModules: ["ChangedModule"] } }));
+      writeFileSync(file, JSON.stringify({ ...manifest, spark: { ...spark, nativeModules: true } }));
       expect(nativePackages(root)[0]!.signature).not.toBe(workspace);
     } finally { rmSync(root, { recursive: true, force: true }); }
   },
@@ -238,7 +238,7 @@ test("host-only and CNG-only edits invalidate the Go compatibility signature", (
     writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark-desktop-app": "1", "@legendapp/spark-desktop-host": "1", "@legendapp/spark-desktop-config": "1" } }));
     for (const name of ["desktop-app", "desktop-host", "desktop-config"]) {
       const dir = path.join(root, "node_modules/@legendapp", name === "desktop" ? "spark" : `spark-${name}`); mkdirSync(dir, { recursive: true });
-      writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: name === "desktop" ? "@legendapp/spark" : `@legendapp/spark-${name}`, version: "1", ...(name === "desktop-app" ? { spark: { nativeModules: ["NativeDesktopApp"] } } : {}) }));
+      writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: name === "desktop" ? "@legendapp/spark" : `@legendapp/spark-${name}`, version: "1", ...(name === "desktop-app" ? { spark: { nativeModules: true } } : {}) }));
     }
     const initial = nativePackages(root)[0]!.signature;
     writeFileSync(path.join(root, "node_modules/@legendapp/spark-desktop-host/AppDelegate.mm"), "changed native host");
@@ -329,7 +329,7 @@ test("app overrides retain patched native packages reached through linked worksp
     writeFileSync(path.join(library, "package.json"), JSON.stringify({ name: "linked-library", version: "1", dependencies: { "native-fixture": "1" } }));
     symlinkSync(library, path.join(app, "node_modules/linked-library"));
     for (const dir of [app, library]) {
-      writeFileSync(path.join(dir, "node_modules/native-fixture/package.json"), JSON.stringify({ name: "native-fixture", version: "1", spark: { nativeModules: ["Fixture"] } }));
+      writeFileSync(path.join(dir, "node_modules/native-fixture/package.json"), JSON.stringify({ name: "native-fixture", version: "1", spark: { nativeModules: true } }));
     }
     const patched = path.join(app, "node_modules/native-fixture");
     expect(installedPackages(app).find(pkg => pkg.name === "native-fixture")?.root).toBe(realpathSync(patched));

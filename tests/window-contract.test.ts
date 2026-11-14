@@ -28,8 +28,8 @@ test("props are snapshotted without coercing invalid JSON values", () => {
   const cyclic: any = {}; cyclic.self = cyclic;
   for (const props of [{ value: undefined }, { value: new Date() }, { value: NaN }, { value: new Array(2) }, cyclic, { [Symbol()]: 1 }]) expect(() => validateOptions({ ...base, props }, "macos", true)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
 });
-test("macOS groups reject unknown fields and conflicting level ownership", () => {
-  expect(() => validateOptions({ alwaysOnTop: false, macos: { level: "normal" } }, "macos", false)).toThrow();
+test("macOS groups reject unknown fields and override portable window levels", () => {
+  expect(() => validateOptions({ alwaysOnTop: true, macos: { level: "normal" } }, "macos", false)).not.toThrow();
   expect(() => validateOptions({ macos: { titleBar: { typo: true } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
   expect(() => validateOptions({ macos: { representedUri: "relative.txt" } }, "macos", false)).toThrow();
   expect(() => validateOptions({ macos: { representedUri: null, startupSplitView: null, titleBar: { controls: [] }, toolbar: { items: [] } } }, "macos", false)).not.toThrow();
@@ -59,4 +59,11 @@ test("toolbar buttons reject unsupported sizing and digit styling before native 
 test("toolbar visibility cannot be undone by an items update in the same call", () => {
   for (const items of [[], [{ type: "button", id: "button" }]]) expect(() => validateOptions({ macos: { toolbar: { visible: false, items } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
   expect(() => validateOptions({ macos: { toolbar: { visible: false } } }, "macos", false)).not.toThrow();
+});
+
+test("empty titlebar and toolbar symbols reject instead of falling back to labels", () => {
+  for (const macos of [
+    { titleBar: { controls: [{ id: "button", symbol: "" }] } },
+    { toolbar: { items: [{ type: "button", id: "button", symbol: "" }] } },
+  ]) expect(() => validateOptions({ macos } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
 });
