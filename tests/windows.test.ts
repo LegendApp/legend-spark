@@ -5,7 +5,7 @@ import path from "node:path";
 import { nativePackages, runtimeFor, incompatible, writeJson, VERSION } from "../packages/cli/src/project.ts";
 import { readRuntime, findGo, registerRuntime } from "../packages/cli/src/local.ts";
 import { architecture, projectPlatform, windowsArchitecture } from "../packages/cli/src/platform.ts";
-import { buildWindows, configureWindowsCommands, isWindowsDebugProduct, preserveWindowsBuildOutputs } from "../packages/cli/src/windows.ts";
+import { buildWindows, pruneExcludedWindowsProjects, configureWindowsCommands, isWindowsDebugProduct, preserveWindowsBuildOutputs } from "../packages/cli/src/windows.ts";
 import { spawnSync } from "node:child_process";
 const { patchHost, withoutPackaging, unpackagedApp } = require("../packages/config-plugin/windows.plugin.cjs");
 function fixture() {
@@ -252,5 +252,41 @@ test("Windows excludes configured native projects from its graph and RNW configu
     expect(nativeConfig(f.root).dependencies.probe.platforms.windows).toBeNull();
     writeJson(path.join(f.root, "app.json"), { expo: { platforms: ["windows"] } });
     expect(nativePackages(f.root).map(pkg => pkg.name)).toContain("probe");
+  } finally { f.close(); }
+});
+
+for (const newline of ["\n", "\r\n"]) test(`Windows generation prunes excluded solution projects and GUID references (${JSON.stringify(newline)})`, () => {
+  const f = fixture();
+  try {
+    const excluded = ["react-native-screens", "@react-native-community/datetimepicker", "other-native-module"];
+    writeJson(path.join(f.root, "app.json"), { expo: { platforms: ["windows"], autolinking: { exclude: excluded } } });
+    writeJson(path.join(f.root, "package.json"), { dependencies: Object.fromEntries([...excluded, "retained"].map(name => [name, "1"])) });
+    for (const name of [...excluded, "retained"]) {
+      writeJson(path.join(f.root, "node_modules", name, "package.json"), { name, version: "1" });
+      mkdirSync(path.join(f.root, "node_modules", name, "windows"));
+    }
+    const { nativeConfig } = require("../packages/cli/src/universal.cjs");
+    const config = nativeConfig(f.root);
+    const dependencies = Object.fromEntries([...excluded, "retained"].map(name => [name, { root: path.join(f.root, "node_modules", name), platforms: config.dependencies[name]?.platforms ?? { windows: {} } }]));
+    const project = { windows: { folder: f.root, sourceDir: "windows", solutionFile: "App.sln" } };
+    const solution = path.join(f.root, "windows/App.sln");
+    mkdirSync(path.dirname(solution));
+    const block = (name: string, file: string, guid: string) => `Project("{TYPE}") = "${name}", "${file}", "{${guid}}"${newline}EndProject${newline}`;
+    const app = block("MyApp", "MyApp\\MyApp.vcxproj", "APP");
+    const retained = block("retained", "..\\node_modules\\retained\\windows\\Module.vcxproj", "RETAINED");
+    const custom = block("react-native-screens", "Custom\\screens.vcxproj", "CUSTOM");
+    const global = [`Global`, `GlobalSection(ProjectConfigurationPlatforms) = postSolution`, `{APP}.Debug.ActiveCfg = Debug|ARM64`, `{RETAINED}.Debug.ActiveCfg = Debug|ARM64`, ...excluded.map((_, i) => `{EXCLUDED-${i}}.Debug.Build.0 = Debug|ARM64`), `EndGlobalSection`, `GlobalSection(NestedProjects) = preSolution`, `{excluded-0} = {FOLDER}`, `EndGlobalSection`, `EndGlobal`, ""].join(newline);
+    writeFileSync(solution, app + excluded.map((name, i) => block(name, `..\\node_modules\\${name.replaceAll("/", "\\")}\\windows\\Module.vcxproj`, `EXCLUDED-${i}`)).join("") + retained + custom + global);
+    for (const name of excluded) expect(dependencies[name]!.platforms.windows).toBeNull();
+    expect(nativePackages(f.root).map(pkg => pkg.name)).toEqual(["retained"]);
+    pruneExcludedWindowsProjects({ project, dependencies });
+    const pruned = readFileSync(solution, "utf8");
+    expect(pruned).toContain(app + retained + custom);
+    expect(pruned).not.toMatch(/EXCLUDED-/i);
+    for (const name of excluded) expect(pruned).not.toContain(`node_modules\\${name.replaceAll("/", "\\")}`);
+    pruneExcludedWindowsProjects({ project, dependencies });
+    expect(readFileSync(solution, "utf8")).toBe(pruned);
+    writeJson(path.join(f.root, "app.json"), { expo: { platforms: ["windows"] } });
+    expect(nativePackages(f.root).map(pkg => pkg.name).sort()).toEqual([...excluded, "retained"].sort());
   } finally { f.close(); }
 });

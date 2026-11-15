@@ -4,7 +4,7 @@ import { prepareWindowsGeometry } from "./windows-geometry.ts";
 import { copyHelpers } from "./helpers.ts";
 import { registerWindowsAssociations } from "./windows-associations.ts";
 import { checkExpoDesktopNode } from "./expo-node.ts";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { WindowsArchitecture } from "./platform.ts";
 import { run } from "./commands.ts";
@@ -61,6 +61,27 @@ export function configureWindowsCommands(root: string) {
   const next = source.replace("</Project>", newline + group + newline + "</Project>");
   if (next !== original) writeFileSync(file, next);
 }
+type WindowsConfig = {
+  project: { windows: { folder: string; sourceDir: string; solutionFile: string } };
+  dependencies: Record<string, { root: string; platforms: { windows?: unknown } }>;
+};
+export function pruneExcludedWindowsProjects(config: WindowsConfig) {
+  const project = config.project.windows;
+  const solution = path.resolve(project.folder, project.sourceDir, project.solutionFile);
+  const normalize = (file: string) => path.resolve(file.replaceAll("\\", path.sep)).toLowerCase();
+  const locations = (file: string) => [normalize(file), ...(existsSync(file) ? [normalize(realpathSync(file))] : [])];
+  const excluded = Object.values(config.dependencies).filter(dependency => dependency.platforms.windows === null).flatMap(dependency => locations(dependency.root));
+  const guids = new Set<string>();
+  const original = readFileSync(solution, "utf8");
+  const projects = original.replace(/^Project\([^\r\n]+\) = "[^"\r\n]*", "([^"\r\n]+)", "(\{[^}]+\})"\r?\n[\s\S]*?^EndProject(?:\r?\n|$)/gm, (block, relative: string, guid: string) => {
+    const files = locations(path.resolve(path.dirname(solution), relative.replaceAll("\\", path.sep)));
+    if (!files.some(file => excluded.some(root => file.startsWith(root + path.sep)))) return block;
+    guids.add(guid.toUpperCase());
+    return "";
+  });
+  const next = projects.split(/(?<=\n)/).filter(line => ![...guids].some(guid => line.toUpperCase().includes(guid))).join("");
+  if (next !== original) writeFileSync(solution, next);
+}
 export async function prepareWindows(root: string, mode: "go" | "dev") {
   await ensurePatchRegistry(root);
   assertNativePatchPreflight(root);
@@ -86,6 +107,8 @@ export async function prepareWindows(root: string, mode: "go" | "dev") {
     writeFileSync(path.join(root, "package.json"), manifest);
   }
   configureWindowsCommands(root);
+  const config = JSON.parse(await run(root, nodeCommand(root, "react-native", "react-native", ["config"]), { capture: true })) as WindowsConfig;
+  pruneExcludedWindowsProjects(config);
   return runtime;
 }
 export async function buildWindows(root: string, mode: string, force: boolean): Promise<{ app: string; runtime: Runtime }> {
