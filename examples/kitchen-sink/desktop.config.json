@@ -62,6 +62,8 @@
           "expo-manifests",
           "expo-updates-interface",
           "react-native-macos",
+          "react-native-screens",
+          "@react-native-community/datetimepicker",
           "react-native-enriched-html",
           "react-native-enriched-markdown",
           "@react-native-community/blur",

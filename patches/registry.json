@@ -38,6 +38,19 @@
         }
       ]
     },
+    "@react-native-community/netinfo": {
+      "kind": "patch",
+      "versions": [
+        {
+          "version": "11.5.2",
+          "minSpark": "0.0.4",
+          "patch": "react-native-community-netinfo@11.5.2.patch",
+          "integrity": "sha512-/g0m65BtX9HU+bPiCH2517bOHpEIUsGrWFXDzi1a5nNKn5KujQgm04WhL7/OSXWKHyrT8VVtUoJA0XKRxueBpQ==",
+          "optional": true,
+          "sha256": "21bd1c98cac2ff5ead8fd9d65d45af71a9f66fde4308df70801c84613faf4149"
+        }
+      ]
+    },
     "@react-native-masked-view/masked-view": {
       "kind": "patch",
       "versions": [
