@@ -469,6 +469,14 @@
           "integrity": "sha512-SQ/qwmfakdPcOMVzph99vFOPbPkVg3JZaTGrjVVXG6RS8ZUqMocHqbeM4V17qPDTzFK+rsAp6T7u2aFe3Hot/w==",
           "optional": true,
           "sha256": "8bbb5bff8c49b585fafeeacc9d9b2dc82f26257b42ba0fb13ad23fab9513cf55"
+        },
+        {
+          "version": "0.3.1",
+          "minSpark": "0.0.4",
+          "patch": "react-native-nitro-zxing@0.3.1.patch",
+          "integrity": "sha512-KBQaNqsme3K1Fk02V+Pbkb30cjl4CiBF9oHNHMAcX1r8c4aS665BYqLoE067MYklOCc1MLlG0/bw1eDK8mW6Xg==",
+          "optional": true,
+          "sha256": "3599b39bf5d2d4934352b275e3749ac45fc83f1551f55480008ee8ee5f55a779"
         }
       ]
     },

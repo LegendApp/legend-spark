@@ -1,0 +1,22 @@
+diff --git a/VisionCameraZxing.podspec b/VisionCameraZxing.podspec
+index 301b92f..82d0144 100644
+--- a/VisionCameraZxing.podspec
++++ b/VisionCameraZxing.podspec
+@@ -20,7 +20,7 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => min_ios_version_supported, :visionos => 1.0 }
++  s.platforms    = { :ios => min_ios_version_supported, :visionos => 1.0, :osx => "14.0" }
+   s.source       = { :git => "https://github.com/margelo/react-native-vision-camera-zxing.git", :tag => "v#{s.version}" }
+ 
+   s.source_files = [
+@@ -52,6 +52,8 @@ Pod::Spec.new do |s|
+       '"$(PODS_TARGET_SRCROOT)/cpp"',
+       '"$(PODS_TARGET_SRCROOT)/nitrogen/generated/shared/c++"',
+       "\"$(PODS_ROOT)/#{nitro_modules_cpp_dir}/**\"",
++      # Static (non-framework) builds: NitroModules' umbrella imports its Apple headers by basename.
++      '"$(PODS_ROOT)/Headers/Public/NitroModules"',
+     ].join(" "),
+     # Header maps resolve by basename across all pods (e.g. React's Point.h or another
+     # barcode pod's BarcodeFormat.hpp would shadow ours); use the search paths above instead.
