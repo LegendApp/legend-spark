@@ -54,6 +54,7 @@ export function configureWindowsCommands(root: string) {
   const newline = original.includes("\r\n") ? "\r\n" : "\n";
   const group = [
     '  <PropertyGroup Label="SparkCLI">',
+    '    <UseFabric Condition="\'$(UseFabric)\' == \'\'">$(RnwNewArch)</UseFabric>',
     '    <CodegenCommand Condition="\'$(CodegenCommand)\' == \'\'">node &quot;' + escaped + '&quot; codegen-windows</CodegenCommand>',
     '    <AutolinkCommand Condition="\'$(AutolinkCommand)\' == \'\'">node &quot;' + escaped + '&quot; autolink-windows</AutolinkCommand>',
     '  </PropertyGroup>',
@@ -132,7 +133,7 @@ export async function buildWindows(root: string, mode: string, force: boolean): 
   const target = runtime.arch === "arm64" ? "ARM64" : "x64";
   // RNW invokes x64 MSBuild even on ARM64 hosts. Match its compiler host to avoid
   // falling back to x86 and exhausting address space while loading large PCHs.
-  await run(root, nodeCommand(root, "react-native", "react-native", ["run-windows", "--arch", target, "--msbuildprops", "PreferredToolArchitecture=x64", "--no-packager", "--no-launch", "--no-deploy", "--no-telemetry", "--logging", "--buildLogDirectory", stateFile(root, "logs/msbuild")]), { capture: true });
+  await run(root, nodeCommand(root, "react-native", "react-native", ["run-windows", "--arch", target, "--msbuildprops", "PreferredToolArchitecture=x64,PlatformToolset=v145", "--no-packager", "--no-launch", "--no-deploy", "--no-telemetry", "--logging", "--buildLogDirectory", stateFile(root, "logs/msbuild")]), { capture: true });
   if (runtimeFor(root, nativePackages(root), mode).fingerprint !== runtime.fingerprint) throw new Error("Native inputs changed during the build. Retry; no Windows runtime was registered.");
   const products: string[] = [];
   function visit(dir: string) {

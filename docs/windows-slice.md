@@ -46,7 +46,7 @@ bun run spark sdk build-runner --platform windows
 
 Keep that environment variable set for subsequent build and dev commands. `Remove-Item Env:SPARK_WINDOWS_ARCH` restores automatic selection. On macOS, Windows project generation defaults to x64; set `SPARK_WINDOWS_ARCH=arm64` to check ARM64 metadata and generation. Native compilation still requires Windows and the matching compiler tools.
 
-The CLI passes `PreferredToolArchitecture=x64` to RNW's x64 MSBuild process. This selects the 64-bit compiler host while preserving the requested app architecture, and avoids x86 compiler address-space failures when loading large precompiled headers. An `arm64` compiler-host preference is reset to x86 by Visual Studio when MSBuild itself runs as x64.
+The CLI passes `PreferredToolArchitecture=x64,PlatformToolset=v145` to RNW's x64 MSBuild process. This selects the 64-bit compiler host while preserving the requested app architecture, and avoids x86 compiler address-space failures when loading large precompiled headers. The generated build properties map the legacy `UseFabric` flag to `RnwNewArch` unless the project already sets it. An `arm64` compiler-host preference is reset to x86 by Visual Studio when MSBuild itself runs as x64.
 
 Runtime fingerprints, output directories, and prebuilt discovery distinguish x64 and ARM64. Both runtimes can be registered together; discovery selects the current target. The build record tracks the last build for each mode, so changing architecture can cause another build while preserving the other architecture’s binary. Native acceptance is pending on **both** architectures; ARM64 selection does not establish that every native dependency compiles or runs on ARM64.
 

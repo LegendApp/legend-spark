@@ -33,6 +33,7 @@ test("Windows native commands use the installed CLI across quoted paths and pres
     expect(child.status, child.stderr).toBe(0);
     expect(JSON.parse(child.stdout)).toEqual({ cwd: realpathSync(path.join(root, "library")), args: ["codegen-windows", "--logging"] });
     expect(first).toContain('Condition="\'$(AutolinkCommand)\' == \'\'"');
+    expect(first).toContain('<UseFabric Condition="\'$(UseFabric)\' == \'\'">$(RnwNewArch)</UseFabric>');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test("Windows uses the shared graph and runtime identity, including native source changes", () => {
