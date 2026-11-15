@@ -11,6 +11,7 @@ REACT_MODULE(SparkOPSQLiteModule, L"OPSQLite")
 struct SparkOPSQLiteModule {
   winrt::Microsoft::ReactNative::ReactContext context;
   std::shared_ptr<std::atomic<bool>> generation;
+  std::string databasePath;
   REACT_INIT(Initialize) void Initialize(winrt::Microsoft::ReactNative::ReactContext const &value) noexcept { context = value; }
   ~SparkOPSQLiteModule() { if (generation) opsqlite::invalidate(generation); }
   static std::filesystem::path Directory() {
@@ -21,16 +22,21 @@ struct SparkOPSQLiteModule {
     PWSTR raw = nullptr; winrt::check_hresult(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &raw)); std::filesystem::path path(raw); CoTaskMemFree(raw);
     path /= L"Spark"; path /= id.c_str(); path /= L"data"; std::filesystem::create_directories(path); return path;
   }
-  REACT_SYNC_METHOD(getConstants) winrt::Microsoft::ReactNative::JSValueObject getConstants() { return {{"WINDOWS_DATABASE_PATH", winrt::to_string(Directory().wstring())}}; }
-  REACT_SYNC_METHOD(install) bool install() {
-    if (generation) return true;
-    auto handle = context.Handle().JSRuntime(); if (!handle) return false;
-    auto &runtime = winrt::Microsoft::ReactNative::GetOrCreateContextRuntime(context, handle);
-    auto location = winrt::to_string(Directory().wstring());
-    generation = opsqlite::install(runtime, context.CallInvoker(), location.c_str(), ""); return true;
+  REACT_SYNC_METHOD(getConstants) winrt::Microsoft::ReactNative::JSValueObject getConstants() noexcept { return {{"WINDOWS_DATABASE_PATH", databasePath}}; }
+  REACT_SYNC_METHOD(install) bool install() noexcept {
+    try {
+      if (generation) return true;
+      auto handle = context.Handle().JSRuntime(); if (!handle) return false;
+      auto &runtime = winrt::Microsoft::ReactNative::GetOrCreateContextRuntime(context, handle);
+      databasePath = winrt::to_string(Directory().wstring());
+      generation = opsqlite::install(runtime, context.CallInvoker(), databasePath.c_str(), ""); return true;
+    } catch (std::exception const &error) { OutputDebugStringA(error.what()); }
+    catch (winrt::hresult_error const &error) { OutputDebugStringW(error.message().c_str()); }
+    return false;
   }
   REACT_METHOD(moveAssetsDatabase) void moveAssetsDatabase(winrt::Microsoft::ReactNative::JSValueObject args, winrt::Microsoft::ReactNative::ReactPromise<bool> promise) noexcept {
     try {
+      if (args.count("path") && !args.at("path").IsNull()) throw winrt::hresult_invalid_argument(L"Windows asset imports do not support custom paths");
       auto filename = args.at("filename").AsString(); std::filesystem::path name(winrt::to_hstring(filename).c_str());
       if (name.empty() || name.has_parent_path() || name == L"." || name == L".." || filename.find('\0') != std::string::npos) throw winrt::hresult_invalid_argument(L"Asset filename must be a simple filename");
       wchar_t executable[32768]{}; GetModuleFileNameW(nullptr, executable, 32768);
@@ -40,9 +46,12 @@ struct SparkOPSQLiteModule {
     } catch (std::exception const &error) { promise.Reject(error.what()); }
     catch (winrt::hresult_error const &error) { promise.Reject(winrt::to_string(error.message()).c_str()); }
   }
-  REACT_SYNC_METHOD(getDylibPath) std::string getDylibPath(std::string, std::string name) {
-    std::filesystem::path file(winrt::to_hstring(name).c_str()); if (file.empty() || file.has_parent_path()) throw winrt::hresult_invalid_argument(L"Expected a library filename");
-    wchar_t executable[32768]{}; GetModuleFileNameW(nullptr, executable, 32768);
-    return winrt::to_string((std::filesystem::path(executable).parent_path() / (file.wstring() + L".dll")).wstring());
+  REACT_SYNC_METHOD(getDylibPath) std::string getDylibPath(std::string bundle, std::string name) noexcept {
+    try {
+      std::filesystem::path file(winrt::to_hstring(name).c_str());
+      if (!bundle.empty() || file.empty() || file.has_parent_path() || name == "." || name == ".." || name.find('\0') != std::string::npos) return {};
+      wchar_t executable[32768]{}; auto length = GetModuleFileNameW(nullptr, executable, 32768); if (!length || length >= 32768) return {};
+      return winrt::to_string((std::filesystem::path(executable).parent_path() / (file.wstring() + L".dll")).wstring());
+    } catch (...) { return {}; }
   }
 };
