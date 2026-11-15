@@ -1,3 +1,4 @@
+import { ensurePatchRegistry } from "@legendapp/spark-desktop-config/patch-registry.cjs";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -114,4 +115,5 @@ export async function installWithEnrichedHtmlPins(root: string, manager: Package
   await run(root, managerCommand(manager, ["install"]));
   if (repairEnrichedHtmlPins(root, manager, false, policy).length) await run(root, managerCommand(manager, ["install"]));
   assertEnrichedHtmlPins(root, policy);
+  await ensurePatchRegistry(root);
 }

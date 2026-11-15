@@ -100,13 +100,20 @@ export function binary(root: string, name: string) {
   if (!entry) throw new Error(`${name} does not expose its CLI entry point`);
   return path.resolve(path.dirname(manifest), entry);
 }
-export async function doctor(root: string, { nativeBuild = true } = {}) {
+export async function doctor(root: string, { nativeBuild = true, readOnly = false } = {}) {
+  const probe = async (argv: string[]) => {
+    if (!readOnly) return run(root, argv, { capture: true });
+    const child = spawnProcess(argv, { cwd: root, stdout: "pipe", stderr: "pipe" });
+    const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    if (code) throw new Error(`${argv[0]} failed: ${err || out}`);
+    return out;
+  };
   if (process.platform === "win32") {
     for (const tool of ["node", "pwsh.exe", "dotnet.exe"]) if (!which(tool)) throw new Error(`Missing ${tool}; see docs/windows-slice.md.`);
     await checkExpoDesktopNode(root);
     const require = createRequire(path.join(root, "package.json"));
     const windows = path.dirname(require.resolve("react-native-windows/package.json"));
-    await run(root, ["pwsh.exe", "-File", path.join(windows, "Scripts/rnw-dependencies.ps1")]);
+    if (!readOnly) await run(root, ["pwsh.exe", "-File", path.join(windows, "Scripts/rnw-dependencies.ps1")]);
     return;
   }
   if (process.platform !== "darwin")
@@ -117,8 +124,6 @@ export async function doctor(root: string, { nativeBuild = true } = {}) {
         `Missing ${tool}. Install the macOS native prerequisites described in docs/development.md, then retry the build.`,
       );
   await checkExpoDesktopNode(root);
-  if (nativeBuild) await run(root, ["xcodebuild", "-version"], { capture: true });
-  await run(root, ["xcrun", "--sdk", "macosx", "--show-sdk-path"], {
-    capture: true,
-  });
+  if (nativeBuild) await probe(["xcodebuild", "-version"]);
+  await probe(["xcrun", "--sdk", "macosx", "--show-sdk-path"]);
 }

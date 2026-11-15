@@ -18,7 +18,7 @@ export function errorPresentation(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   const command = error instanceof CommandError ? error.argv.join(" ") : "";
   const details = error instanceof CommandError ? error.output : message;
-  let summary = message.split("\n")[0] || "An unexpected error occurred.";
+  let summary = (message.includes("\nFix:") ? message : message.split("\n")[0]) || "An unexpected error occurred.";
   let next: string | undefined;
   if (isNetworkError(error)) {
     summary = command.includes("notarytool") ? "Could not reach Apple’s notarization service." : "Could not reach the remote service.";

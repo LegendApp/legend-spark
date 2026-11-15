@@ -334,12 +334,12 @@ test("optional pins patch only the app's own installs of the pinned version, wit
     const receipt = JSON.parse(readFileSync(path.join(directory, "package.json"), "utf8")).spark;
     expect(receipt).toMatchObject({ dependencyPatch: { version: "4.3.2" } });
     expect(receipt.sdk).toBeUndefined();
-    // Another version keeps upstream behavior instead of failing the app's native preparation.
+    // Mismatched optional versions must fail before native work.
     rmSync(directory, { recursive: true });
     mkdirSync(directory, { recursive: true });
     writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "4.2.0" }, null, 2) + "\n");
     writeFileSync(path.join(directory, "Native.podspec"), "upstream\n");
-    expect(prepareNativePatches(root)[name]).toBeUndefined();
+    expect(() => prepareNativePatches(root)).toThrow("Install react-native-mmkv@4.3.2");
     expect(readFileSync(path.join(directory, "Native.podspec"), "utf8")).toBe("upstream\n");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

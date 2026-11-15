@@ -1,5 +1,18 @@
 # Integrated external libraries
 
+## Versioned patch registry
+
+Spark keeps exact tested versions in `patches/registry.json`, including redirect-only adapters and the minimum Spark version for each patch. Old versions and their patch files are retained. Run `bun scripts/patch-registry.ts` after adding a version; validation rejects missing files, changed hashes, ranges and unknown metadata. Preserve an existing patch file when adding a newer recipe; give the new recipe a distinct file and `minSpark` entry.
+
+Install, `spark prebuild`, `spark dev` and `spark build` check installed libraries before native work. Spark reads the latest registry and patches from `LegendApp/legend-spark` main over HTTPS, pins all files to one commit SHA, and caches that set by SHA. If the fetch fails, it prints a one-line notice and uses the patches bundled with the installed SDK. Build receipts record `runtime.patchSourceSHA` as that commit or `bundled`.
+
+Spark selects the newest patch for the exact installed library version whose `minSpark` supports the installed Spark. If a newer recipe needs a newer Spark, it offers `spark upgrade`; declining keeps the compatible recipe. If no compatible patch exists, a terminal lists patched versions with the newest compatible version as the default. Accepting updates `package.json` and reinstalls; declining stops. CI and piped commands fail with an exact install command. Shared `node_modules` installations prompt and repair at their shared root.
+
+Use `"spark": { "patches": { "<library>": false } }` in `package.json` to skip a library's check and Spark patch. A shared-root opt-out applies to its apps. `spark doctor` reports the same version findings with a `Fix:` line without prompts, migrations or filesystem writes. App patches still layer after Spark's selected recipe. SDK-owned native archives retain their provenance checks; use the matching SDK archive overrides when installing them.
+
+No new Expo-owned packages are added to this registry. Existing Expo patches and the existing Clipboard/Document Picker redirects remain supported.
+
+
 Version-matched copy of the integration table for this Spark release. Import each library from its own package and use its upstream documentation; this table lists the version Spark patches and tested, and what changes on desktop. Install exactly that version: patches apply to exact versions, and other versions build unpatched.
 
 | Starting application | Intended path |

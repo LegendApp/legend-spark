@@ -7,10 +7,22 @@ Export: `@legendapp/spark/contracts` (`SparkError`, `Availability`, `Subscriptio
 - **Expo Clipboard:** declare `expo-clipboard@55.0.17` and keep its original import. macOS supports text/HTML and PNG images; JPEG/quality options, URL methods, listeners and synchronous writes reject with `ERR_UNAVAILABLE`. `isPasteButtonAvailable` is false.
 - **Keep the library's own import.** Write `import { Image } from 'expo-image'`, not a Spark path. Where a library has no macOS native view, Spark redirects that import to a stand-in (for example `expo-image` and `react-native-fast-image` become JS stand-ins on React Native's `Image`; `react-native-screens` uses its web implementation; `expo-document-picker` opens Spark's file dialog; native-stack uses a JS stack). Stand-ins cover a documented subset; check the integration table before relying on advanced features.
 - **Spark doesn't wrap external libraries.** Use them directly: `react-native-vision-camera` for camera, `react-native-reanimated`, `@shopify/react-native-skia`, `expo-router`, `react-native-mmkv`, etc. Spark only patches them for macOS, pins tested versions and handles native setup. Exceptions are the deliberate Spark contracts: `/webview`, `/sqlite`, `/clipboard`, `/secure-storage`, `/links`.
-- **Install the version Spark tested.** Patches apply to exact versions; another version builds unpatched and may fail on macOS. Declare libraries you import in the app's `package.json` and keep Spark's overrides/resolutions.
+- **Install the version Spark tested.** Patches apply to exact versions; an unsupported version stops native preparation with a repair prompt or CI install command. Declare libraries you import in the app's `package.json` and keep Spark's overrides/resolutions.
 - **Native libraries need a custom build.** Adding one means `b` in `spark dev` or `spark build --dev`; the prebuilt Runner won't contain it.
 - **Data locations are fixed for you.** Spark moves MMKV storage from `~/Documents/mmkv` to the app's Application Support folder; Release Profiler traces and Image Manipulator output go to the app's Caches folder. Nitro SQLite uses `~/Library/Application Support/<bundle id>`. Don't override these to user-visible folders.
 - iOS-only modules on macOS typically become no-ops or report unavailable (Keyboard Controller events never fire, Tracking Transparency reports `unavailable`, Splash Screen does nothing). Don't build features that depend on them on desktop.
+
+## Versioned patch registry
+
+Spark keeps exact tested versions in `patches/registry.json`, including redirect-only adapters and the minimum Spark version for each patch. Old versions and their patch files are retained. Run `bun scripts/patch-registry.ts` after adding a version; validation rejects missing files, changed hashes, ranges and unknown metadata. Preserve an existing patch file when adding a newer recipe; give the new recipe a distinct file and `minSpark` entry.
+
+Install, `spark prebuild`, `spark dev` and `spark build` check installed libraries before native work. Spark reads the latest registry and patches from `LegendApp/legend-spark` main over HTTPS, pins all files to one commit SHA, and caches that set by SHA. If the fetch fails, it prints a one-line notice and uses the patches bundled with the installed SDK. Build receipts record `runtime.patchSourceSHA` as that commit or `bundled`.
+
+Spark selects the newest patch for the exact installed library version whose `minSpark` supports the installed Spark. If a newer recipe needs a newer Spark, it offers `spark upgrade`; declining keeps the compatible recipe. If no compatible patch exists, a terminal lists patched versions with the newest compatible version as the default. Accepting updates `package.json` and reinstalls; declining stops. CI and piped commands fail with an exact install command. Shared `node_modules` installations prompt and repair at their shared root.
+
+Use `"spark": { "patches": { "<library>": false } }` in `package.json` to skip a library's check and Spark patch. A shared-root opt-out applies to its apps. `spark doctor` reports the same version findings with a `Fix:` line without prompts, migrations or filesystem writes. App patches still layer after Spark's selected recipe. SDK-owned native archives retain their provenance checks; use the matching SDK archive overrides when installing them.
+
+No new Expo-owned packages are added to this registry. Existing Expo patches and the existing Clipboard/Document Picker redirects remain supported.
 
 ## Patch a library
 

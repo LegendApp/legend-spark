@@ -1,3 +1,4 @@
+import { ensurePatchRegistry } from "@legendapp/spark-desktop-config/patch-registry.cjs";
 import { which, nodeCommand } from "./process.ts";
 import { prepareWindowsGeometry } from "./windows-geometry.ts";
 import { copyHelpers } from "./helpers.ts";
@@ -44,6 +45,7 @@ export async function preserveWindowsBuildOutputs(root: string, prepare: () => P
   }
 }
 export async function prepareWindows(root: string, mode: "go" | "dev") {
+  await ensurePatchRegistry(root);
   assertNativePatchPreflight(root);
   await checkExpoDesktopNode(root);
   prepareConfig(root);
@@ -70,6 +72,7 @@ export async function prepareWindows(root: string, mode: "go" | "dev") {
 }
 export async function buildWindows(root: string, mode: string, force: boolean): Promise<{ app: string; runtime: Runtime }> {
   if (mode !== "go" && mode !== "dev") throw new Error("Windows currently supports Spark Runner runtimes and development builds. Use spark build --dev; production builds and packaging are not implemented.");
+  await ensurePatchRegistry(root);
   assertNativePatchPreflight(root);
   if (process.platform !== "win32") throw new Error("Windows native builds require Windows x64 or ARM64. Project generation and Metro bundle checks can run on macOS.");
   for (const tool of ["node", "pwsh.exe", "dotnet.exe"]) if (!which(tool)) throw new Error(`Missing ${tool}. See docs/windows-slice.md for the Windows native prerequisites.`);

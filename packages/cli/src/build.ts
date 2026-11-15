@@ -1,3 +1,4 @@
+import { ensurePatchRegistry } from "@legendapp/spark-desktop-config/patch-registry.cjs";
 import { restoreNativeMetadata } from "./native-metadata.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import { missingNativeFrameworks, preparationChanges, preserveMacOSPods, type NativePreparation } from "./native-preparation.ts";
@@ -45,6 +46,7 @@ import {
 } from "./project.ts";
 
 export async function analyze(root: string) {
+  await ensurePatchRegistry(root);
   assertNativePatchPreflight(root);
   if (projectPlatform(root) === "windows") throw new Error("Windows production analysis is not implemented; use spark build --dev.");
   const packages = nativePackages(root, { applyExcludes: false });
@@ -201,6 +203,7 @@ export async function prebuild(root: string): Promise<void> {
 }
 
 async function withBuildLock<T>(root: string, action: () => Promise<T>): Promise<T> {
+  await ensurePatchRegistry(root);
   assertNativePatchPreflight(root);
   const lock = stateFile(root, "build.lock");
   mkdirSync(path.dirname(lock), { recursive: true });

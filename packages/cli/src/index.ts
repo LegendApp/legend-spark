@@ -1,3 +1,4 @@
+import { ensurePatchRegistry, fetchRegistry, registryFindings } from "@legendapp/spark-desktop-config/patch-registry.cjs";
 import { enrichedHtmlPinIssues } from "./enriched-html-pins.ts";
 import { publishCustomize } from "./customize-artifacts.ts";
 import type { PackageManager } from "./package-manager.ts";
@@ -29,7 +30,7 @@ import { optionalBackendIssues, printDependencyPins, upgradeDependencyPins } fro
 import { migrate } from "./migrate.ts";
 import { upgrade } from "./upgrade.ts";
 import { patchLibrary, patchRoot } from "./patch.ts";
-import { ensureProjectVersion } from "./project-version.ts";
+import { projectSparkVersion, ensureProjectVersion } from "./project-version.ts";
 import { reportError } from "./errors.ts";
 
 async function main() {
@@ -50,6 +51,7 @@ async function main() {
   if (!values.help && ["build", "prebuild"].includes(command ?? "")) {
     const root = project();
     ensureProjectVersion(root);
+    await ensurePatchRegistry(root);
     const selected = readConfig(root).expo.platforms[0];
     if (!["ios", "android", "web"].includes(selected) && (values.device || values.port)) throw new Error("--device and --port are mobile build options; use spark dev for desktop launch options.");
     if (["ios", "android", "web"].includes(selected)) {
@@ -189,7 +191,16 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       let pinIssues = false;
       try { root = project(); } catch { console.log("No Spark app found; skipping dependency pin check."); }
       if (root) {
-        ensureProjectVersion(root);
+        projectSparkVersion(root);
+        try {
+          const source = await fetchRegistry(root, { writeCache: false });
+          const findings = registryFindings(root, source);
+          for (const issue of findings) console.error(`${issue.message}\nFix: cd ${JSON.stringify(issue.owner)} && ${issue.fix}`);
+          if (findings.length) { process.exitCode = 1; pinIssues = true; }
+        } catch (error) {
+          console.error(`Patch registry check failed: ${error instanceof Error ? error.message : String(error)}\nFix: repair the registry metadata or reinstall Spark.`);
+          process.exitCode = 1; pinIssues = true;
+        }
         try {
           const issues = [...upgradeDependencyPins(root, true), ...enrichedHtmlPinIssues(root), ...optionalBackendIssues(root)];
           printDependencyPins(issues);
@@ -214,7 +225,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
         console.error(`App patch check failed: ${error instanceof Error ? error.message : String(error)}`);
         process.exitCode = 1;
       }
-      await doctor(root ?? start);
+      await doctor(root ?? start, { readOnly: true });
       console.log("Native toolchain available.");
       if (pinIssues) console.log("Dependency pin issues found; run spark upgrade.");
       break;
@@ -281,6 +292,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
 try {
   await main();
 } catch (error) {
-  reportError(process.cwd(), error, "Spark");
+  if (process.argv[2] === "doctor") console.error(error instanceof Error ? error.message : String(error));
+  else reportError(process.cwd(), error, "Spark");
   process.exitCode = 1;
 }

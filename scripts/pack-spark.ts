@@ -1,3 +1,5 @@
+import { validateRegistryFiles } from "./patch-registry.ts";
+import { validateRegistry } from "../packages/config-plugin/patch-registry.cjs";
 import { validateRelease, type ReleaseManifest } from "../packages/cli/src/release.ts";
 // @ts-ignore JavaScript build utility shared with the Node launcher.
 import { buildCLI } from "./build-node.mjs";
@@ -45,11 +47,16 @@ export async function packSpark(root: string, output: string, release?: ReleaseM
     for (const file of ["upstream.json", "react-native-nitro-modules.patch", "react-native-nitro-image.patch", "react-native-vision-camera.patch"])
       cpSync(path.join(root, "patches/camera", file), path.join(stage, "patches/camera", file));
     cpSync(path.join(root, "patches/dependencies.json"), path.join(stage, "patches/dependencies.json"));
-    const integrations = JSON.parse(readFileSync(path.join(root, "patches/dependencies.json"), "utf8"));
-    for (const pin of Object.values(integrations) as { patch: string }[]) {
-      const destination = path.join(stage, "patches", pin.patch);
-      mkdirSync(path.dirname(destination), { recursive: true });
-      cpSync(path.join(root, "patches", pin.patch), destination);
+    const registry = validateRegistry(JSON.parse(readFileSync(path.join(root, "patches/registry.json"), "utf8")));
+    validateRegistryFiles(root, registry);
+    cpSync(path.join(root, "patches/registry.json"), path.join(stage, "patches/registry.json"));
+    for (const library of Object.values(registry.libraries) as { versions: { patch?: string; sdkPatch?: string }[] }[]) for (const pin of library.versions) {
+      for (const file of [pin.patch, pin.sdkPatch]) {
+        if (!file) continue;
+        const destination = path.join(stage, "patches", file);
+        mkdirSync(path.dirname(destination), { recursive: true });
+        cpSync(path.join(root, "patches", file), destination);
+      }
     }
     const manifest = JSON.parse(readFileSync(path.join(stage, "package.json"), "utf8"));
     manifest.spark = { ...manifest.spark, nativePatchRequirements: nativePatchRequirements(root, manifest.version) };

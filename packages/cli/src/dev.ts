@@ -1,3 +1,4 @@
+import { ensurePatchRegistry } from "@legendapp/spark-desktop-config/patch-registry.cjs";
 import { installedRelease } from "./release.ts";
 import { createRuntimeInputCache } from "./runtime-input-cache.ts";
 import { acquireRunner } from "./runner-install.ts";
@@ -33,6 +34,7 @@ import {
 type BundleOptions = { dev?: boolean; minify?: boolean; https?: boolean; args?: string[] };
 
 export async function launch(root: string, app: string, port?: number, options: BundleOptions = {}) {
+  await ensurePatchRegistry(root);
   assertNativePatchPreflight(root);
   if (readRuntime(app)?.platform === "windows") {
     if (process.platform !== "win32") throw new Error("Launch the Windows runtime on Windows.");
@@ -81,6 +83,7 @@ export async function dev(
   noOpen = false,
   appArgs: string[] = [],
 ) {
+  await ensurePatchRegistry(root);
   assertNativePatchPreflight(root);
   const platform = projectPlatform(root);
   preparePatch(root);

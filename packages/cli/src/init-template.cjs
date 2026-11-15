@@ -27,4 +27,10 @@ function initializeTemplate(root, recordVersion = true) {
   if (plan) applyMigrationPlan(root, plan);
 }
 module.exports = { initializeTemplate };
-if (require.main === module) initializeTemplate(process.cwd());
+if (require.main === module) {
+  const root = process.cwd();
+  require('@legendapp/spark-desktop-config/patch-registry.cjs').ensurePatchRegistry(root).then(() => {
+    initializeTemplate(root);
+    require('@legendapp/spark-desktop-config/native-patches.cjs').prepareNativePatches(root);
+  }).catch(error => { console.error(error.message); process.exitCode = 1; });
+}

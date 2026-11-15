@@ -1,3 +1,4 @@
+import { patchSourceSHA } from "@legendapp/spark-desktop-config/patch-registry.cjs";
 import { SparkError, validatePackageSettings } from "@legendapp/spark-desktop-config/validation.cjs";
 import { assertEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { nativeWindowOptions } from "@legendapp/spark-window-options";
@@ -28,6 +29,7 @@ export type NativePackage = Package & {
   requires: string[];
 };
 export type Runtime = {
+  patchSourceSHA?: string;
   sourceRevision?: string;
   schema: 1;
   framework: string;
@@ -374,6 +376,7 @@ export function runtimeFor(
   return {
     schema: 1,
     framework: VERSION,
+    patchSourceSHA: patchSourceSHA(root),
     platform,
     arch: architecture(platform),
     mode,

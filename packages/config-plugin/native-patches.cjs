@@ -3,6 +3,7 @@ const { createHash } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
+const { sourceFor, selectPatch, assertRegistryVersions, patchDisabled, installedRegistryPackages, readPatch } = require("./patch-registry.cjs");
 
 const optionalBackends = ["react-native-enriched-markdown", "react-native-enriched-html", "react-native-webview", "@op-engineering/op-sqlite"];
 const cameraPackages = ["react-native-nitro-image", "react-native-vision-camera"];
@@ -156,7 +157,15 @@ function nativePatchInventory(sparkFile, hasCamera) {
   }
   const integrations = path.join(patchesRoot, "dependencies.json");
   if (fs.existsSync(integrations)) Object.assign(pins, JSON.parse(fs.readFileSync(integrations, "utf8")));
-  return { pins, patchesRoot };
+  const source = sourceFor(directory);
+  if (source) {
+    for (const [name, library] of Object.entries(source.registry.libraries)) {
+      if (library.kind === "patch" && (!cameraPackages.includes(name) && name !== "react-native-nitro-modules" || hasCamera)) {
+        pins[name] ??= library.versions[0];
+      }
+    }
+  }
+  return { pins, patchesRoot: source?.directory ?? patchesRoot, source };
 }
 
 // Use the same file checks as preparation, but never write patches or receipts into node_modules.
@@ -190,7 +199,8 @@ function appPatchIssues(root) {
       issues.push(`${own.file} patches ${name}@${own.version}, but ${manifest.version} is installed.\n  Fix: ${redo}`);
       continue;
     }
-    const candidate = inventory?.pins[name];
+    const candidate = inventory?.source?.registry.libraries[name]?.kind === "patch"
+      ? selectPatch(inventory.source.registry.libraries[name], manifest.version, inventory.source.sparkVersion) : inventory?.pins[name];
     const pin = candidate?.version === manifest.version ? candidate : undefined;
     // Package-manager patches on other libraries remain the package manager's responsibility.
     if (own.thirdParty && !pin) continue;
@@ -200,7 +210,8 @@ function appPatchIssues(root) {
     try {
       layerPatches(packageRoot, name, [
         pin ? {
-          text: fs.readFileSync(path.join(inventory.patchesRoot, pin.patch), "utf8"), apply: enabled,
+          text: (inventory.source ? readPatch(inventory.source, pin) : fs.readFileSync(path.join(inventory.patchesRoot, pin.patch))).toString("utf8"),
+          applied: fs.existsSync(path.join(packageRoot, ".spark-base.patch")) ? fs.readFileSync(path.join(packageRoot, ".spark-base.patch"), "utf8") : undefined, apply: enabled,
           error: relative => `${own.file} conflicts with Spark's ${name} patch at ${relative}.`,
         } : undefined,
         { text: own.bytes.toString("utf8"), applied: fs.existsSync(kept) ? fs.readFileSync(kept, "utf8") : undefined, apply: true,
@@ -217,6 +228,7 @@ function prepareNativePatches(root, installed = []) {
   const app = readManifest(manifestFile);
   if (app.name !== "@legendapp/spark" && !app.dependencies?.["@legendapp/spark"] && !app.devDependencies?.["@legendapp/spark"]) return {};
   validatePackageSettings(app.spark, root);
+  assertRegistryVersions(root);
   const appRequire = createRequire(manifestFile);
   let sparkFile;
   try { sparkFile = appRequire.resolve("@legendapp/spark/package.json"); }
@@ -226,9 +238,19 @@ function prepareNativePatches(root, installed = []) {
   for (const name of [...cameraPackages, ...optionalBackends]) {
     if (app.optionalDependencies?.[name] || installed.some(pkg => pkg.name === name)) dependencies[name] = true;
   }
-  const hasCamera = cameraPackages.some(name => dependencies[name]);
-  const { pins, patchesRoot } = nativePatchInventory(sparkFile, hasCamera);
-  for (const name of Object.keys(app.spark?.patches ?? {})) if (!Object.hasOwn(pins, name)) throw new SparkError(`Unknown package.json spark.patches package: ${name}`, "E_UNSUPPORTED_OPTION");
+  const currentSource = sourceFor(root);
+  const registryPackages = currentSource ? installedRegistryPackages(root, currentSource) : [];
+  const hasCamera = cameraPackages.some(name => dependencies[name] || registryPackages.some(pkg => pkg.name === name));
+  const { pins, patchesRoot, source } = nativePatchInventory(sparkFile, hasCamera);
+  if (source) {
+    for (const pkg of registryPackages) {
+      if (source.registry.libraries[pkg.name].kind !== "patch" || pkg.name === "react-native-nitro-modules" && !hasCamera) continue;
+      dependencies[pkg.name] = true;
+      pins[pkg.name] ??= source.registry.libraries[pkg.name].versions[0];
+      if (!installed.some(entry => entry.root === pkg.root)) installed.push({ name: pkg.name, root: pkg.root, json: readManifest(pkg.file) });
+    }
+  }
+  for (const name of Object.keys(app.spark?.patches ?? {})) if (!Object.hasOwn(source?.registry.libraries ?? pins, name)) throw new SparkError(`Unknown package.json spark.patches package: ${name}`, "E_UNSUPPORTED_OPTION");
   const active = Object.keys(pins).filter(name => dependencies[name] ||
     (hasCamera && name === "react-native-nitro-modules") ||
     (dependencies["react-native-vision-camera"] && name === "react-native-nitro-image"));
@@ -256,14 +278,14 @@ function prepareNativePatches(root, installed = []) {
     if (!own) fs.rmSync(kept, { force: true });
     else if (applied !== text) fs.writeFileSync(kept, own.bytes);
   };
-  const layered = new Set();
+  const layered = new Set(), skipped = new Set();
   const queue = [appRequire, createRequire(sparkFile)].map(req => ({ req, optionalOnly: false }));
-  if (hasCamera || optionalBackends.some(name => dependencies[name])) queue.push(...installed.map(pkg => ({ req: createRequire(path.join(pkg.root, "package.json")), optionalOnly: true })));
+  if (source || hasCamera || optionalBackends.some(name => dependencies[name])) queue.push(...installed.map(pkg => ({ req: createRequire(path.join(pkg.root, "package.json")), optionalOnly: true })));
   const visited = new Set();
   const packages = {};
   for (const { req, optionalOnly } of queue) {
     for (const name of active) {
-      if (optionalOnly && name !== "react-native-nitro-modules" && !cameraPackages.includes(name) && !optionalBackends.includes(name)) continue;
+      if (optionalOnly && !source && name !== "react-native-nitro-modules" && !cameraPackages.includes(name) && !optionalBackends.includes(name)) continue;
       let file;
       try { file = resolveManifest(req, name); }
       catch (error) {
@@ -275,10 +297,13 @@ function prepareNativePatches(root, installed = []) {
       if (visited.has(packageRoot)) continue;
       visited.add(packageRoot);
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
-      const pin = pins[name];
+      const library = source?.registry.libraries[name];
+      const pin = library ? selectPatch(library, manifest.version, source.sparkVersion) : pins[name];
+      if (!pin && patchDisabled(root, name, file)) { skipped.add(name); continue; }
+      if (!pin) throw new Error(`No compatible Spark patch for ${name}@${manifest.version}. Run spark doctor.`);
       if (pin.optional && manifest.version !== pin.version) {
-        console.warn(`Spark's desktop patch for ${name} needs ${pin.version}; found ${manifest.version}, so it stays unpatched.`);
-        continue;
+        if (patchDisabled(root, name, file)) continue;
+        throw new Error(`Spark's desktop patch for ${name} needs ${pin.version}; found ${manifest.version}. Install ${name}@${pin.version}, then retry.`);
       }
       packages[name] = { root: packageRoot };
       queue.push({ req: createRequire(file), optionalOnly });
@@ -286,15 +311,19 @@ function prepareNativePatches(root, installed = []) {
         const owner = readManifest(req.resolve("./package.json"));
         throw new Error(`Spark needs ${name}@${pin.version}; found ${manifest.version} at ${packageRoot}, required by ${owner.name ?? root}. Add an override/resolution for the pinned version.`);
       }
-      const bytes = fs.readFileSync(path.join(patchesRoot, pin.patch));
+      const bytes = source ? readPatch(source, pin) : fs.readFileSync(path.join(patchesRoot, pin.patch));
       const own = appPatch(name, manifest.version);
       const ownRoot = appRoot(name, packageRoot, manifest, own);
-      const enabled = app.spark?.patches?.[name] !== false;
+      const enabled = !patchDisabled(root, name, file);
+      const keptSpark = path.join(packageRoot, ".spark-base.patch");
+      const appliedSpark = fs.existsSync(keptSpark) ? fs.readFileSync(keptSpark, "utf8") : undefined;
       if (!enabled) warnOnce(`Spark's ${name} patch is disabled by spark.patches in package.json; desktop support for ${name} isn't guaranteed.`);
       if (own?.thirdParty) warnOnce(`Spark applies its ${name} patch first, then ${own.file}.`);
       layerApp(packageRoot, name,
-        { text: bytes.toString("utf8"), apply: enabled, error: relative => `Cannot apply Spark's ${name} patch to ${relative}. Reinstall dependencies before retrying.` },
+        { text: bytes.toString("utf8"), applied: appliedSpark, apply: enabled, error: relative => `Cannot apply Spark's ${name} patch to ${relative}. Reinstall dependencies before retrying.` },
         own, relative => `Cannot apply ${own.file} to ${relative}${enabled ? " on top of Spark's patch" : ""}. Redo it with spark patch ${name}.`);
+      if (enabled) fs.writeFileSync(keptSpark, bytes);
+      else fs.rmSync(keptSpark, { force: true });
       layered.add(name);
       stamp(file, installed, manifest => {
         if (name !== "react-native-nitro-modules" && !pin.optional) {
@@ -337,7 +366,7 @@ function prepareNativePatches(root, installed = []) {
     });
   }
   for (const name of active) {
-    if (!packages[name] && !pins[name].optional) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
+    if (!packages[name] && !skipped.has(name) && !pins[name].optional && app.spark?.patches?.[name] !== false) throw new Error(`Spark needs ${name}@${pins[name].version}. Finish installing dependencies before native preparation.`);
   }
   return packages;
 }

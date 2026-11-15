@@ -1,3 +1,4 @@
+import { patchDisabled } from "@legendapp/spark-desktop-config/patch-registry.cjs";
 import { assertEnrichedHtmlPins } from "./enriched-html-pins.ts";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -12,13 +13,14 @@ export type PackedPatchRequirements = { schema: 1; frameworkVersion: string; pac
 const required = ["@react-native-runtimes/core", "react-native-nitro-modules"];
 const optional = ["@op-engineering/op-sqlite", "react-native-webview", "expo-audio"];
 
-export function validatePackedNativePatches(packages: Pick<NativePackage, "name" | "json">[], requirements: PackedPatchRequirements | undefined, frameworkVersion = VERSION): string[] {
+export function validatePackedNativePatches(packages: Pick<NativePackage, "name" | "json">[], requirements: PackedPatchRequirements | undefined, frameworkVersion = VERSION, disabled: string[] = []): string[] {
   if (!requirements || requirements.schema !== 1 || requirements.frameworkVersion !== frameworkVersion || !requirements.packages || typeof requirements.packages !== "object")
     return [`The installed @legendapp/spark SDK does not include native patch provenance for ${frameworkVersion}. Run spark add desktop to install the matching SDK packages, then retry.`];
   const installed = new Map(packages.map(pkg => [pkg.name, pkg.json]));
   const errors: string[] = [];
-  for (const name of required) if (!installed.has(name)) errors.push(`${name} is missing; reinstall the dependencies from this Spark SDK.`);
+  for (const name of required) if (!disabled.includes(name) && !installed.has(name)) errors.push(`${name} is missing; reinstall the dependencies from this Spark SDK.`);
   for (const name of [...required, ...optional]) {
+    if (disabled.includes(name)) continue;
     const actual = installed.get(name);
     if (!actual) continue;
     const expected = requirements.packages[name];
@@ -32,7 +34,7 @@ export function validatePackedNativePatches(packages: Pick<NativePackage, "name"
   return errors;
 }
 
-export function validateWorkspaceNativePatches(root: string, packages: Pick<NativePackage, "name" | "root" | "json">[]): string[] {
+export function validateWorkspaceNativePatches(root: string, packages: Pick<NativePackage, "name" | "root" | "json">[], disabled: string[] = []): string[] {
   const framework = findFramework(root);
   if (!framework) return ["The Spark SDK is missing native patch provenance. Run spark add desktop to install matching SDK packages, then retry."];
   const frameworkPackage = readJson(path.join(framework, "package.json"));
@@ -42,6 +44,7 @@ export function validateWorkspaceNativePatches(root: string, packages: Pick<Nati
   const installed = new Map(packages.map(pkg => [pkg.name, pkg]));
   const errors: string[] = [];
   for (const name of [...required, ...optional]) {
+    if (disabled.includes(name)) continue;
     const pkg = installed.get(name);
     if (!pkg) {
       if (required.includes(name)) errors.push(`${name} is missing; reinstall the dependencies from this Spark workspace.`);
@@ -93,10 +96,14 @@ export function assertNativePatchPreflight(root: string) {
   let errors: string[];
   const spark = packages.find(pkg => pkg.name === "@legendapp/spark");
   const requirements = spark?.json.spark?.nativePatchRequirements as PackedPatchRequirements | undefined;
-  if (requirements) errors = validatePackedNativePatches(packages, requirements);
-  else if (framework) errors = validateWorkspaceNativePatches(root, packages);
+  const disabled = [...required, ...optional].filter(name => {
+    const pkg = packages.find(pkg => pkg.name === name);
+    return patchDisabled(root, name, pkg && path.join(pkg.root, "package.json"));
+  });
+  if (requirements) errors = validatePackedNativePatches(packages, requirements, VERSION, disabled);
+  else if (framework) errors = validateWorkspaceNativePatches(root, packages, disabled);
   else {
-    errors = validatePackedNativePatches(packages, requirements);
+    errors = validatePackedNativePatches(packages, requirements, VERSION, disabled);
   }
   errors.push(...validateAppPatches(root, packages));
   if (errors.length) throw new Error(`Native patch preparation stopped before changing project files:\n${errors.map(error => `- ${error}`).join("\n")}`);
