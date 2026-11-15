@@ -27,7 +27,7 @@ let originalApp: string | undefined;
 let proof: any;
 const token = crypto.randomUUID();
 function startSession(extra: string[] = []) {
-  const child = spawnProcess([process.execPath, cli, "dev", "--project", root, ...extra], { cwd: root, env: { ...process.env, SPARK_SESSION_TOKEN: token }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  const child = spawnProcess([process.execPath, cli, "dev", "--project", root, ...extra], { cwd: root, env: { ...process.env, SPARK_SESSION_TOKEN: token, CI: "0" }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
   for (const stream of [child.stdout, child.stderr]) void (async () => {
     for await (const chunk of stream!) appendFileSync(stateFile(root, "logs/windows-session.log"), chunk);
   })();
