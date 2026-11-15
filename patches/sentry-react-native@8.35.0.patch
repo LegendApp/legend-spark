@@ -1,0 +1,76 @@
+diff --git a/ios/Replay/RNSentryReplayMask.h b/ios/Replay/RNSentryReplayMask.h
+index 3903d41..61dd169 100644
+--- a/ios/Replay/RNSentryReplayMask.h
++++ b/ios/Replay/RNSentryReplayMask.h
+@@ -1,6 +1,8 @@
+ #import <Sentry/SentryDefines.h>
+ 
+-#if SENTRY_HAS_UIKIT
++// macOS has no replay, but codegen's component provider still names this view: without the class, its
++// registry gets a nil entry and the app aborts at launch. On macOS it is a plain container.
++#if SENTRY_HAS_UIKIT || TARGET_OS_OSX
+ 
+ #    import <React/RCTViewManager.h>
+ 
+diff --git a/ios/Replay/RNSentryReplayMask.mm b/ios/Replay/RNSentryReplayMask.mm
+index 3dad47a..de9bd40 100644
+--- a/ios/Replay/RNSentryReplayMask.mm
++++ b/ios/Replay/RNSentryReplayMask.mm
+@@ -1,6 +1,6 @@
+ #import <Sentry/SentryDefines.h>
+ 
+-#if SENTRY_HAS_UIKIT
++#if SENTRY_HAS_UIKIT || TARGET_OS_OSX
+ 
+ #    import "RNSentryReplayMask.h"
+ 
+@@ -16,7 +16,11 @@ @implementation RNSentryReplayMaskManager
+ 
+ RCT_EXPORT_MODULE(RNSentryReplayMask)
+ 
++#    if TARGET_OS_OSX
++- (RCTPlatformView *)view
++#    else
+ - (UIView *)view
++#    endif
+ {
+     return [RNSentryReplayMask new];
+ }
+diff --git a/ios/Replay/RNSentryReplayUnmask.h b/ios/Replay/RNSentryReplayUnmask.h
+index c1dc8a3..d28497e 100644
+--- a/ios/Replay/RNSentryReplayUnmask.h
++++ b/ios/Replay/RNSentryReplayUnmask.h
+@@ -1,6 +1,8 @@
+ #import <Sentry/SentryDefines.h>
+ 
+-#if SENTRY_HAS_UIKIT
++// macOS has no replay, but codegen's component provider still names this view: without the class, its
++// registry gets a nil entry and the app aborts at launch. On macOS it is a plain container.
++#if SENTRY_HAS_UIKIT || TARGET_OS_OSX
+ 
+ #    import <React/RCTViewManager.h>
+ 
+diff --git a/ios/Replay/RNSentryReplayUnmask.mm b/ios/Replay/RNSentryReplayUnmask.mm
+index 0fc0248..c445a78 100644
+--- a/ios/Replay/RNSentryReplayUnmask.mm
++++ b/ios/Replay/RNSentryReplayUnmask.mm
+@@ -1,6 +1,6 @@
+ #import <Sentry/SentryDefines.h>
+ 
+-#if SENTRY_HAS_UIKIT
++#if SENTRY_HAS_UIKIT || TARGET_OS_OSX
+ 
+ #    import "RNSentryReplayUnmask.h"
+ 
+@@ -16,7 +16,11 @@ @implementation RNSentryReplayUnmaskManager
+ 
+ RCT_EXPORT_MODULE(RNSentryReplayUnmask)
+ 
++#    if TARGET_OS_OSX
++- (RCTPlatformView *)view
++#    else
+ - (UIView *)view
++#    endif
+ {
+     return [RNSentryReplayUnmask new];
+ }
