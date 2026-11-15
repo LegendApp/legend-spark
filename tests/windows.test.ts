@@ -290,3 +290,15 @@ for (const newline of ["\n", "\r\n"]) test(`Windows generation prunes excluded s
     expect(nativePackages(f.root).map(pkg => pkg.name).sort()).toEqual([...excluded, "retained"].sort());
   } finally { f.close(); }
 });
+
+test("default Windows package and app GUIDs stay distinct when removing packaging", () => {
+  const { toExpo } = require("../packages/config-plugin/config.cjs");
+  const input = { name: "Windows", version: "1.0.0", projectId: "test-windows", platforms: ["windows"] };
+  const { windows } = toExpo(input).expo;
+  expect(windows.projectGuid).not.toBe(windows.packageGuid);
+  expect(toExpo(input).expo.windows).toEqual(windows);
+  const project = `Project("{TYPE}") = "MyApp", "MyApp\\MyApp.vcxproj", "{${windows.projectGuid}}"\r\nEndProject\r\n`;
+  const packaging = `Project("{TYPE}") = "MyApp.Package", "MyApp.Package\\MyApp.Package.wapproj", "{${windows.packageGuid}}"\r\nEndProject\r\n`;
+  const config = `{${windows.projectGuid}}.Debug.Build.0 = Debug|ARM64\r\n`;
+  expect(withoutPackaging(project + packaging + config + `{${windows.packageGuid}}.Debug.Build.0 = Debug|ARM64\r\n`)).toBe(project + config);
+});

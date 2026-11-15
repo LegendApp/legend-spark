@@ -104,8 +104,10 @@ function toExpo(value, target) {
   if (!overrides || typeof overrides !== "object" || Array.isArray(overrides) || Object.keys(overrides).some(p => !platforms.includes(p))) throw new Error("expoByPlatform keys must be supported platforms");
   const backend = merge(value.expo ?? {}, overrides[selected] ?? {});
   if (!backend || typeof backend !== "object" || Array.isArray(backend)) throw new Error("expo overrides must be an object");
-  const hex = createHash("sha256").update(value.projectId).digest("hex");
-  const guid = `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
+  const guid = seed => {
+    const hex = createHash("sha256").update(seed).digest("hex");
+    return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
+  };
   const config = {
     ...backend,
     name: value.name, slug: backend.slug ?? value.name.toLowerCase().replace(/[^a-z0-9-]/g, "-"), version: value.version,
@@ -114,7 +116,7 @@ function toExpo(value, target) {
     ...(value.scheme !== undefined ? { scheme: value.scheme } : {}),
     extra: { ...backend.extra, spark: { ...extra, ...(platforms.length > 1 ? { supportedPlatforms: platforms } : {}) } },
     experiments: { ...backend.experiments, outOfTreePlatforms: true },
-    windows: backend.windows ?? { namespace: "DesktopApp", displayName: value.name, packageGuid: guid, projectGuid: guid },
+    windows: backend.windows ?? { namespace: "DesktopApp", displayName: value.name, packageGuid: guid(`${value.projectId}:windows-package`), projectGuid: guid(value.projectId) },
     plugins: [...(["macos", "windows"].includes(selected) ? ["@legendapp/spark/config-plugin"] : []), ...(backend.plugins ?? []).filter(p => (Array.isArray(p) ? p[0] : p) !== "@legendapp/spark-desktop-config" && (Array.isArray(p) ? p[0] : p) !== "@legendapp/spark/config-plugin")],
   };
   const nativeIdentity = identity(config);
