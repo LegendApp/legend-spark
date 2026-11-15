@@ -52,6 +52,6 @@ try {
       if ($key) { try { $key.DeleteValue($plan.previous.appId + '.Document', $false) } finally { $key.Dispose() } }
     }
   }
-  Add-Type -TypeDefinition '[System.Runtime.InteropServices.DllImport("shell32.dll")] public static extern void SHChangeNotify(uint e, uint f, System.IntPtr a, System.IntPtr b);' -Name Shell -Namespace Spark
+  Add-Type -MemberDefinition '[System.Runtime.InteropServices.DllImport("shell32.dll")] public static extern void SHChangeNotify(uint e, uint f, System.IntPtr a, System.IntPtr b);' -Name Shell -Namespace Spark
   [Spark.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
 } finally { $classes.Dispose() }
