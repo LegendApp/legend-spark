@@ -1,5 +1,7 @@
 #pragma once
 #include <shobjidl.h>
+#include <shellapi.h>
+#include <filesystem>
 #include <wrl.h>
 #include <thread>
 #include <exception>
@@ -7,7 +9,7 @@
 namespace winrt::SparkFileSystem {
 // The shell can choose permanent deletion even when recycling was requested.
 // Veto that choice before any deletion, including on network/removable volumes.
-struct RecycleGuard final : Microsoft::WRL::RuntimeClass<Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>, IFileOperationProgressSink> {
+struct RecycleGuard final : ::Microsoft::WRL::RuntimeClass<::Microsoft::WRL::RuntimeClassFlags<::Microsoft::WRL::ClassicCom>, IFileOperationProgressSink> {
   HRESULT result = E_ABORT;
   bool completed = false;
   IFACEMETHODIMP PreDeleteItem(DWORD flags, IShellItem *) override { return (flags & TSF_DELETE_RECYCLE_IF_POSSIBLE) ? S_OK : E_ABORT; }
@@ -38,7 +40,7 @@ inline void Trash(std::filesystem::path const &path) {
       check_hresult(operation->SetOperationFlags(FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_ALLOWUNDO | FOFX_RECYCLEONDELETE | FOFX_EARLYFAILURE));
       com_ptr<IShellItem> item;
       check_hresult(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(item.put())));
-      auto guard = Microsoft::WRL::Make<RecycleGuard>();
+      auto guard = ::Microsoft::WRL::Make<RecycleGuard>();
       check_hresult(operation->DeleteItem(item.get(), guard.Get()));
       check_hresult(operation->PerformOperations());
       BOOL aborted = FALSE; check_hresult(operation->GetAnyOperationsAborted(&aborted));
