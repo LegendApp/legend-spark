@@ -61,7 +61,7 @@ const images = () => rendered.root.findAllByType("Image");
 const style = (value: any): any => Object.assign({}, ...(Array.isArray(value) ? value.flat(Infinity).filter(Boolean) : [value]));
 
 test("FastImageBackground routes layout, test and accessibility props to the container and imageProps to the image", async () => {
-  const { FastImageBackground } = shim("react-native-fast-image@10.9.9", "index.macos.tsx");
+  const { FastImageBackground } = shim("react-native-fast-image@10.11.0", "index.macos.tsx");
   const onLayout = vi.fn(), onLoad = vi.fn();
   await mount(FastImageBackground, { testID: "background", onLayout, accessibilityLabel: "container", source: { uri: "photo" }, onLoad,
     imageProps: { testID: "image", accessibilityLabel: "photo", onLoad: undefined }, children: "overlay" });
@@ -74,13 +74,13 @@ test("FastImageBackground routes layout, test and accessibility props to the con
 });
 
 test("FastImage configureCache resolves the same explicit unsupported result as cache siblings", async () => {
-  const { default: FastImage } = shim("react-native-fast-image@10.9.9", "index.macos.tsx");
+  const { default: FastImage } = shim("react-native-fast-image@10.11.0", "index.macos.tsx");
   await expect(FastImage.configureCache()).resolves.toEqual({ ok: false, error: "FastImage.configureCache is not supported on macOS" });
 });
 
 test.each([7, { uri: "photo", width: 800, height: 600, scale: 2, headers: { Accept: "image/png" } }])(
   "FastImage strips intrinsic layout dimensions from main and placeholder sources: %j", async source => {
-    const { default: FastImage } = shim("react-native-fast-image@10.9.9", "index.macos.tsx");
+    const { default: FastImage } = shim("react-native-fast-image@10.11.0", "index.macos.tsx");
     await mount(FastImage, { source, placeholder: source, style: { width: 120, height: 120 } });
     for (const image of images()) {
       expect(image.props.source).not.toHaveProperty("width");

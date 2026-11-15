@@ -61,10 +61,10 @@
     "optional": true
   },
   "react-native-fast-image": {
-    "version": "10.9.9",
-    "url": "https://registry.npmjs.org/react-native-fast-image/-/react-native-fast-image-10.9.9.tgz",
-    "integrity": "sha512-Dev69p1kcTxx7qLLFwax5hB/3X5wMNpviUIXS6K6KnITyhu+O2AEUhenZoq2OmGnT9UzHBIYHkEKoFebZNK/lA==",
-    "patch": "react-native-fast-image@10.9.9.patch",
+    "version": "10.11.0",
+    "url": "https://registry.npmjs.org/react-native-fast-image/-/react-native-fast-image-10.11.0.tgz",
+    "integrity": "sha512-YeRYN/KUBdN0/aIXFegx+o4itmFEILS37HGBOxYUW1Mth1+zLM9oOYidVzUnGM2jOapEC0aoZ8jvdL2AjRyMtw==",
+    "patch": "react-native-fast-image@10.11.0.patch",
     "optional": true
   },
   "react-native-release-profiler": {
