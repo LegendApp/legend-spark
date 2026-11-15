@@ -37,7 +37,7 @@ export async function packWindowsLibraries(output: string) {
       cpSync(path.join(root, "patches/windows", adapter, "windows"), path.join(stage, "windows"), { recursive: true });
       const namespace = adapter === "nitro" ? "SparkNitro" : "SparkOPSQLite";
       const config = path.join(stage, "react-native.config.js");
-      writeFileSync(config, (existsSync(config) ? readFileSync(config, "utf8") : "module.exports = {};\n") + `\nmodule.exports.dependency ??= {}; module.exports.dependency.platforms ??= {};\nmodule.exports.dependency.platforms.windows = ${JSON.stringify({ sourceDir: "windows", solutionFile: `${namespace}.sln`, projects: [{ projectFile: `${namespace}/${namespace}.vcxproj`, directDependency: true }] })};\n`);
+      writeFileSync(config, (existsSync(config) ? readFileSync(config, "utf8") : "module.exports = {};\n") + `\nmodule.exports.dependency ??= {}; module.exports.dependency.platforms ??= {};\nif (process.platform === "win32") module.exports.dependencies = { ...module.exports.dependencies, "react-native-windows": {} };\nmodule.exports.dependency.platforms.windows = ${JSON.stringify({ sourceDir: "windows", solutionFile: `${namespace}.sln`, projects: [{ projectFile: `${namespace}/${namespace}.vcxproj`, directDependency: true }] })};\n`);
       pkg.files = [...new Set([...(pkg.files ?? []), "windows", "react-native.config.js"])];
     }
     if (adapter === "nitro") {

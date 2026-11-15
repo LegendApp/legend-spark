@@ -27,7 +27,8 @@
     "ios",
     "*.podspec",
     "windows",
-    "macos"
+    "macos",
+    "react-native.config.js"
   ],
   "spark": {
     "sdk": true,
