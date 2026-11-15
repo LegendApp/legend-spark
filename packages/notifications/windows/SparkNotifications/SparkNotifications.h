@@ -46,7 +46,7 @@ struct NotificationsState : std::enable_shared_from_this<NotificationsState> {
   void Ensure() {
     if (notifier) return;
     project = Env(L"SPARK_PROJECT_ID"); if (project.empty()) throw hresult_invalid_argument(L"Missing project identity");
-    auto key = Hash(project); appId = L"Spark." + key;
+    auto key = Hash(hstring(project)); appId = L"Spark." + key;
     auto classId = L"{" + key.substr(0, 8) + L"-" + key.substr(8, 4) + L"-" + key.substr(12, 4) + L"-" + key.substr(16, 4) + L"-" + key.substr(20, 12) + L"}";
     wchar_t executable[32768]{}; if (!GetModuleFileNameW(nullptr, executable, 32768)) throw_last_error();
     Json::JsonObject launch;
@@ -135,7 +135,7 @@ struct NotificationsState : std::enable_shared_from_this<NotificationsState> {
       Toast::ScheduledToastNotification toast(xml, clock::now() + std::chrono::milliseconds(static_cast<int64_t>(delay * 1000))); toast.Tag(tag); toast.Group(group); notifier.AddToSchedule(toast);
     } else {
       Toast::ToastNotification toast(xml); toast.Tag(tag); toast.Group(group);
-      response.SetNamedValue(L"action", Json::JsonValue::CreateStringValue(L"dismiss")); auto encoded = response.Stringify(); auto weak = weak_from_this(); auto dispatcher = context.UIDispatcher();
+      response.SetNamedValue(L"action", Json::JsonValue::CreateStringValue(L"dismiss")); auto encoded = std::wstring(response.Stringify()); auto weak = weak_from_this(); auto dispatcher = context.UIDispatcher();
       const auto generation = ++nextGeneration;
       auto token = toast.Dismissed([weak, dispatcher, tag, generation, encoded](auto const &, Toast::ToastDismissedEventArgs const &event) {
         const bool userDismissed = event.Reason() == Toast::ToastDismissalReason::UserCanceled;
