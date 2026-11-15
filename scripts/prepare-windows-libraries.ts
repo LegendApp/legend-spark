@@ -49,6 +49,10 @@ export async function packWindowsLibraries(output: string) {
         if (next === false) throw new Error(`Could not apply Nitro macOS patch to ${target}`);
         writeFileSync(target, next);
       }
+      for (const [file, header] of [["core/AnyMap.cpp", "stdexcept"], ["utils/NitroTypeInfo.cpp", "unordered_map"]]) {
+        const target = path.join(stage, "cpp", file!);
+        writeFileSync(target, `#include <${header}>\n` + readFileSync(target, "utf8"));
+      }
       // Export the portable C++ API from its DLL, so consumers share one registry.
       const defines = path.join(stage, "cpp/utils/NitroDefines.hpp");
       writeFileSync(defines, readFileSync(defines, "utf8") + `\n#ifdef _WIN32\n#ifdef NITRO_WINDOWS_EXPORTS\n#define NITRO_WINDOWS_API __declspec(dllexport)\n#else\n#define NITRO_WINDOWS_API __declspec(dllimport)\n#endif\n#else\n#define NITRO_WINDOWS_API\n#endif\n`);

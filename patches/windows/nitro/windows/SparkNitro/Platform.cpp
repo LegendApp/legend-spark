@@ -1,4 +1,5 @@
 #include "pch.h"
+#include <ReactDispatcher.h>
 #include <ThreadUtils.hpp>
 #include <NitroLogger.hpp>
 #include <future>
