@@ -52,11 +52,11 @@ struct TrayState : std::enable_shared_from_this<TrayState> {
     }
     // Windows has no SF Symbols or tray text label. Its app icon identifies the
     // item; title supplies its accessible tooltip when no tooltip is specified.
-    HICON large = nullptr, small = nullptr; wchar_t executable[32768]{};
+    HICON largeIcon = nullptr, smallIcon = nullptr; wchar_t executable[32768]{};
     GetModuleFileNameW(nullptr, executable, 32768);
-    ExtractIconExW(executable, 0, &large, &small, 1);
-    if (large) DestroyIcon(large);
-    if (small) return small;
+    ExtractIconExW(executable, 0, &largeIcon, &smallIcon, 1);
+    if (largeIcon) DestroyIcon(largeIcon);
+    if (smallIcon) return smallIcon;
     auto icon = CopyIcon(LoadIconW(nullptr, IDI_APPLICATION)); if (!icon) throw_last_error(); return icon;
   }
   static HMENU Menu(Json::JsonArray const &entries, std::map<UINT, std::string> &actions, UINT &sequence, int depth = 0) {
