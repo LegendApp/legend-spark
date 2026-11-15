@@ -9,6 +9,7 @@
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
 #include <shobjidl.h>
+#include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Security.Cryptography.h>
 #include <winrt/Windows.Security.Cryptography.Core.h>
 #pragma comment(lib, "Shell32.lib")
