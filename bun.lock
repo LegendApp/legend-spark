@@ -154,7 +154,7 @@
         "react-native-nitro-image": "0.15.2",
         "react-native-nitro-modules": "0.37.0",
         "react-native-nitro-sqlite": "10.2.0",
-        "react-native-nitro-zxing": "0.3.0",
+        "react-native-nitro-zxing": "0.3.1",
         "react-native-pressable-opacity": "1.0.10",
         "react-native-quick-base64": "3.0.1",
         "react-native-quick-crypto": "1.1.9",
@@ -485,9 +485,9 @@
       "version": "0.0.4",
       "dependencies": {
         "@legendapp/spark-clipboard": "0.0.4",
-        "base64-js": "1.5.1",
         "@legendapp/spark-file-dialog": "0.0.4",
         "@legendapp/spark-file-system": "0.0.4",
+        "base64-js": "1.5.1",
       },
       "peerDependencies": {
         "react": "^19.2.0",
@@ -2519,7 +2519,7 @@
 
     "react-native-nitro-sqlite": ["react-native-nitro-sqlite@10.2.0", "", { "dependencies": { "typeorm": "1.1.1" }, "peerDependencies": { "better-sqlite3": "^12.11.1", "react": ">=17.0.0", "react-native": ">=0.75.0", "react-native-nitro-modules": ">=0.35.0" }, "optionalPeers": ["better-sqlite3"] }, "sha512-lB0yc4SzVNTZoe0ItyBJqOQ9qAc2SY3ku7PzFwP97e4NpZIOX0ec7p49sLK04MdWRmInt96Q7NU4rPfbNyg7Nw=="],
 
-    "react-native-nitro-zxing": ["react-native-nitro-zxing@0.3.0", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-nitro-image": "*", "react-native-nitro-modules": "*", "react-native-vision-camera": "*" }, "optionalPeers": ["react-native-nitro-modules"] }, "sha512-SQ/qwmfakdPcOMVzph99vFOPbPkVg3JZaTGrjVVXG6RS8ZUqMocHqbeM4V17qPDTzFK+rsAp6T7u2aFe3Hot/w=="],
+    "react-native-nitro-zxing": ["react-native-nitro-zxing@0.3.1", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-nitro-image": "*", "react-native-nitro-modules": "*", "react-native-vision-camera": "*" }, "optionalPeers": ["react-native-nitro-modules"] }, "sha512-KBQaNqsme3K1Fk02V+Pbkb30cjl4CiBF9oHNHMAcX1r8c4aS665BYqLoE067MYklOCc1MLlG0/bw1eDK8mW6Xg=="],
 
     "react-native-pressable-opacity": ["react-native-pressable-opacity@1.0.10", "", { "peerDependencies": { "react": "*", "react-native": ">= 0.63", "react-native-gesture-handler": "*", "react-native-reanimated": ">= 2" } }, "sha512-Py9YH9TlS3Lv1so5JCj6bgiqkeYYGupF4ZImlpoyhhId/t/RiSqR68LlASOHgdctqQuqVJObQiFfzX8oZI9+6w=="],
 
