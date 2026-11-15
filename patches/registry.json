@@ -72,6 +72,14 @@
           "integrity": "sha512-bYrNW87nDtbMXAJsosYwu59xwTqeuaurfCDA+62MQ6hY4+2Iv71+Sik3ulW92fOqg8s2SZinOJosHEWoi9Ayqw==",
           "optional": true,
           "sha256": "b9f154447af517ec8efa288d67668bf3ba5b204ad1df62de51816ac49d2c045a"
+        },
+        {
+          "version": "7.21.1",
+          "minSpark": "0.0.4",
+          "patch": "react-navigation-native-stack@7.21.1.patch",
+          "integrity": "sha512-wb45+tWtveeogDh/372FuwP9S81VYc8HlaV3IJefQzWRcMFWpU65tPniaafiQ3yyfO94FJYtRydtRVYriLU05w==",
+          "optional": true,
+          "sha256": "b9f154447af517ec8efa288d67668bf3ba5b204ad1df62de51816ac49d2c045a"
         }
       ]
     },
@@ -83,6 +91,14 @@
           "minSpark": "0.0.4",
           "patch": "sentry-react-native@8.32.0.patch",
           "integrity": "sha512-Z7W2t0oDrm46JU+FgdB0AL+Ru5urBVmFhYl/RjuPi2AnAjddmbNyDZGzpOLSYtl6oWqqz2u4zGuj3ZFjrCMJOg==",
+          "optional": true,
+          "sha256": "c85dcbf1b17c070a197dac5df0cebba1abb4042a97ee180403740a8f9a816efa"
+        },
+        {
+          "version": "8.35.0",
+          "minSpark": "0.0.4",
+          "patch": "sentry-react-native@8.35.0.patch",
+          "integrity": "sha512-MCPb6xogyJsqYUXQyzPBZUZ6WCDvlq2L/BmT/wn2M0q1qsviB81PKw9q2Vom9EokMUDkp0uzJn3izTyWhw8ZHQ==",
           "optional": true,
           "sha256": "c85dcbf1b17c070a197dac5df0cebba1abb4042a97ee180403740a8f9a816efa"
         }
@@ -372,6 +388,14 @@
           "integrity": "sha512-Dev69p1kcTxx7qLLFwax5hB/3X5wMNpviUIXS6K6KnITyhu+O2AEUhenZoq2OmGnT9UzHBIYHkEKoFebZNK/lA==",
           "optional": true,
           "sha256": "689e49d8793c8f39c01052d14cd03e5c929ccdd2d965b1d35cf385351860660a"
+        },
+        {
+          "version": "10.11.0",
+          "minSpark": "0.0.4",
+          "patch": "react-native-fast-image@10.11.0.patch",
+          "integrity": "sha512-YeRYN/KUBdN0/aIXFegx+o4itmFEILS37HGBOxYUW1Mth1+zLM9oOYidVzUnGM2jOapEC0aoZ8jvdL2AjRyMtw==",
+          "optional": true,
+          "sha256": "689e49d8793c8f39c01052d14cd03e5c929ccdd2d965b1d35cf385351860660a"
         }
       ]
     },
@@ -424,6 +448,14 @@
           "integrity": "sha512-4rxaPcXKudZW1Ma1Y63rHF8/7hbanOyqr01Gac6ROUYApcCH8/YtS0d02cm0ZEbSzwPvmcvFRzPoT4cHWxhJGA==",
           "optional": true,
           "sha256": "3b1475949fd0d957de5d6d02692fa3cbdc85e5c669b1d595008c80b748c7ef4e"
+        },
+        {
+          "version": "1.10.0",
+          "minSpark": "0.0.4",
+          "patch": "react-native-nitro-fetch@1.10.0.patch",
+          "integrity": "sha512-n8NwldyOpL2MZQ3Dfi8Id4alPKzAFgVgqJwmq7oBNMMMKRcHaTxYhcZttYU2Fadd9mcYxbCyydU89fmWWm+xOw==",
+          "optional": true,
+          "sha256": "7e63b19880e69ede0de9da7d46a803788bb49af16248766cd245f5a15eac2693"
         }
       ]
     },
@@ -469,6 +501,14 @@
           "integrity": "sha512-SQ/qwmfakdPcOMVzph99vFOPbPkVg3JZaTGrjVVXG6RS8ZUqMocHqbeM4V17qPDTzFK+rsAp6T7u2aFe3Hot/w==",
           "optional": true,
           "sha256": "8bbb5bff8c49b585fafeeacc9d9b2dc82f26257b42ba0fb13ad23fab9513cf55"
+        },
+        {
+          "version": "0.3.1",
+          "minSpark": "0.0.4",
+          "patch": "react-native-nitro-zxing@0.3.1.patch",
+          "integrity": "sha512-KBQaNqsme3K1Fk02V+Pbkb30cjl4CiBF9oHNHMAcX1r8c4aS665BYqLoE067MYklOCc1MLlG0/bw1eDK8mW6Xg==",
+          "optional": true,
+          "sha256": "3599b39bf5d2d4934352b275e3749ac45fc83f1551f55480008ee8ee5f55a779"
         }
       ]
     },
@@ -560,6 +600,14 @@
           "integrity": "sha512-eYqixPy6auBj6k/ica9fCYIPgFQsLzUwRoxGZ04hX3hkANTNjaz3/LzNfXPfgJbwF/fQrhaK0qII4nhtSqUPfA==",
           "optional": true,
           "sha256": "801c26a538886c76393565c43d6fb4f465de22bdda0df67605681498f132761a"
+        },
+        {
+          "version": "3.7.0",
+          "minSpark": "0.0.4",
+          "patch": "react-native-unistyles@3.7.0.patch",
+          "integrity": "sha512-Rh2MElgv2gCP/Q4BG0ztWz8iawH1BSyCgAvBRCpw10+lA8N8WqTT97rY4OgfJhB7m9eZLWUH2nQch2HfVNk3+Q==",
+          "optional": true,
+          "sha256": "4bd8a5911591d88baea8d56ab50d55ab112b749cfd8fac052bb65a39b5260eeb"
         }
       ]
     },
@@ -569,13 +617,24 @@
         {
           "version": "5.2.3",
           "minSpark": "0.0.4",
-          "patch": "camera/react-native-vision-camera.patch",
+          "patch": "camera/react-native-vision-camera@5.2.3.patch",
           "integrity": "sha512-OHjgM8BPzxppTqbF1FEltj+fxvisj4xdghM7ypoT1p6cOe28HByhOJP1c7LkBiUiZuotbsdbQwGdJ8nU7ZvPzA==",
           "requires": [
             "react-native-nitro-modules",
             "react-native-nitro-image"
           ],
           "sha256": "81a15b8d8445c780bb3c0ebbc5fcebacdc4c739b2c35e2f2dce8f6450800d783"
+        },
+        {
+          "version": "5.2.4",
+          "minSpark": "0.0.4",
+          "patch": "camera/react-native-vision-camera.patch",
+          "integrity": "sha512-bYRSYkV61CgdvcB4MdBR2pCTzqWgYaKLbXAtvg0lDQtD7dUumiXhKw76q80cxlJb0Obimdj+HD1Fci9fCVvxbQ==",
+          "requires": [
+            "react-native-nitro-modules",
+            "react-native-nitro-image"
+          ],
+          "sha256": "48cdcd0f5e1b1ce8a092d497477bb5daea122b2010b787d136f8ea375f4e8559"
         }
       ]
     },

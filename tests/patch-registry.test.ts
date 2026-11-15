@@ -6,6 +6,8 @@ import { assertRegistryVersions, compareVersions, ensurePatchRegistry, fetchRegi
 import { prepareNativePatches } from "../packages/config-plugin/native-patches.cjs";
 import { generateRegistry, validateRegistryFiles } from "../scripts/patch-registry.ts";
 
+import { which } from "../packages/cli/src/process.ts";
+
 const repository = path.resolve(import.meta.dirname, "..");
 const directories: string[] = [];
 const sha = "a".repeat(40);
@@ -215,7 +217,7 @@ test("doctor CLI reports registry fixes and tool errors without any filesystem w
   json(path.join(f.root, "desktop.config.json"), { name: "Fixture", version: "1.0.0", projectId: "test.fixture" });
   const preload = path.join(f.root, "offline.cjs"); writeFileSync(preload, 'globalThis.fetch = async () => { throw new Error("offline fixture"); };\n');
   const { spawnSync } = await import("node:child_process");
-  const child = spawnSync(process.execPath, [path.join(repository, "packages/cli/src/index.ts"), "doctor", "--project", f.root], {
+  const child = spawnSync(which("node")!, [path.join(repository, "packages/cli/dist/index.js"), "doctor", "--project", f.root], {
     cwd: f.root, encoding: "utf8", env: { ...process.env, NODE_OPTIONS: `--require=${preload}`, PATH: "", SPARK_HOME: path.join(f.root, "home") },
   });
   expect(child.status, child.stdout + child.stderr).toBe(1);
@@ -260,7 +262,7 @@ test("an existing app's install hook checks versions even after its template was
   json(path.join(f.root, "desktop.config.json"), { name: "Fixture", projectId: "already.initialized" });
   const preload = path.join(f.root, "offline.cjs"); writeFileSync(preload, 'globalThis.fetch = async () => { throw new Error("offline fixture"); };\n');
   const { spawnSync } = await import("node:child_process");
-  const child = spawnSync(process.execPath, [path.join(repository, "packages/desktop/init-template.cjs")], {
+  const child = spawnSync(which("node")!, [path.join(repository, "packages/desktop/init-template.cjs")], {
     cwd: f.root, encoding: "utf8", env: { ...process.env, CI: "1", NODE_OPTIONS: `--require=${preload}`, SPARK_HOME: path.join(f.root, "home") },
   });
   expect(child.status, child.stdout + child.stderr).toBe(1);

@@ -1,0 +1,2662 @@
+diff --git a/VisionCamera.podspec b/VisionCamera.podspec
+index e798a1d..5a0daf9 100644
+--- a/VisionCamera.podspec
++++ b/VisionCamera.podspec
+@@ -10,7 +10,8 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => min_ios_version_supported, :visionos => 1.0 }
++  s.platforms    = { :ios => min_ios_version_supported, :visionos => 1.0, :osx => "14.0" }
++  s.osx.prefix_header_contents = "#include <CoreGraphics/CoreGraphics.h>"
+   s.source       = { :git => "https://github.com/mrousavy/nitro.git", :tag => "#{s.version}" }
+ 
+   s.source_files = [
+diff --git a/ios/Delegates/CapturePhotoDelegate.swift b/ios/Delegates/CapturePhotoDelegate.swift
+index 58fdb4e..023bbf5 100644
+--- a/ios/Delegates/CapturePhotoDelegate.swift
++++ b/ios/Delegates/CapturePhotoDelegate.swift
+@@ -88,6 +88,9 @@ final class CapturePhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+     CapturePhotoDelegate.delegates.removeAll { $0 == self }
+   }
+ 
++#if os(macOS)
++
++#else
+   @available(iOS 17.0, *)
+   func photoOutput(
+     _ output: AVCapturePhotoOutput,
+@@ -95,5 +98,6 @@ final class CapturePhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+     error: (any Error)?
+   ) {
+     logger.warning("didFinishCapturingDeferredPhotoProxy is not implemented!")
+-  }
++  }#endif
++
+ }
+diff --git a/ios/Delegates/DepthFrameDelegate.swift b/ios/Delegates/DepthFrameDelegate.swift
+index 8d3d0b5..cff3568 100644
+--- a/ios/Delegates/DepthFrameDelegate.swift
++++ b/ios/Delegates/DepthFrameDelegate.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ //
+ //  DepthFrameDelegate.swift
+ //  VisionCamera
+@@ -30,3 +31,5 @@ final class DepthFrameDelegate: NSObject, AVCaptureDepthDataOutputDelegate {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Delegates/SynchronizedOutputDelegate.swift b/ios/Delegates/SynchronizedOutputDelegate.swift
+index 16bb97f..938c4f1 100644
+--- a/ios/Delegates/SynchronizedOutputDelegate.swift
++++ b/ios/Delegates/SynchronizedOutputDelegate.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ //
+ //  SynchronizedOutputDelegate.swift
+ //  VisionCamera
+@@ -108,3 +109,5 @@ final class SynchronizedOutputDelegate: NSObject, AVCaptureDataOutputSynchronize
+     return SynchronizedDataFrame(data: .depth(buffer), metadata: metadata)
+   }
+ }
++
++#endif
+diff --git a/ios/Extensions/AVFoundation/AVCaptureConnection+orientation.swift b/ios/Extensions/AVFoundation/AVCaptureConnection+orientation.swift
+index 36181e9..112d08e 100644
+--- a/ios/Extensions/AVFoundation/AVCaptureConnection+orientation.swift
++++ b/ios/Extensions/AVFoundation/AVCaptureConnection+orientation.swift
+@@ -10,10 +10,18 @@ import NitroModules
+ 
+ extension AVCaptureConnection {
+   var orientation: CameraOrientation {
++#if os(macOS)
++    return .up
++#else
+     return CameraOrientation(avOrientation: videoOrientation)
++#endif
+   }
+ 
+   func setOrientation(_ orientation: CameraOrientation) throws {
++#if os(macOS)
++    // Desktop cameras supply upright buffers; portrait is an iOS screen convention.
++    guard orientation == .up else { throw RuntimeError.error(withMessage: "Custom capture orientation is not supported by the macOS prototype") }
++#else
+     guard self.isVideoOrientationSupported else {
+       throw RuntimeError.error(
+         withMessage:
+@@ -21,5 +29,6 @@ extension AVCaptureConnection {
+       )
+     }
+     self.videoOrientation = orientation.toAVCaptureVideoOrientation()
++#endif
+   }
+ }
+diff --git a/ios/Extensions/AVFoundation/AVCaptureDevice.DeviceType+all.swift b/ios/Extensions/AVFoundation/AVCaptureDevice.DeviceType+all.swift
+index 1f5adb8..adbfd55 100644
+--- a/ios/Extensions/AVFoundation/AVCaptureDevice.DeviceType+all.swift
++++ b/ios/Extensions/AVFoundation/AVCaptureDevice.DeviceType+all.swift
+@@ -14,6 +14,9 @@ extension AVCaptureDevice.DeviceType {
+    * This list should be kept up to date by just adding new device types here.
+    */
+   static var all: [AVCaptureDevice.DeviceType] {
++#if os(macOS)
++    return [.builtInWideAngleCamera, .external, .continuityCamera, .deskViewCamera]
++#else
+     var devices: [AVCaptureDevice.DeviceType] = []
+ 
+     devices.append(.builtInWideAngleCamera)
+@@ -38,5 +41,6 @@ extension AVCaptureDevice.DeviceType {
+     devices.append(.builtInTrueDepthCamera)
+ 
+     return devices
++#endif
+   }
+ }
+diff --git a/ios/Extensions/AVFoundation/AVCaptureDevice.Format+supportedResolutionsFor.swift b/ios/Extensions/AVFoundation/AVCaptureDevice.Format+supportedResolutionsFor.swift
+index 7adc7fd..13fdbde 100644
+--- a/ios/Extensions/AVFoundation/AVCaptureDevice.Format+supportedResolutionsFor.swift
++++ b/ios/Extensions/AVFoundation/AVCaptureDevice.Format+supportedResolutionsFor.swift
+@@ -13,11 +13,16 @@ extension AVCaptureDevice.Format {
+     return [self.formatDescription.dimensions]
+   }
+   private var photoDimensions: [CMVideoDimensions] {
++#if os(macOS)
++    let dimensions = self.supportedMaxPhotoDimensions
++    return dimensions.isEmpty ? self.videoDimensions : dimensions
++#else
+     if #available(iOS 16.0, *) {
+       return self.supportedMaxPhotoDimensions
+     } else {
+       return [self.highResolutionStillImageDimensions]
+     }
++#endif
+   }
+ 
+   /**
+@@ -29,6 +34,9 @@ extension AVCaptureDevice.Format {
+       return self.videoDimensions
+     case .photo:
+       return self.photoDimensions
++#if os(macOS)
++    case .depthVideo, .depthPhoto: return []
++#else
+     case .depthVideo:
+       return self.supportedDepthDataFormats
+         .flatMap { $0.videoDimensions }
+@@ -37,6 +45,7 @@ extension AVCaptureDevice.Format {
+       return self.supportedDepthDataFormats
+         .flatMap { $0.photoDimensions }
+         .withoutDuplicates()
++#endif
+     }
+   }
+ }
+diff --git a/ios/Extensions/AVFoundation/AVCaptureDevice.Format+supportsOutput.swift b/ios/Extensions/AVFoundation/AVCaptureDevice.Format+supportsOutput.swift
+index 5a496ce..cd71719 100644
+--- a/ios/Extensions/AVFoundation/AVCaptureDevice.Format+supportsOutput.swift
++++ b/ios/Extensions/AVFoundation/AVCaptureDevice.Format+supportsOutput.swift
+@@ -9,7 +9,11 @@ import Foundation
+ 
+ extension AVCaptureDevice.Format {
+   func supportsOutput(_ output: AVCaptureOutput) -> Bool {
++#if os(macOS)
++    return output is AVCapturePhotoOutput || output is AVCaptureMovieFileOutput || output is AVCaptureVideoDataOutput
++#else
+     let targetOutputClass = type(of: output)
+     return self.unsupportedCaptureOutputClasses.allSatisfy { $0 != targetOutputClass }
++#endif
+   }
+ }
+diff --git a/ios/Extensions/AVFoundation/AVCapturePhoto+getMediaSampleMetadata.swift b/ios/Extensions/AVFoundation/AVCapturePhoto+getMediaSampleMetadata.swift
+index 066ae6d..f5140d5 100644
+--- a/ios/Extensions/AVFoundation/AVCapturePhoto+getMediaSampleMetadata.swift
++++ b/ios/Extensions/AVFoundation/AVCapturePhoto+getMediaSampleMetadata.swift
+@@ -6,10 +6,20 @@
+ 
+ import AVFoundation
+ import Foundation
++import ImageIO
+ import NitroModules
+ 
+ extension AVCapturePhoto {
+   func getMediaSampleMetadata() throws -> MediaSampleMetadata {
++#if os(macOS)
++    var exif: UInt32 = 1
++    if let data = fileDataRepresentation(), let source = CGImageSourceCreateWithData(data as CFData, nil), let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
++      exif = (properties[kCGImagePropertyOrientation] as? NSNumber)?.uint32Value ?? 1
++    }
++    let orientation: CameraOrientation
++    switch exif { case 3, 4: orientation = .down; case 5, 8: orientation = .left; case 6, 7: orientation = .right; default: orientation = .up }
++    return MediaSampleMetadata(timestamp: timestamp, orientation: orientation, isMirrored: [2, 4, 5, 7].contains(exif))
++#else
+     guard let orientationAny = self.metadata[kCGImagePropertyOrientation as String],
+       let exifOrientation = orientationAny as? UInt32
+     else {
+@@ -24,5 +34,6 @@ extension AVCapturePhoto {
+       timestamp: timestamp,
+       orientation: orientation,
+       isMirrored: isMirrored)
++#endif
+   }
+ }
+diff --git a/ios/Extensions/AVFoundation/AVCapturePhoto+memorySize.swift b/ios/Extensions/AVFoundation/AVCapturePhoto+memorySize.swift
+index d1f8ea7..8e366c1 100644
+--- a/ios/Extensions/AVFoundation/AVCapturePhoto+memorySize.swift
++++ b/ios/Extensions/AVFoundation/AVCapturePhoto+memorySize.swift
+@@ -14,7 +14,7 @@ extension AVCapturePhoto {
+ 
+     // base native buffer (width * height * RGB)
+     let width = resolvedSettings.photoDimensions.width
+-    let height = resolvedSettings.photoDimensions.width
++    let height = resolvedSettings.photoDimensions.height
+     let bytesPerPixel = 3  // RGB
+     estimate += Int(width) * Int(height) * bytesPerPixel
+ 
+@@ -23,6 +23,7 @@ extension AVCapturePhoto {
+       estimate += pixelBuffer.memorySize
+     }
+ 
++#if !os(macOS)
+     // raw preview buffer
+     if let previewPixelBuffer {
+       estimate += previewPixelBuffer.memorySize
+@@ -32,6 +33,7 @@ extension AVCapturePhoto {
+     if let depthData {
+       estimate += depthData.depthDataMap.memorySize
+     }
++#endif
+     return estimate
+   }
+ }
+diff --git a/ios/Extensions/AVFoundation/AVDepthData+toUIImage.swift b/ios/Extensions/AVFoundation/AVDepthData+toUIImage.swift
+index 6f48cd8..0be886f 100644
+--- a/ios/Extensions/AVFoundation/AVDepthData+toUIImage.swift
++++ b/ios/Extensions/AVFoundation/AVDepthData+toUIImage.swift
+@@ -7,10 +7,13 @@
+ import AVFoundation
+ import CoreImage
+ import Foundation
++#if os(macOS)
++import ImageIO
++#endif
+ import NitroModules
+ 
+ extension AVDepthData {
+-  func toUIImage(orientation: UIImage.Orientation) throws -> UIImage {
++  func toUIImage(orientation: CameraImageOrientation) throws -> CameraPlatformImage {
+     // No-copy create CIImage from AVDepthData
+     guard let ciImage = CIImage(depthData: self) else {
+       throw RuntimeError.error(withMessage: "Failed to convert Depth to Image!")
+diff --git a/ios/Extensions/CIImage+toUIImage.swift b/ios/Extensions/CIImage+toUIImage.swift
+index 22ee164..3277a1b 100644
+--- a/ios/Extensions/CIImage+toUIImage.swift
++++ b/ios/Extensions/CIImage+toUIImage.swift
+@@ -7,12 +7,15 @@
+ import AVFoundation
+ import CoreImage
+ import Foundation
++#if os(macOS)
++import ImageIO
++#endif
+ import NitroModules
+ 
+ extension CIImage {
+   private static let context = CIContext(options: [.useSoftwareRenderer: false])
+ 
+-  func toUIImage(orientation: UIImage.Orientation) throws -> UIImage {
++  func toUIImage(orientation: CameraImageOrientation) throws -> CameraPlatformImage {
+     // Copy the CIImage into a CGImage (render)
+     guard
+       let cgImage = Self.context.createCGImage(
+@@ -21,10 +24,16 @@ extension CIImage {
+     else {
+       throw RuntimeError.error(withMessage: "Failed to copy CIImage into CGImage!")
+     }
++    #if os(macOS)
++    let oriented = CIImage(cgImage: cgImage).oriented(orientation)
++    guard let result = Self.context.createCGImage(oriented, from: oriented.extent) else { throw RuntimeError.error(withMessage: "Failed to orient image") }
++    return result
++    #else
+     // No-copy wrap the CGImage in a UIImage
+     return UIImage(
+       cgImage: cgImage,
+       scale: 1,
+       orientation: orientation)
++    #endif
+   }
+ }
+diff --git a/ios/Extensions/Converters/AV+CapturePhotoSettings.swift b/ios/Extensions/Converters/AV+CapturePhotoSettings.swift
+index e9490e1..0e89e79 100644
+--- a/ios/Extensions/Converters/AV+CapturePhotoSettings.swift
++++ b/ios/Extensions/Converters/AV+CapturePhotoSettings.swift
+@@ -10,10 +10,18 @@ import NitroModules
+ 
+ extension AVCapturePhotoSettings {
+   private var isRAWFormat: Bool {
++#if os(macOS)
++    return false
++#else
+     return self.rawPhotoPixelFormatType != 0
++#endif
+   }
+   private var isAppleProRAWFormat: Bool {
++#if os(macOS)
++    return false
++#else
+     return AVCapturePhotoOutput.isAppleProRAWPixelFormat(self.rawPhotoPixelFormatType)
++#endif
+   }
+ 
+   var supportsQualityPrioritization: Bool {
+@@ -37,6 +45,9 @@ extension AVCapturePhotoSettings {
+ 
+ extension AVCapturePhotoOutput {
+   var bestRawPixelFormat: OSType? {
++#if os(macOS)
++    return self.availableRawPhotoPixelFormatTypes.first
++#else
+     if self.isAppleProRAWEnabled {
+       if let appleProRawFormat = self.availableRawPhotoPixelFormatTypes.first(where: {
+         AVCapturePhotoOutput.isAppleProRAWPixelFormat($0)
+@@ -47,6 +58,7 @@ extension AVCapturePhotoOutput {
+     }
+     // No Apple ProRAW enabled or available, just use the first available default RAW format (or nil if there is none)
+     return self.availableRawPhotoPixelFormatTypes.first
++#endif
+   }
+ }
+ 
+@@ -78,6 +90,9 @@ extension CapturePhotoSettings {
+         ],
+       ])
+     case .dng:
++#if os(macOS)
++      throw RuntimeError.error(withMessage: "RAW photo capture is not supported on macOS")
++#else
+       // For RAW, we need to get the first available RAW format (often Bayer14)
+       guard let rawFormat = output.bestRawPixelFormat else {
+         throw RuntimeError.error(
+@@ -86,9 +101,14 @@ extension CapturePhotoSettings {
+         )
+       }
+       return AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
++#endif
+     case .native:
++#if os(macOS)
++      return try getBaseAVCapturePhotoSettings(for: output, in: .jpeg, quality: quality)
++#else
+       // Apple's default processed photo format is HEIC.
+       return try getBaseAVCapturePhotoSettings(for: output, in: .heic, quality: quality)
++#endif
+     }
+   }
+ 
+@@ -109,7 +129,9 @@ extension CapturePhotoSettings {
+ 
+     // Shoot in max resolution
+     if #available(iOS 16.0, *) {
+-      settings.maxPhotoDimensions = output.maxPhotoDimensions
++      if output.maxPhotoDimensions.width > 0 && output.maxPhotoDimensions.height > 0 {
++        settings.maxPhotoDimensions = output.maxPhotoDimensions
++      }
+     }
+ 
+     // photoQualityPrioritization can only be set on processed photos.
+@@ -125,6 +147,11 @@ extension CapturePhotoSettings {
+         settings.flashMode = avFlashMode
+       }
+     }
++#if os(macOS)
++    if enableDepthData == true || enableCameraCalibrationDataDelivery == true || options.previewImageTargetSize != nil {
++      throw RuntimeError.error(withMessage: "Depth, calibration and preview thumbnails are not supported on macOS")
++    }
++#else
+     // enableShutterSound={...}
+     if let enableShutterSound {
+       if #available(iOS 18.0, *) {
+@@ -188,6 +215,10 @@ extension CapturePhotoSettings {
+         ]
+       }
+     }
++#endif
++#if os(macOS)
++    if location != nil { throw RuntimeError.error(withMessage: "Photo location metadata is not supported on macOS") }
++#else
+     // metadata
+     settings.addLibraryMetadataTag()
+     if let location {
+@@ -197,10 +228,12 @@ extension CapturePhotoSettings {
+       settings.addLocationMetadataTag(location)
+     }
+ 
++#endif
+     return settings
+   }
+ }
+ 
++#if !os(macOS)
+ extension AVCapturePhotoSettings {
+   fileprivate func addLibraryMetadataTag() {
+     var metadataCopy = metadata
+@@ -216,3 +249,5 @@ extension AVCapturePhotoSettings {
+     self.metadata = metadataCopy
+   }
+ }
++
++#endif
+diff --git a/ios/Extensions/Converters/AV+DeviceType.swift b/ios/Extensions/Converters/AV+DeviceType.swift
+index 79b869c..77c87f3 100644
+--- a/ios/Extensions/Converters/AV+DeviceType.swift
++++ b/ios/Extensions/Converters/AV+DeviceType.swift
+@@ -10,6 +10,14 @@ import NitroModules
+ 
+ extension DeviceType {
+   init(type: AVCaptureDevice.DeviceType) {
++#if os(macOS)
++    switch type {
++    case .builtInWideAngleCamera: self = .wideAngle
++    case .continuityCamera: self = .continuity
++    case .external, .deskViewCamera: self = .external
++    default: self = .unknown
++    }
++#else
+     switch type {
+     case .builtInWideAngleCamera:
+       self = .wideAngle
+@@ -45,5 +53,6 @@ extension DeviceType {
+       logger.error("VisionCamera: Unknown DeviceType: \(type.rawValue)!")
+       self = .unknown
+     }
++#endif
+   }
+ }
+diff --git a/ios/Extensions/Converters/AV+InterruptionReason.swift b/ios/Extensions/Converters/AV+InterruptionReason.swift
+index 7f1d93b..d94dd83 100644
+--- a/ios/Extensions/Converters/AV+InterruptionReason.swift
++++ b/ios/Extensions/Converters/AV+InterruptionReason.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ ///
+ /// AV+InterruptionReason.swift
+ /// VisionCamera
+@@ -28,3 +29,5 @@ extension InterruptionReason {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Extensions/Converters/AV+MediaType.swift b/ios/Extensions/Converters/AV+MediaType.swift
+index 2321198..88ac77b 100644
+--- a/ios/Extensions/Converters/AV+MediaType.swift
++++ b/ios/Extensions/Converters/AV+MediaType.swift
+@@ -15,8 +15,10 @@ extension MediaType {
+       self = .video
+     case .depthData:
+       self = .depth
++#if !os(macOS)
+     case .metadataObject:
+       self = .metadata
++#endif
+     default:
+       self = .other
+     }
+@@ -29,7 +31,11 @@ extension MediaType {
+     case .depth:
+       return .depthData
+     case .metadata:
++#if os(macOS)
++      return AVMediaType(rawValue: "meta")
++#else
+       return .metadataObject
++#endif
+     case .other:
+       fatalError("Cannot convert 'other' to AVMediaType!")
+     }
+diff --git a/ios/Extensions/Converters/AV+PhotoContainerFormat.swift b/ios/Extensions/Converters/AV+PhotoContainerFormat.swift
+index d54d635..e9255ac 100644
+--- a/ios/Extensions/Converters/AV+PhotoContainerFormat.swift
++++ b/ios/Extensions/Converters/AV+PhotoContainerFormat.swift
+@@ -20,7 +20,7 @@ extension PhotoContainerFormat {
+     case .tif:
+       self = .tiff
+     default:
+-      if #available(iOS 26.0, *) {
++      if #available(iOS 26.0, macOS 26.0, *) {
+         if avFileType == .dcm {
+           self = .dcm
+           return
+@@ -62,7 +62,7 @@ extension PhotoContainerFormat {
+       }
+       return type
+     case .dng:
+-      guard #available(iOS 18.0, *) else {
++      guard #available(iOS 18.0, macOS 15.0, *) else {
+         throw RuntimeError.error(
+           withMessage: "PhotoContainerFormat \"dng\" is only available on iOS 18.0 or newer!")
+       }
+diff --git a/ios/Extensions/Converters/AV+ScannedObjectType.swift b/ios/Extensions/Converters/AV+ScannedObjectType.swift
+index ce76ac2..d3f34f3 100644
+--- a/ios/Extensions/Converters/AV+ScannedObjectType.swift
++++ b/ios/Extensions/Converters/AV+ScannedObjectType.swift
+@@ -62,9 +62,9 @@ extension ScannedObjectType {
+         self = .microQr
+       } else if #available(iOS 17.0, *), type == .humanFullBody {
+         self = .humanFullBody
+-      } else if #available(iOS 26.0, *), type == .dogHead {
++      } else if #available(iOS 26.0, macOS 26.0, *), type == .dogHead {
+         self = .dogHead
+-      } else if #available(iOS 26.0, *), type == .catHead {
++      } else if #available(iOS 26.0, macOS 26.0, *), type == .catHead {
+         self = .catHead
+       } else {
+         logger.error("Unknown AVMetadataObject.ObjectType: \(type.rawValue)")
+@@ -146,7 +146,7 @@ extension ScannedObjectType {
+         return nil
+       }
+     case .dogHead:
+-      if #available(iOS 26.0, *) {
++      if #available(iOS 26.0, macOS 26.0, *) {
+         return .dogHead
+       } else {
+         return nil
+@@ -154,7 +154,7 @@ extension ScannedObjectType {
+     case .dogBody:
+       return .dogBody
+     case .catHead:
+-      if #available(iOS 26.0, *) {
++      if #available(iOS 26.0, macOS 26.0, *) {
+         return .catHead
+       } else {
+         return nil
+diff --git a/ios/Extensions/Converters/AV+TargetColorSpace.swift b/ios/Extensions/Converters/AV+TargetColorSpace.swift
+index 10762ca..f585051 100644
+--- a/ios/Extensions/Converters/AV+TargetColorSpace.swift
++++ b/ios/Extensions/Converters/AV+TargetColorSpace.swift
+@@ -10,6 +10,12 @@ import NitroModules
+ 
+ extension TargetColorSpace {
+   func toAVCaptureColorSpace() -> AVCaptureColorSpace {
++#if os(macOS)
++    switch self {
++    case .p3D65: return .P3_D65
++    default: return .sRGB
++    }
++#else
+     switch self {
+     case .srgb:
+       return .sRGB
+@@ -35,5 +41,6 @@ extension TargetColorSpace {
+       // Dolby Vision is not supported on iOS
+       return .HLG_BT2020
+     }
++#endif
+   }
+ }
+diff --git a/ios/Extensions/Converters/AV+TargetStabilizationMode.swift b/ios/Extensions/Converters/AV+TargetStabilizationMode.swift
+index 6809612..0330e72 100644
+--- a/ios/Extensions/Converters/AV+TargetStabilizationMode.swift
++++ b/ios/Extensions/Converters/AV+TargetStabilizationMode.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ ///
+ /// AV+TargetStabilizationMode.swift
+ /// VisionCamera
+@@ -42,3 +43,5 @@ extension TargetStabilizationMode {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Extensions/Converters/AV+VideoCodec.swift b/ios/Extensions/Converters/AV+VideoCodec.swift
+index 894bc6e..6e9d5f0 100644
+--- a/ios/Extensions/Converters/AV+VideoCodec.swift
++++ b/ios/Extensions/Converters/AV+VideoCodec.swift
+@@ -30,13 +30,13 @@ extension VideoCodec {
+     case .jpeg:
+       self = .jpeg
+     default:
+-      if #available(iOS 18.0, *) {
++      if #available(iOS 18.0, macOS 15.0, *) {
+         if avCodec == .appleProRes4444XQ {
+           self = .proRes4444Xq
+           return
+         }
+       }
+-      if #available(iOS 26.0, *) {
++      if #available(iOS 26.0, macOS 26.0, *) {
+         if avCodec == .proResRAW {
+           self = .proResRaw
+           return
+@@ -84,19 +84,19 @@ extension VideoCodec {
+     case .jpeg:
+       return .jpeg
+     case .proRes4444Xq:
+-      guard #available(iOS 18.0, *) else {
++      guard #available(iOS 18.0, macOS 15.0, *) else {
+         throw RuntimeError.error(
+           withMessage: "VideoCodec \"pro-res-4444-xq\" is only available on iOS 18.0 or higher!")
+       }
+       return .appleProRes4444XQ
+     case .proResRaw:
+-      guard #available(iOS 26.0, *) else {
++      guard #available(iOS 26.0, macOS 26.0, *) else {
+         throw RuntimeError.error(
+           withMessage: "VideoCodec \"pro-res-raw\" is only available on iOS 18.0 or higher!")
+       }
+       return .proResRAW
+     case .proResRawHq:
+-      guard #available(iOS 26.0, *) else {
++      guard #available(iOS 26.0, macOS 26.0, *) else {
+         throw RuntimeError.error(
+           withMessage: "VideoCodec \"pro-res-raw-hq\" is only available on iOS 18.0 or higher!")
+       }
+diff --git a/ios/Extensions/Converters/UI+CameraOrientation.swift b/ios/Extensions/Converters/UI+CameraOrientation.swift
+index 97757ed..2eb6bb8 100644
+--- a/ios/Extensions/Converters/UI+CameraOrientation.swift
++++ b/ios/Extensions/Converters/UI+CameraOrientation.swift
+@@ -1,3 +1,6 @@
++#if os(macOS)
++
++#else
+ ///
+ /// UI+CameraOrientation.swift
+ /// VisionCamera
+@@ -53,3 +56,5 @@ extension CameraOrientation {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Extensions/CoreMedia/CMAccelerometerData+deviceOrientation.swift b/ios/Extensions/CoreMedia/CMAccelerometerData+deviceOrientation.swift
+index 1eecf74..1989d0f 100644
+--- a/ios/Extensions/CoreMedia/CMAccelerometerData+deviceOrientation.swift
++++ b/ios/Extensions/CoreMedia/CMAccelerometerData+deviceOrientation.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ //
+ //  CMAccelerometerData+deviceOrientation.swift
+ //  VisionCamera
+@@ -38,3 +39,5 @@ extension CMAccelerometerData {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Extensions/CoreMedia/CMSampleBuffer+toUIImage.swift b/ios/Extensions/CoreMedia/CMSampleBuffer+toUIImage.swift
+index 5fa9814..ef5dc43 100644
+--- a/ios/Extensions/CoreMedia/CMSampleBuffer+toUIImage.swift
++++ b/ios/Extensions/CoreMedia/CMSampleBuffer+toUIImage.swift
+@@ -7,10 +7,13 @@
+ import AVFoundation
+ import CoreImage
+ import Foundation
++#if os(macOS)
++import ImageIO
++#endif
+ import NitroModules
+ 
+ extension CMSampleBuffer {
+-  func toUIImage(orientation: UIImage.Orientation) throws -> UIImage {
++  func toUIImage(orientation: CameraImageOrientation) throws -> CameraPlatformImage {
+     guard let imageBuffer else {
+       throw RuntimeError.error(withMessage: "This Frame does not have a PixelBuffer!")
+     }
+diff --git a/ios/Extensions/UIApplication+interfaceOrientation.swift b/ios/Extensions/UIApplication+interfaceOrientation.swift
+index 96464fa..396961a 100644
+--- a/ios/Extensions/UIApplication+interfaceOrientation.swift
++++ b/ios/Extensions/UIApplication+interfaceOrientation.swift
+@@ -1,3 +1,6 @@
++#if os(macOS)
++
++#else
+ //
+ //  UIApplication+interfaceOrientation.swift
+ //  VisionCamera
+@@ -28,3 +31,5 @@ extension UIApplication {
+     return windowScene.interfaceOrientation
+   }
+ }
++
++#endif
+diff --git a/ios/Extensions/UIImageOrientation+exif.swift b/ios/Extensions/UIImageOrientation+exif.swift
+index 53506e0..98a404f 100644
+--- a/ios/Extensions/UIImageOrientation+exif.swift
++++ b/ios/Extensions/UIImageOrientation+exif.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ ///
+ /// CIImage+toUIImage.swift
+ /// VisionCamera
+@@ -44,3 +45,5 @@ extension UIImage.Orientation {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Hybrid Objects/Constraints/ConstraintResolver.swift b/ios/Hybrid Objects/Constraints/ConstraintResolver.swift
+index 22a5793..dd37721 100644
+--- a/ios/Hybrid Objects/Constraints/ConstraintResolver.swift	
++++ b/ios/Hybrid Objects/Constraints/ConstraintResolver.swift	
+@@ -103,7 +103,11 @@ enum ConstraintResolver {
+     // If we need depth data, also find the best depth format
+     let needsDepth = outputs.contains { $0.requiresDepthFormat }
+     // TODO: Don't just choose the first format, but also negotiate depth data format in our constraint resolution.
++#if os(macOS)
++    let bestDepthFormat: AVCaptureDevice.Format? = nil
++#else
+     let bestDepthFormat = needsDepth ? best.format.supportedDepthDataFormats.first : nil
++#endif
+ 
+     return ResolvedConstraints(
+       device: device,
+@@ -174,6 +178,11 @@ enum ConstraintResolver {
+       throw RuntimeError.error(withMessage: "The given `device` does not have any `formats`!")
+     }
+ 
++#if os(macOS)
++    if isMultiCam || outputs.contains(where: { $0.requiresDepthFormat }) {
++      throw RuntimeError.error(withMessage: "Depth and multi-camera sessions are not supported on macOS")
++    }
++#else
+     // 1. If we need a Depth Output, filter out formats without depth support
+     let needsDepth = outputs.contains { $0.requiresDepthFormat }
+     if needsDepth {
+@@ -197,6 +206,7 @@ enum ConstraintResolver {
+       }
+     }
+ 
++#endif
+     // 3. Ensure formats support all target outputs
+     formats = formats.filter { format in
+       outputs.allSatisfy { format.supportsOutput($0.output) }
+@@ -277,7 +287,11 @@ extension InternalConstraint {
+       let r = afSystem.resolve(for: format)
+       return ConstraintEvaluation(penalty: r.penalty, resolved: .formatOnly)
+     case .preferHighestPhotoQuality:
++#if os(macOS)
++      let penalty = 0.0
++#else
+       let penalty = format.isHighestPhotoQualitySupported ? 0.0 : 1.0
++#endif
+       return ConstraintEvaluation(
+         penalty: ConstraintPenalty(distance: penalty),
+         resolved: .formatOnly)
+diff --git a/ios/Hybrid Objects/Constraints/HybridCameraSessionConfig.swift b/ios/Hybrid Objects/Constraints/HybridCameraSessionConfig.swift
+index 0ae6b5c..8a7863e 100644
+--- a/ios/Hybrid Objects/Constraints/HybridCameraSessionConfig.swift	
++++ b/ios/Hybrid Objects/Constraints/HybridCameraSessionConfig.swift	
+@@ -35,7 +35,11 @@ final class HybridCameraSessionConfig: HybridCameraSessionConfigSpec, NativeCame
+ 
+   var isPhotoHDREnabled: Bool {
+     // Highest Photo Quality implies Smart HDR, this is not directly controllable.
++#if os(macOS)
++    return false
++#else
+     return negotiatedFormat.format.isHighestPhotoQualitySupported
++#endif
+   }
+ 
+   var nativePixelFormat: PixelFormat {
+@@ -49,7 +53,11 @@ final class HybridCameraSessionConfig: HybridCameraSessionConfigSpec, NativeCame
+   }
+ 
+   var isBinned: Bool {
++#if os(macOS)
++    return false
++#else
+     return negotiatedFormat.format.isVideoBinned
++#endif
+   }
+ 
+   func toString() -> String {
+diff --git a/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+BinnedConstraint.swift b/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+BinnedConstraint.swift
+index 22c0e23..4366a55 100644
+--- a/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+BinnedConstraint.swift	
++++ b/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+BinnedConstraint.swift	
+@@ -11,7 +11,12 @@ extension BinnedConstraint: ResolvableConstraint {
+ 
+   func resolve(for format: AVCaptureDevice.Format) -> ConstraintResolution<Void> {
+     let penalty: Double
+-    switch (format.isVideoBinned, self.binned) {
++#if os(macOS)
++    let isBinned = false
++#else
++    let isBinned = format.isVideoBinned
++#endif
++    switch (isBinned, self.binned) {
+     case (true, true), (false, false):
+       penalty = 0.0
+     case (true, false):
+diff --git a/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+StabilizationModeConstraint.swift b/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+StabilizationModeConstraint.swift
+index 1494372..c1eaa3c 100644
+--- a/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+StabilizationModeConstraint.swift	
++++ b/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+StabilizationModeConstraint.swift	
+@@ -49,6 +49,9 @@ extension TargetStabilizationMode {
+   /// Walks the fallback chain until we find a mode the format supports.
+   /// Returns both the penalty (number of fallback steps) and the resolved mode.
+   func resolve(for format: AVCaptureDevice.Format) -> ConstraintResolution<TargetStabilizationMode> {
++#if os(macOS)
++    return ConstraintResolution(penalty: ConstraintPenalty(distance: self == .off ? 0 : 1), resolvedValue: .off)
++#else
+     var penalty = 0
+     var currentMode = self
+     while currentMode != .off {
+@@ -61,5 +64,6 @@ extension TargetStabilizationMode {
+     return ConstraintResolution(
+       penalty: ConstraintPenalty(distance: Double(penalty)),
+       resolvedValue: currentMode)
++#endif
+   }
+ }
+diff --git a/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+VideoDynamicRangeConstraint.swift b/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+VideoDynamicRangeConstraint.swift
+index f250bab..c8d4e0b 100644
+--- a/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+VideoDynamicRangeConstraint.swift	
++++ b/ios/Hybrid Objects/Constraints/ResolvableConstraint/ResolvableConstraint+VideoDynamicRangeConstraint.swift	
+@@ -69,7 +69,12 @@ extension TargetColorSpace {
+     var penalty = 0
+     var currentColorSpace = self
+     while currentColorSpace != .srgb {
+-      if format.supportedColorSpaces.contains(currentColorSpace.toAVCaptureColorSpace()) {
++#if os(macOS)
++      let supported = (currentColorSpace == .srgb || currentColorSpace == .p3D65) && format.supportedColorSpaces.contains(currentColorSpace.toAVCaptureColorSpace())
++#else
++      let supported = format.supportedColorSpaces.contains(currentColorSpace.toAVCaptureColorSpace())
++#endif
++      if supported {
+         break
+       }
+       currentColorSpace = currentColorSpace.nextBestMode()
+diff --git a/ios/Hybrid Objects/Gestures/HybridTapToFocusGestureController.swift b/ios/Hybrid Objects/Gestures/HybridTapToFocusGestureController.swift
+index 79cdcfc..a1a8199 100644
+--- a/ios/Hybrid Objects/Gestures/HybridTapToFocusGestureController.swift	
++++ b/ios/Hybrid Objects/Gestures/HybridTapToFocusGestureController.swift	
+@@ -7,23 +7,34 @@
+ 
+ import AVFoundation
+ import NitroModules
++#if os(macOS)
++import AppKit
++typealias CameraTapGestureRecognizer = NSClickGestureRecognizer
++#else
+ import UIKit
++typealias CameraTapGestureRecognizer = UITapGestureRecognizer
++#endif
+ 
+ final class HybridTapToFocusGestureController: HybridTapToFocusGestureControllerSpec,
+   NativeGestureController
+ {
+-  let gestureRecognizer = UITapGestureRecognizer()
++  let gestureRecognizer = CameraTapGestureRecognizer()
+   weak var controller: (any HybridCameraControllerSpec)? = nil
+ 
+   private weak var previewView: (any HybridPreviewViewSpec)? = nil
+ 
+   override init() {
+     super.init()
++    #if os(macOS)
++    gestureRecognizer.target = self
++    gestureRecognizer.action = #selector(onTap(_:))
++    #else
+     gestureRecognizer.cancelsTouchesInView = false
+     gestureRecognizer.addTarget(self, action: #selector(onTap(_:)))
++    #endif
+   }
+ 
+-  @objc private func onTap(_ gestureRecognizer: UITapGestureRecognizer) {
++  @objc private func onTap(_ gestureRecognizer: CameraTapGestureRecognizer) {
+     guard let controller, let previewView else {
+       return
+     }
+diff --git a/ios/Hybrid Objects/Gestures/HybridZoomGestureController.swift b/ios/Hybrid Objects/Gestures/HybridZoomGestureController.swift
+index e2f5ab5..c1a791c 100644
+--- a/ios/Hybrid Objects/Gestures/HybridZoomGestureController.swift	
++++ b/ios/Hybrid Objects/Gestures/HybridZoomGestureController.swift	
+@@ -1,3 +1,21 @@
++#if os(macOS)
++import AppKit
++import NitroModules
++final class HybridZoomGestureController: HybridZoomGestureControllerSpec, NativeGestureController {
++  let gestureRecognizer = NSMagnificationGestureRecognizer()
++  weak var controller: (any HybridCameraControllerSpec)?
++  private var initialZoom = 1.0
++  override init() { super.init(); gestureRecognizer.target = self; gestureRecognizer.action = #selector(onZoom(_:)) }
++  @objc private func onZoom(_ gesture: NSMagnificationGestureRecognizer) {
++    guard let controller else { return }
++    if gesture.state == .began { initialZoom = controller.zoom }
++    if gesture.state == .changed {
++      let zoom = min(controller.maxZoom, max(controller.minZoom, initialZoom * (1 + gesture.magnification)))
++      do { _ = try controller.setZoom(zoom: zoom) } catch { logger.error("Zoom failed: \(error)") }
++    }
++  }
++}
++#else
+ ///
+ /// HybridCameraPhotoOutput.swift
+ /// VisionCamera
+@@ -51,3 +69,5 @@ final class HybridZoomGestureController: HybridZoomGestureControllerSpec, Native
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Hybrid Objects/HybridCameraController.swift b/ios/Hybrid Objects/HybridCameraController.swift
+index ff48fd9..2036a30 100644
+--- a/ios/Hybrid Objects/HybridCameraController.swift	
++++ b/ios/Hybrid Objects/HybridCameraController.swift	
+@@ -51,46 +51,82 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+   }
+ 
+   var whiteBalanceGains: WhiteBalanceGains {
++#if os(macOS)
++    return WhiteBalanceGains(redGain: 1, blueGain: 1, greenGain: 1)
++#else
+     let gains = captureDevice.deviceWhiteBalanceGains
+     return WhiteBalanceGains(
+       redGain: Double(gains.redGain),
+       blueGain: Double(gains.blueGain),
+       greenGain: Double(gains.greenGain))
++#endif
+   }
+ 
+   var isLowLightBoostEnabled: Bool {
++#if os(macOS)
++    return false
++#else
+     return captureDevice.automaticallyEnablesLowLightBoostWhenAvailable
++#endif
+   }
+ 
+   var isSmoothAutoFocusEnabled: Bool {
++#if os(macOS)
++    return false
++#else
+     return captureDevice.isSmoothAutoFocusEnabled
++#endif
+   }
+ 
+   var isDistortionCorrectionEnabled: Bool {
++#if os(macOS)
++    return false
++#else
+     return captureDevice.isGeometricDistortionCorrectionEnabled
++#endif
+   }
+ 
+   var zoom: Double {
++#if os(macOS)
++    return 1
++#else
+     return captureDevice.videoZoomFactor
++#endif
+   }
+ 
+   var minZoom: Double {
++#if os(macOS)
++    return 1
++#else
+     return captureDevice.minAvailableVideoZoomFactor
++#endif
+   }
+ 
+   var maxZoom: Double {
++#if os(macOS)
++    return 1
++#else
+     return captureDevice.maxAvailableVideoZoomFactor
++#endif
+   }
+ 
+   var displayableZoomFactor: Double {
++#if os(macOS)
++    return 1
++#else
+     guard #available(iOS 18.0, *) else {
+       return zoom
+     }
+     return zoom * captureDevice.displayVideoZoomFactorMultiplier
++#endif
+   }
+ 
+   var torchStrength: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(captureDevice.torchLevel)
++#endif
+   }
+ 
+   var torchMode: TorchMode {
+@@ -98,26 +134,52 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+   }
+ 
+   var lensPosition: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(captureDevice.lensPosition)
++#endif
+   }
+ 
+   var exposureDuration: Double {
++#if os(macOS)
++    return 0
++#else
+     return captureDevice.exposureDuration.seconds
++#endif
+   }
+ 
+   var activeMaxExposureDuration: Double {
++#if os(macOS)
++    return 0
++#else
+     return captureDevice.activeMaxExposureDuration.seconds
++#endif
+   }
+ 
+   var exposureBias: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(captureDevice.exposureTargetBias)
++#endif
+   }
+ 
+   var iso: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(captureDevice.iso)
++#endif
+   }
+ 
+   func configure(config: CameraControllerConfiguration) -> Promise<Void> {
++#if os(macOS)
++    if config.enableLowLightBoost != nil || config.enableSmoothAutoFocus != nil || config.enableDistortionCorrection != nil {
++      return .rejected(withError: RuntimeError.error(withMessage: "These controller options are not supported on macOS"))
++    }
++    return .resolved()
++#else
+     return captureDevice.withLock(queue) {
+       let device = self.captureDevice
+ 
+@@ -148,9 +210,13 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+         device.isGeometricDistortionCorrectionEnabled = enableDistortionCorrection
+       }
+     }
++#endif
+   }
+ 
+   func setZoom(zoom: Double) -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "setZoom is not supported on macOS"))
++#else
+     return captureDevice.withLock(queue) {
+       // 1. Ensure zoom is within valid range
+       let device = self.captureDevice
+@@ -166,6 +232,7 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+       // 3. Apply zoom
+       device.videoZoomFactor = clampedForFormat
+     }
++#endif
+   }
+ 
+   func focusTo(
+@@ -268,10 +335,14 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+     }
+   }
+ 
+-  func addSubjectAreaChangedListener(onSubjectAreaChanged: @escaping () -> Void) -> ListenerSubscription {
++  func addSubjectAreaChangedListener(onSubjectAreaChanged: @escaping () -> Void) throws -> ListenerSubscription {
++#if os(macOS)
++    throw RuntimeError.error(withMessage: "Subject-area monitoring is not supported on macOS")
++#else
+     return SubjectAreaMonitor.addObserver(
+       device: captureDevice,
+       onSubjectAreaDidChange: onSubjectAreaChanged)
++#endif
+   }
+ 
+   func setTorchMode(mode: TorchMode) -> Promise<Void> {
+@@ -299,6 +370,9 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+   }
+ 
+   func enableTorchWithStrength(strength: Double) -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "enableTorchWithStrength is not supported on macOS"))
++#else
+     return captureDevice.withLock(queue) {
+       guard self.device.supportsTorchStrength else {
+         throw RuntimeError.error(
+@@ -314,9 +388,13 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+       }
+       try self.captureDevice.setTorchModeOn(level: Float(strength))
+     }
++#endif
+   }
+ 
+   func startZoomAnimation(zoom: Double, rate: Double) -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "startZoomAnimation is not supported on macOS"))
++#else
+     return captureDevice.withLock(queue) { completion in
+       if self.captureDevice.videoZoomFactor == zoom {
+         // We are already exactly on our target value
+@@ -337,15 +415,23 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+ 
+       self.captureDevice.ramp(toVideoZoomFactor: zoom, withRate: Float(rate))
+     }
++#endif
+   }
+ 
+   func cancelZoomAnimation() -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "cancelZoomAnimation is not supported on macOS"))
++#else
+     return captureDevice.withLock(queue) {
+       self.captureDevice.cancelVideoZoomRamp()
+     }
++#endif
+   }
+ 
+   func setExposureBias(exposure: Double) -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "setExposureBias is not supported on macOS"))
++#else
+     return captureDevice.withLock(queue) { completion in
+       // 1. Ensure exposureBias is within range
+       let device = self.captureDevice
+@@ -362,9 +448,13 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+         completion()
+       }
+     }
++#endif
+   }
+ 
+   func setFocusLocked(lensPosition: Double) -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "setFocusLocked is not supported on macOS"))
++#else
+     return captureDevice.withLock(queue) { completion in
+       // 1. Ensure values are within valid range
+       guard lensPosition >= 0 && lensPosition <= 1 else {
+@@ -378,34 +468,61 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+         completion()
+       }
+     }
++#endif
+   }
+ 
+   func lockCurrentFocus() -> Promise<Void> {
++#if os(macOS)
++    return captureDevice.withLock(queue) {
++      guard self.captureDevice.isFocusModeSupported(.locked) else { throw RuntimeError.error(withMessage: "lockCurrentFocus is unsupported by this camera") }
++      self.captureDevice.focusMode = .locked
++    }
++#else
+     return captureDevice.withLock(queue) { completion in
+       self.captureDevice.setFocusModeLocked(lensPosition: AVCaptureDevice.currentLensPosition) {
+         _ in
+         completion()
+       }
+     }
++#endif
+   }
+ 
+   var minExposureDuration: Double {
++#if os(macOS)
++    return 0
++#else
+     return captureDevice.activeFormat.minExposureDuration.seconds
++#endif
+   }
+ 
+   var maxExposureDuration: Double {
++#if os(macOS)
++    return 0
++#else
+     return captureDevice.activeFormat.maxExposureDuration.seconds
++#endif
+   }
+ 
+   var minISO: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(captureDevice.activeFormat.minISO)
++#endif
+   }
+ 
+   var maxISO: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(captureDevice.activeFormat.maxISO)
++#endif
+   }
+ 
+   func setExposureLocked(duration: Double, iso: Double) -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "setExposureLocked is not supported on macOS"))
++#else
+     return captureDevice.withLock(queue) { completion in
+       let device = self.captureDevice
+       // 1. Ensure values are within valid range
+@@ -433,9 +550,16 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+         completion()
+       }
+     }
++#endif
+   }
+ 
+   func lockCurrentExposure() -> Promise<Void> {
++#if os(macOS)
++    return captureDevice.withLock(queue) {
++      guard self.captureDevice.isExposureModeSupported(.locked) else { throw RuntimeError.error(withMessage: "lockCurrentExposure is unsupported by this camera") }
++      self.captureDevice.exposureMode = .locked
++    }
++#else
+     return captureDevice.withLock(queue) { completion in
+       self.captureDevice.setExposureModeCustom(
+         duration: AVCaptureDevice.currentExposureDuration,
+@@ -444,11 +568,15 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+         completion()
+       }
+     }
++#endif
+   }
+ 
+   func convertWhiteBalanceTemperatureAndTintValues(
+     whiteBalanceTemperatureAndTint: WhiteBalanceTemperatureAndTint
+   ) throws -> WhiteBalanceGains {
++#if os(macOS)
++    throw RuntimeError.error(withMessage: "Manual white balance gains are not supported on macOS")
++#else
+     // 1. Convert our type to the AVFoundation type
+     let tintValues = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
+       temperature: Float(whiteBalanceTemperatureAndTint.temperature),
+@@ -460,9 +588,13 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+       redGain: Double(gains.redGain),
+       blueGain: Double(gains.blueGain),
+       greenGain: Double(gains.greenGain))
++#endif
+   }
+ 
+   func setWhiteBalanceLocked(whiteBalanceGains: WhiteBalanceGains) -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "setWhiteBalanceLocked is not supported on macOS"))
++#else
+     return captureDevice.withLock(queue) { completion in
+       // 1. Ensure values are within valid range
+       let device = self.captureDevice
+@@ -498,14 +630,22 @@ final class HybridCameraController: HybridCameraControllerSpec, NativeCameraCont
+         completion()
+       }
+     }
++#endif
+   }
+ 
+   func lockCurrentWhiteBalance() -> Promise<Void> {
++#if os(macOS)
++    return captureDevice.withLock(queue) {
++      guard self.captureDevice.isWhiteBalanceModeSupported(.locked) else { throw RuntimeError.error(withMessage: "lockCurrentWhiteBalance is unsupported by this camera") }
++      self.captureDevice.whiteBalanceMode = .locked
++    }
++#else
+     return captureDevice.withLock(queue) { completion in
+       self.captureDevice.setWhiteBalanceModeLocked(with: AVCaptureDevice.currentWhiteBalanceGains) {
+         _ in
+         completion()
+       }
+     }
++#endif
+   }
+ }
+diff --git a/ios/Hybrid Objects/HybridCameraDeviceFactory.swift b/ios/Hybrid Objects/HybridCameraDeviceFactory.swift
+index 013833c..9e8d1d0 100644
+--- a/ios/Hybrid Objects/HybridCameraDeviceFactory.swift	
++++ b/ios/Hybrid Objects/HybridCameraDeviceFactory.swift	
+@@ -23,9 +23,13 @@ final class HybridCameraDeviceFactory: HybridCameraDeviceFactorySpec {
+   }
+ 
+   var supportedMultiCamDeviceCombinations: [[any HybridCameraDeviceSpec]] {
++#if os(macOS)
++    return []
++#else
+     return discoverySession.supportedMultiCamDeviceSets.map { devices in
+       return devices.map { HybridCameraDevice(device: $0) }
+     }
++#endif
+   }
+ 
+   var userPreferredCamera: (any HybridCameraDeviceSpec)? {
+@@ -53,7 +57,7 @@ final class HybridCameraDeviceFactory: HybridCameraDeviceFactorySpec {
+     -> ListenerSubscription
+   {
+     // 1. Attach a listener using KVO
+-    let observation = discoverySession.observe(\.devices) { _, change in
++    let observation = discoverySession.observe(\.devices, options: [.old, .new]) { _, change in
+       guard let newDevices = change.newValue else { return }
+       logger.info("Devices changed! \(change.oldValue?.count ?? 0) -> \(newDevices.count)")
+       let devices = newDevices.map { HybridCameraDevice(device: $0) }
+diff --git a/ios/Hybrid Objects/HybridCameraFactory.swift b/ios/Hybrid Objects/HybridCameraFactory.swift
+index 3f35188..637fff3 100644
+--- a/ios/Hybrid Objects/HybridCameraFactory.swift	
++++ b/ios/Hybrid Objects/HybridCameraFactory.swift	
+@@ -44,7 +44,11 @@ final class VisionCamera: HybridCameraFactorySpec {
+   }
+ 
+   var supportsMultiCamSessions: Bool {
++#if os(macOS)
++    return false
++#else
+     return AVCaptureMultiCamSession.isMultiCamSupported
++#endif
+   }
+ 
+   func createCameraSession(enableMultiCam: Bool) -> Promise<any HybridCameraSessionSpec> {
+@@ -71,7 +75,10 @@ final class VisionCamera: HybridCameraFactorySpec {
+     return try HybridCameraPhotoOutput(options: options)
+   }
+ 
+-  func createVideoOutput(options: VideoOutputOptions) -> any HybridCameraVideoOutputSpec {
++  func createVideoOutput(options: VideoOutputOptions) throws -> any HybridCameraVideoOutputSpec {
++#if os(macOS)
++    if options.targetBitRate != nil { throw RuntimeError.error(withMessage: "Custom movie bit rate is not supported by the macOS prototype") }
++#endif
+     if options.enablePersistentRecorder == true {
+       // On iOS, the `AVCaptureMovieFileOutput` does not allow flipping the Camera while
+       // recording, which is a feature we call "enablePersistentRecorder".
+@@ -88,13 +95,21 @@ final class VisionCamera: HybridCameraFactorySpec {
+   }
+ 
+   func createDepthFrameOutput(options: DepthFrameOutputOptions)
+-    -> any HybridCameraDepthFrameOutputSpec
++    throws -> any HybridCameraDepthFrameOutputSpec
+   {
++#if os(macOS)
++    throw RuntimeError.error(withMessage: "createDepthFrameOutput is not supported on macOS")
++#else
+     return HybridCameraDepthFrameOutput(options: options)
++#endif
+   }
+ 
+-  func createObjectOutput(options: ObjectOutputOptions) -> any HybridCameraObjectOutputSpec {
++  func createObjectOutput(options: ObjectOutputOptions) throws -> any HybridCameraObjectOutputSpec {
++#if os(macOS)
++    throw RuntimeError.error(withMessage: "createObjectOutput is not supported on macOS")
++#else
+     return HybridCameraObjectOutput(options: options)
++#endif
+   }
+ 
+   func createPreviewOutput() -> any HybridCameraPreviewOutputSpec {
+@@ -104,7 +119,11 @@ final class VisionCamera: HybridCameraFactorySpec {
+   func createOutputSynchronizer(outputs: [any HybridCameraOutputSpec]) throws
+     -> any HybridCameraOutputSynchronizerSpec
+   {
++#if os(macOS)
++    throw RuntimeError.error(withMessage: "createOutputSynchronizer is not supported on macOS")
++#else
+     return try HybridCameraOutputSynchronizer(outputs: outputs)
++#endif
+   }
+ 
+   func createZoomGestureController() -> any HybridZoomGestureControllerSpec {
+diff --git a/ios/Hybrid Objects/HybridCameraSession.swift b/ios/Hybrid Objects/HybridCameraSession.swift
+index c74356e..23574b7 100644
+--- a/ios/Hybrid Objects/HybridCameraSession.swift	
++++ b/ios/Hybrid Objects/HybridCameraSession.swift	
+@@ -18,14 +18,20 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+     target: nil)
+ 
+   init(enableMultiCam: Bool) {
++#if os(macOS)
++    self.session = AVCaptureSession()
++#else
+     if enableMultiCam {
+       self.session = AVCaptureMultiCamSession()
+     } else {
+       self.session = AVCaptureSession()
+     }
++#endif
+     // We manage formats manually via `device.activeFormat`, so opt out of the
+     // session's preset-based format selection upfront.
++#if !os(macOS)
+     self.session.sessionPreset = .inputPriority
++#endif
+     super.init()
+   }
+ 
+@@ -45,11 +51,15 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+       // Ensure multi-cam is enabled if we have multiple inputs
+       let isMultiCam = connections.count > 1
+       if isMultiCam {
++#if os(macOS)
++        throw RuntimeError.error(withMessage: "Multi-camera sessions are not supported on macOS")
++#else
+         guard self.session is AVCaptureMultiCamSession else {
+           throw RuntimeError(
+             "Cannot add multiple inputs (\(connections)) to a single-cam CameraSession! "
+               + "Create your CameraSession as a multi-cam session (`enableMultiCamSupport = true`) to add multiple camera inputs.")
+         }
++#endif
+       }
+ 
+       logger.info("Reconfiguring CameraSession with \(connections.count) connection(s)...")
+@@ -90,8 +100,11 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+           return constraint.isType(VideoDynamicRangeConstraint.self)
+         }
+       }
++#if !os(macOS)
+       self.session.automaticallyConfiguresCaptureDeviceForWideColor = !hasCustomDynamicRangeConstraint
++#endif
+ 
++#if !os(macOS)
+       // Haptics and System Sounds Playback
+       if let allowHapticsAndSystemSoundsPlayback = config?.allowHapticsAndSystemSoundsPlayback {
+         let audioSession = AVAudioSession.sharedInstance()
+@@ -106,6 +119,7 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+         }
+       }
+ 
++#endif
+       // Return CameraControllers per connection to adjust camera settings (focus, etc)
+       return try connections.map { connection in
+         return try HybridCameraController(device: connection.input, queue: Self.queue)
+@@ -146,6 +160,9 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+     if device.activeFormat != resolved.negotiatedFormat.format {
+       device.activeFormat = resolved.negotiatedFormat.format
+     }
++#if os(macOS)
++
++#else
+     if let depthFormat = resolved.negotiatedFormat.depthFormat {
+       // On devices that support depth, `device.activeDepthDataFormat`
+       // cannot be set to `nil`, so we only set the depth format when
+@@ -156,6 +173,7 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+       }
+     }
+ 
++#endif
+     // TODO: Do we want to do any sanity checks here? Or assume that the negotiated format is properly validated before being set here?
+ 
+     // TODO: We could add a `allowFpsThrottling` flag in the future to run at variable frame rate.
+@@ -165,6 +183,9 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+       device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(fps))
+     }
+ 
++#if os(macOS)
++
++#else
+     // Video Stabilization
+     if let videoStabilizationMode = resolved.enabledConstraints.selectedVideoStabilizationMode {
+       for connection in self.session.connections where !connection.isConnectedToPreview {
+@@ -180,10 +201,14 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+       }
+     }
+ 
++#endif
+     // Dynamic Range
+     if let dynamicRange = resolved.enabledConstraints.selectedVideoDynamicRange {
+       device.activeColorSpace = dynamicRange.colorSpace.toAVCaptureColorSpace()
+       // Bit-Depth + ColorRange is implicitly set via `activeFormat`'s pixel format
++#if os(macOS)
++
++#else
+       if device.activeFormat.isVideoHDRSupported {
+         if dynamicRange.isHDR {
+           // TODO: If we refactor `TargetDynamicRange` to an enum, `EDR` (which `isVideoHDREnabled` effectively is) could be a separate value.
+@@ -195,6 +220,7 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+           device.isVideoHDREnabled = false
+         }
+       }
++#endif
+     }
+   }
+ 
+@@ -289,6 +315,9 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+       if !containsInput {
+         // 2.1. It doesn't exist yet - add it to the session..
+         let deviceInput = try AVCaptureDeviceInput(device: device)
++        guard self.session.canAddInput(deviceInput) else {
++          throw RuntimeError.error(withMessage: "This camera input cannot be added to the capture session")
++        }
+         self.session.addInputWithNoConnections(deviceInput)
+         // 2.2. Configure the input with initial settings
+         if connection.initialZoom != nil || connection.initialExposureBias != nil {
+@@ -391,6 +420,11 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+   ) throws {
+     try device.lockForConfiguration()
+     defer { device.unlockForConfiguration() }
++#if os(macOS)
++    if initialZoom != nil || initialExposureBias != nil {
++      throw RuntimeError.error(withMessage: "Initial zoom and exposure bias are not supported on macOS")
++    }
++#else
+     if let initialZoom = initialZoom {
+       let clamped = max(
+         min(initialZoom, device.maxAvailableVideoZoomFactor), device.minAvailableVideoZoomFactor)
+@@ -401,6 +435,7 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+         min(Float(initialExposure), device.maxExposureTargetBias), device.minExposureTargetBias)
+       device.setExposureTargetBias(clamped)
+     }
++#endif
+   }
+ 
+   // pragma MARK: On Started/Stopped Listeners
+@@ -440,6 +475,9 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+   ) throws -> ListenerSubscription {
+     return self.session.addListener(for: AVCaptureSession.wasInterruptedNotification) {
+       notification in
++#if os(macOS)
++      onInterruptionStarted(.unknown)
++#else
+       if let reasonAny = notification.userInfo?[AVCaptureSessionInterruptionReasonKey],
+         let reasonRawValue = reasonAny as? NSNumber,
+         let avReason = AVCaptureSession.InterruptionReason(rawValue: reasonRawValue.intValue)
+@@ -449,6 +487,7 @@ final class HybridCameraSession: HybridCameraSessionSpec {
+       } else {
+         onInterruptionStarted(.unknown)
+       }
++#endif
+     }
+   }
+ 
+diff --git a/ios/Hybrid Objects/Image Types/HybridPhoto.swift b/ios/Hybrid Objects/Image Types/HybridPhoto.swift
+index 03129f1..ff11de2 100644
+--- a/ios/Hybrid Objects/Image Types/HybridPhoto.swift	
++++ b/ios/Hybrid Objects/Image Types/HybridPhoto.swift	
+@@ -7,6 +7,8 @@
+ 
+ import AVFoundation
+ import Foundation
++import CoreImage
++import ImageIO
+ import NitroImage
+ import NitroModules
+ 
+@@ -43,24 +45,36 @@ final class HybridPhoto: HybridPhotoSpec, NativePhoto {
+   }
+ 
+   var isRawPhoto: Bool {
++#if os(macOS)
++    return false
++#else
+     return photo.isRawPhoto
++#endif
+   }
+ 
+   var depth: (any HybridDepthSpec)? {
++#if os(macOS)
++    return nil
++#else
+     guard let depthData = photo.depthData else {
+       return nil
+     }
+     return HybridDepth(
+       depthData: depthData,
+       metadata: metadata)
++#endif
+   }
+ 
+   var size: CMVideoDimensions {
++#if os(macOS)
++    return photo.resolvedSettings.photoDimensions
++#else
+     if isRawPhoto {
+       return photo.resolvedSettings.rawPhotoDimensions
+     } else {
+       return photo.resolvedSettings.photoDimensions
+     }
++#endif
+   }
+   var width: Double {
+     return Double(size.width)
+@@ -70,10 +84,14 @@ final class HybridPhoto: HybridPhotoSpec, NativePhoto {
+   }
+ 
+   var calibrationData: (any HybridCameraCalibrationDataSpec)? {
++#if os(macOS)
++    return nil
++#else
+     guard let calibrationData = photo.cameraCalibrationData else {
+       return nil
+     }
+     return HybridCameraCalibrationData(calibrationData: calibrationData)
++#endif
+   }
+ 
+   // pragma MARK: Pixel Buffer access
+@@ -135,6 +153,14 @@ final class HybridPhoto: HybridPhotoSpec, NativePhoto {
+   }
+ 
+   func toImage() throws -> any HybridImageSpec {
++#if os(macOS)
++    guard !isRawPhoto, let data = photo.fileDataRepresentation(),
++      let source = CGImageSourceCreateWithData(data as CFData, nil),
++      let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: max(width, height)] as CFDictionary) else {
++      throw RuntimeError.error(withMessage: "Could not decode captured photo")
++    }
++    return HybridCGImage(cgImage: cgImage)
++#else
+     guard let cgImage = photo.cgImageRepresentation() else {
+       if isRawPhoto {
+         throw RuntimeError.error(
+@@ -143,9 +169,15 @@ final class HybridPhoto: HybridPhotoSpec, NativePhoto {
+         throw RuntimeError.error(withMessage: "Failed to get Image data!")
+       }
+     }
++    #if os(macOS)
++    let image = try CIImage(cgImage: cgImage).toUIImage(orientation: orientation.toImageOrientation(isMirrored: isMirrored))
++    return HybridCGImage(cgImage: image)
++    #else
+     let uiOrientation = orientation.toUIImageOrientation(isMirrored: isMirrored)
+     let uiImage = UIImage(cgImage: cgImage, scale: 1, orientation: uiOrientation)
+     return HybridUIImage(uiImage: uiImage)
++    #endif
++#endif
+   }
+ 
+   func toImageAsync() throws -> Promise<any HybridImageSpec> {
+diff --git a/ios/Hybrid Objects/Image Types/HybridUIImage.swift b/ios/Hybrid Objects/Image Types/HybridUIImage.swift
+index bcc192a..69ed299 100644
+--- a/ios/Hybrid Objects/Image Types/HybridUIImage.swift	
++++ b/ios/Hybrid Objects/Image Types/HybridUIImage.swift	
+@@ -1,3 +1,6 @@
++#if os(macOS)
++
++#else
+ //
+ //  HybridPhoto.swift
+ //  VisionCamera
+@@ -18,3 +21,5 @@ internal final class HybridUIImage: HybridImageSpec, NativeImage {
+     super.init()
+   }
+ }
++
++#endif
+diff --git a/ios/Hybrid Objects/Inputs/HybridCameraDevice.swift b/ios/Hybrid Objects/Inputs/HybridCameraDevice.swift
+index bf7bafa..ecb567c 100644
+--- a/ios/Hybrid Objects/Inputs/HybridCameraDevice.swift	
++++ b/ios/Hybrid Objects/Inputs/HybridCameraDevice.swift	
+@@ -17,7 +17,11 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+ 
+   lazy var supportedPixelFormats: [PixelFormat] = {
+     let videoFormats = device.formats
++#if os(macOS)
++    let depthFormats: [AVCaptureDevice.Format] = []
++#else
+     let depthFormats = device.formats.flatMap { $0.supportedDepthDataFormats }
++#endif
+     let allFormats = videoFormats + depthFormats
+     return
+       allFormats
+@@ -95,8 +99,12 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+   }
+ 
+   func supportsVideoStabilizationMode(videoStabilizationMode: TargetStabilizationMode) throws -> Bool {
++#if os(macOS)
++    return videoStabilizationMode == .off
++#else
+     let stabilizationMode = videoStabilizationMode.toAVCaptureVideoStabilizationMode()
+     return device.formats.contains { $0.isVideoStabilizationModeSupported(stabilizationMode) }
++#endif
+   }
+ 
+   func supportsPreviewStabilizationMode(previewStabilizationMode: TargetStabilizationMode) throws -> Bool {
+@@ -134,22 +142,38 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+     return CameraPosition(position: device.position)
+   }
+ 
++#if os(macOS)
++  let physicalDevices: [any HybridCameraDeviceSpec] = []
++#else
+   lazy var physicalDevices: [any HybridCameraDeviceSpec] =
+     device.constituentDevices.map { HybridCameraDevice(device: $0) }
++#endif
+ 
+   var isVirtualDevice: Bool {
++#if os(macOS)
++    return false
++#else
+     return device.isVirtualDevice
++#endif
+   }
+ 
+   var focalLength: Double? {
++#if os(macOS)
++    return nil
++#else
+     guard #available(iOS 26.0, *) else {
+       return nil
+     }
+     return Double(device.nominalFocalLengthIn35mmFilm)
++#endif
+   }
+ 
+   var lensAperture: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(device.lensAperture)
++#endif
+   }
+ 
+   var isContinuityCamera: Bool {
+@@ -170,7 +194,11 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+   }
+ 
+   var supportsSmoothAutoFocus: Bool {
++#if os(macOS)
++    return false
++#else
+     return device.isSmoothAutoFocusSupported
++#endif
+   }
+ 
+   var supportsSpeedQualityPrioritization: Bool {
+@@ -179,13 +207,25 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+   }
+ 
+   var supportsExposureBias: Bool {
++#if os(macOS)
++    return false
++#else
+     return true
++#endif
+   }
+   var minExposureBias: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(device.minExposureTargetBias)
++#endif
+   }
+   var maxExposureBias: Double {
++#if os(macOS)
++    return 0
++#else
+     return Double(device.maxExposureTargetBias)
++#endif
+   }
+ 
+   var hasFlash: Bool {
+@@ -197,8 +237,12 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+   }
+ 
+   var supportsTorchStrength: Bool {
++#if os(macOS)
++    return false
++#else
+     // On iOS any device with a torch also supports custom torch level/strength
+     return device.hasTorch
++#endif
+   }
+ 
+   var minTorchStrength: Double {
+@@ -210,27 +254,51 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+   }
+ 
+   var supportsLowLightBoost: Bool {
++#if os(macOS)
++    return false
++#else
+     return device.isLowLightBoostSupported
++#endif
+   }
+ 
+   var minZoom: Double {
++#if os(macOS)
++    return 1
++#else
+     return device.minAvailableVideoZoomFactor
++#endif
+   }
+ 
+   var maxZoom: Double {
++#if os(macOS)
++    return 1
++#else
+     return device.maxAvailableVideoZoomFactor
++#endif
+   }
+ 
+   var zoomLensSwitchFactors: [Double] {
++#if os(macOS)
++    return []
++#else
+     return device.virtualDeviceSwitchOverVideoZoomFactors.map { $0.doubleValue }
++#endif
+   }
+ 
+   var supportsDistortionCorrection: Bool {
++#if os(macOS)
++    return false
++#else
+     return device.isGeometricDistortionCorrectionSupported
++#endif
+   }
+ 
+   var supportsPreviewImage: Bool {
++#if os(macOS)
++    return false
++#else
+     return true
++#endif
+   }
+ 
+   var supportsFocusMetering: Bool {
+@@ -239,7 +307,11 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+   }
+ 
+   var supportsFocusLocking: Bool {
++#if os(macOS)
++    return false
++#else
+     return device.isLockingFocusWithCustomLensPositionSupported
++#endif
+   }
+ 
+   var supportsExposureMetering: Bool {
+@@ -248,7 +320,11 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+   }
+ 
+   var supportsExposureLocking: Bool {
++#if os(macOS)
++    return false
++#else
+     return device.isExposureModeSupported(.custom)
++#endif
+   }
+ 
+   var supportsWhiteBalanceMetering: Bool {
+@@ -257,16 +333,28 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+   }
+ 
+   var supportsWhiteBalanceLocking: Bool {
++#if os(macOS)
++    return false
++#else
+     return device.isLockingWhiteBalanceWithCustomDeviceGainsSupported
++#endif
+   }
+ 
+   var maxWhiteBalanceGain: Double {
++#if os(macOS)
++    return 1
++#else
+     return Double(device.maxWhiteBalanceGain)
++#endif
+   }
+ 
+   var mediaTypes: [MediaType] {
++#if os(macOS)
++    return [.video]
++#else
+     let allMediaTypes: [MediaType] = [.video, .depth, .metadata]
+     return allMediaTypes.filter { device.hasMediaType($0.toAVMediaType()) }
++#endif
+   }
+ 
+   func isSessionConfigSupported(config: any HybridCameraSessionConfigSpec) throws -> Bool {
+@@ -280,6 +368,9 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+       return false
+     }
+ 
++#if os(macOS)
++    if config.negotiatedFormat.depthFormat != nil { return false }
++#else
+     if let depthFormat = config.negotiatedFormat.depthFormat {
+       guard format.supportedDepthDataFormats.contains(depthFormat) else {
+         // Format is from a different `AVCaptureDevice.Format`
+@@ -287,6 +378,7 @@ final class HybridCameraDevice: HybridCameraDeviceSpec, NativeCameraDevice {
+       }
+     }
+ 
++#endif
+     // TODO: Re-use the logic from `ConstraintResolver` for resolving the actual enabled
+     //       constraints (like FPS or HDR settings) so we have a single source of truth
+     //       when we modify anything in the future.
+diff --git a/ios/Hybrid Objects/Orientation/HybridDeviceOrientationManager.swift b/ios/Hybrid Objects/Orientation/HybridDeviceOrientationManager.swift
+index 2759093..3fdbb55 100644
+--- a/ios/Hybrid Objects/Orientation/HybridDeviceOrientationManager.swift	
++++ b/ios/Hybrid Objects/Orientation/HybridDeviceOrientationManager.swift	
+@@ -1,3 +1,12 @@
++#if os(macOS)
++import NitroModules
++final class HybridDeviceOrientationManager: HybridOrientationManagerSpec {
++  let source: OrientationSource = .device
++  var currentOrientation: CameraOrientation? { .up }
++  func startOrientationUpdates(onChanged: @escaping (CameraOrientation) -> Void) { onChanged(.up) }
++  func stopOrientationUpdates() { }
++}
++#else
+ ///
+ /// HybridDeviceOrientationManager.swift
+ /// VisionCamera
+@@ -58,3 +67,5 @@ final class HybridDeviceOrientationManager: HybridOrientationManagerSpec {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Hybrid Objects/Orientation/HybridInterfaceOrientationManager.swift b/ios/Hybrid Objects/Orientation/HybridInterfaceOrientationManager.swift
+index 29b1017..8a3a2c9 100644
+--- a/ios/Hybrid Objects/Orientation/HybridInterfaceOrientationManager.swift	
++++ b/ios/Hybrid Objects/Orientation/HybridInterfaceOrientationManager.swift	
+@@ -1,3 +1,12 @@
++#if os(macOS)
++import NitroModules
++final class HybridInterfaceOrientationManager: HybridOrientationManagerSpec {
++  let source: OrientationSource = .interface
++  var currentOrientation: CameraOrientation? { .up }
++  func startOrientationUpdates(onChanged: @escaping (CameraOrientation) -> Void) { onChanged(.up) }
++  func stopOrientationUpdates() { }
++}
++#else
+ ///
+ /// HybridInterfaceOrientationManager.swift
+ /// VisionCamera
+@@ -73,3 +82,5 @@ final class HybridInterfaceOrientationManager: HybridOrientationManagerSpec {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Hybrid Objects/Outputs/HybridCameraDepthFrameOutput.swift b/ios/Hybrid Objects/Outputs/HybridCameraDepthFrameOutput.swift
+index 0be7d9d..279b949 100644
+--- a/ios/Hybrid Objects/Outputs/HybridCameraDepthFrameOutput.swift	
++++ b/ios/Hybrid Objects/Outputs/HybridCameraDepthFrameOutput.swift	
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ ///
+ /// HybridCameraDepthFrameOutput.swift
+ /// VisionCamera
+@@ -144,3 +145,5 @@ final class HybridCameraDepthFrameOutput: HybridCameraDepthFrameOutputSpec, Nati
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Hybrid Objects/Outputs/HybridCameraFrameOutput.swift b/ios/Hybrid Objects/Outputs/HybridCameraFrameOutput.swift
+index 17c7a5f..377bd3a 100644
+--- a/ios/Hybrid Objects/Outputs/HybridCameraFrameOutput.swift	
++++ b/ios/Hybrid Objects/Outputs/HybridCameraFrameOutput.swift	
+@@ -60,8 +60,10 @@ final class HybridCameraFrameOutput: HybridCameraFrameOutputSpec, NativeCameraOu
+     // If the pipeline stalls, drop frames to avoid blowing up RAM
+     output.alwaysDiscardsLateVideoFrames = options.dropFramesWhileBusy
+     // JS configures the video resolution, we don't want to downscale here by default.
++#if !os(macOS)
+     output.automaticallyConfiguresOutputBufferDimensions = false
+-    if #available(iOS 26.0, *), output.isDeferredStartSupported {
++#endif
++    if #available(iOS 26.0, macOS 26.0, *), output.isDeferredStartSupported {
+       // Deferred start allows the Session to delay this output's startup in favor
+       // of preview-related outputs to make preview appear faster.
+       output.isDeferredStartEnabled = options.allowDeferredStart
+@@ -71,10 +73,14 @@ final class HybridCameraFrameOutput: HybridCameraFrameOutputSpec, NativeCameraOu
+     //       and `targetResolution` to `.any` (to not participate in resolution negotiations).
+     //       If `allowBufferResizing` is false, we don't set `.videoSettings` ("native" resolution), and reflect our
+     //       target resolution via `targetResolution` to participate in resolution negotiations.
++#if os(macOS)
++
++#else
+     if #available(iOS 17.0, *), options.enablePreviewSizedOutputBuffers {
+       output.deliversPreviewSizedOutputBuffers = true
+     }
+-    if #available(iOS 26.0, *) {
++#endif
++    if #available(iOS 26.0, macOS 26.0, *) {
+       // We don't need HDR metadata, as that's only useful for encoders.
+       output.preservesDynamicHDRMetadata = false
+     }
+@@ -93,12 +99,16 @@ final class HybridCameraFrameOutput: HybridCameraFrameOutputSpec, NativeCameraOu
+       try? connection.setOrientation(outputOrientation)
+       try? connection.setMirrorMode(config.mirrorMode)
+     }
++#if os(macOS)
++
++#else
+     if options.enableCameraMatrixDelivery {
+       // Pipeline should deliver camera matrix (via attachment on `CMSampleBuffer`)
+       if connection.isCameraIntrinsicMatrixDeliverySupported {
+         connection.isCameraIntrinsicMatrixDeliveryEnabled = true
+       }
+     }
++#endif
+   }
+ 
+   private func videoSettingsForPixelFormat(_ targetPixelFormat: TargetVideoPixelFormat) -> [String:
+diff --git a/ios/Hybrid Objects/Outputs/HybridCameraObjectOutput.swift b/ios/Hybrid Objects/Outputs/HybridCameraObjectOutput.swift
+index 9e9270a..f9ff425 100644
+--- a/ios/Hybrid Objects/Outputs/HybridCameraObjectOutput.swift	
++++ b/ios/Hybrid Objects/Outputs/HybridCameraObjectOutput.swift	
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ ///
+ /// HybridCameraObjectOutput.swift
+ /// VisionCamera
+@@ -82,3 +83,5 @@ final class HybridCameraObjectOutput: HybridCameraObjectOutputSpec, NativeCamera
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Hybrid Objects/Outputs/HybridCameraOutputSynchronizer.swift b/ios/Hybrid Objects/Outputs/HybridCameraOutputSynchronizer.swift
+index ba07982..b69d560 100644
+--- a/ios/Hybrid Objects/Outputs/HybridCameraOutputSynchronizer.swift	
++++ b/ios/Hybrid Objects/Outputs/HybridCameraOutputSynchronizer.swift	
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ ///
+ /// HybridCameraDepthFrameOutput.swift
+ /// VisionCamera
+@@ -91,3 +92,5 @@ extension SynchronizedDataFrame {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Hybrid Objects/Outputs/HybridCameraPhotoOutput.swift b/ios/Hybrid Objects/Outputs/HybridCameraPhotoOutput.swift
+index e5249f2..3b20de6 100644
+--- a/ios/Hybrid Objects/Outputs/HybridCameraPhotoOutput.swift	
++++ b/ios/Hybrid Objects/Outputs/HybridCameraPhotoOutput.swift	
+@@ -18,11 +18,19 @@ final class HybridCameraPhotoOutput: HybridCameraPhotoOutputSpec, NativeCameraOu
+   let output: AVCapturePhotoOutput
+ 
+   var supportsDepthDataDelivery: Bool {
++#if os(macOS)
++    return false
++#else
+     return output.isDepthDataDeliverySupported
++#endif
+   }
+ 
+   var supportsCameraCalibrationDataDelivery: Bool {
++#if os(macOS)
++    return false
++#else
+     return output.isCameraCalibrationDataDeliverySupported
++#endif
+   }
+   var outputOrientation: CameraOrientation = .up {
+     didSet {
+@@ -38,11 +46,15 @@ final class HybridCameraPhotoOutput: HybridCameraPhotoOutputSpec, NativeCameraOu
+       let dims = output.maxPhotoDimensions
+       return Size(width: Double(dims.width), height: Double(dims.height))
+     }
++#if os(macOS)
++    return nil
++#else
+     guard let device = output.connections.first?.deviceInput?.device else {
+       return nil
+     }
+     let dims = device.activeFormat.highResolutionStillImageDimensions
+     return Size(width: Double(dims.width), height: Double(dims.height))
++#endif
+   }
+ 
+   var streamType: StreamType = .photo
+@@ -57,6 +69,9 @@ final class HybridCameraPhotoOutput: HybridCameraPhotoOutputSpec, NativeCameraOu
+ 
+     output.maxPhotoQualityPrioritization = options.qualityPrioritization.toAVQualityPrioritization()
+ 
++#if os(macOS)
++
++#else
+     if options.containerFormat == .dng {
+       // If we capture RAW photos, try using Apple ProRAW. If not, Bayer14 RAW will be used.
+       output.isAppleProRAWEnabled = output.isAppleProRAWSupported
+@@ -69,6 +84,7 @@ final class HybridCameraPhotoOutput: HybridCameraPhotoOutputSpec, NativeCameraOu
+       output.isCameraSensorOrientationCompensationEnabled = false
+     }
+ 
++#endif
+     // Prepare the default Photo Settings to make the pipeline ready - some things (like flashMode)
+     // might change on a per-capture basis, but containerFormat and preview size is already known
+     // and can be prepared already.
+@@ -112,7 +128,9 @@ final class HybridCameraPhotoOutput: HybridCameraPhotoOutputSpec, NativeCameraOu
+       location: nil)
+     let avSettings = try settings.toAVCapturePhotoSettings(for: output, withOptions: options)
+     // Prepare the AVCapturePhotoOutput for those settings so coming up captures are faster
++#if !os(macOS)
+     self.output.setPreparedPhotoSettingsArray([avSettings])
++#endif
+   }
+ 
+   func capturePhoto(
+@@ -135,17 +153,23 @@ final class HybridCameraPhotoOutput: HybridCameraPhotoOutputSpec, NativeCameraOu
+         if self.options.previewImageTargetSize != nil,
+           let onPreviewImageAvailable = callbacks.onPreviewImageAvailable
+         {
++#if !os(macOS)
+           Task {
+             // On a separate Thread, start decoding the Preview Image Data
+-            guard let cgPreviewImage = photo.previewCGImageRepresentation() else {
++            guard let cgPreviewImage = photo.previewCGImageRepresentation() as CGImage? else {
+               return
+             }
+             // Wrap the `CGImage` in a `HybridUIImage` and notify the callback
++            #if os(macOS)
++            let image = HybridCGImage(cgImage: cgPreviewImage)
++            #else
+             let uiImage = UIImage(
+               cgImage: cgPreviewImage, scale: 1.0, orientation: metadata.uiImageOrientation)
+             let image = HybridUIImage(uiImage: uiImage)
++            #endif
+             onPreviewImageAvailable(image)
+           }
++#endif
+         }
+         // 2. Wrap the `AVCapturePhoto` in a `HybridPhoto` and resolve the Promise
+         let image = HybridPhoto(
+@@ -189,6 +213,10 @@ final class HybridCameraPhotoOutput: HybridCameraPhotoOutputSpec, NativeCameraOu
+     let captureSettings = try settings.map {
+       try $0.toAVCapturePhotoSettings(for: self.output, withOptions: self.options)
+     }
++#if os(macOS)
++    // macOS has no preparation API; validate settings synchronously.
++    promise.resolve()
++#else
+     self.output.setPreparedPhotoSettingsArray(captureSettings) { prepared, error in
+       if let error {
+         promise.reject(withError: error)
+@@ -200,6 +228,7 @@ final class HybridCameraPhotoOutput: HybridCameraPhotoOutputSpec, NativeCameraOu
+         }
+       }
+     }
++#endif
+     return promise
+   }
+ }
+diff --git a/ios/Hybrid Objects/Outputs/HybridCameraPreviewOutput.swift b/ios/Hybrid Objects/Outputs/HybridCameraPreviewOutput.swift
+index 9f63db3..056646e 100644
+--- a/ios/Hybrid Objects/Outputs/HybridCameraPreviewOutput.swift	
++++ b/ios/Hybrid Objects/Outputs/HybridCameraPreviewOutput.swift	
+@@ -6,6 +6,9 @@
+ 
+ import AVFoundation
+ import Foundation
++#if os(macOS)
++import AppKit
++#endif
+ import NitroModules
+ 
+ final class HybridCameraPreviewOutput: HybridCameraPreviewOutputSpec, NativePreviewViewOutput {
+@@ -38,8 +41,13 @@ final class HybridCameraPreviewOutput: HybridCameraPreviewOutputSpec, NativePrev
+   /// because the view might not even be laid out yet at the time
+   /// the resolution negotiation runs.
+   var targetResolution: ResolutionRule {
++    #if os(macOS)
++    let screenSizeDp = CGSize(width: 1920, height: 1080)
++    let pixelRatio: CGFloat = 1
++    #else
+     let screenSizeDp = UIScreen.main.bounds.size
+     let pixelRatio = UIScreen.main.scale
++    #endif
+     let screenSizePx = Size(
+       width: screenSizeDp.width * pixelRatio,
+       height: screenSizeDp.height * pixelRatio)
+diff --git a/ios/Hybrid Objects/Outputs/HybridCameraVideoFrameOutput.swift b/ios/Hybrid Objects/Outputs/HybridCameraVideoFrameOutput.swift
+index ddf5895..d713b9c 100644
+--- a/ios/Hybrid Objects/Outputs/HybridCameraVideoFrameOutput.swift	
++++ b/ios/Hybrid Objects/Outputs/HybridCameraVideoFrameOutput.swift	
+@@ -62,8 +62,10 @@ final class HybridCameraVideoFrameOutput: HybridCameraVideoOutputSpec, NativeCam
+     // Queue up Frames if there are any hiccups in AVAssetWriter so we don't lose Frames.
+     output.alwaysDiscardsLateVideoFrames = false
+     // JS configures the video resolution, we don't want to downscale here.
++#if !os(macOS)
+     output.automaticallyConfiguresOutputBufferDimensions = false
+-    if #available(iOS 26.0, *) {
++#endif
++    if #available(iOS 26.0, macOS 26.0, *) {
+       // We only use this output for recording, allowing it to start deferred makes the session start faster.
+       if output.isDeferredStartSupported {
+         output.isDeferredStartEnabled = true
+@@ -141,7 +143,7 @@ final class HybridCameraVideoFrameOutput: HybridCameraVideoOutputSpec, NativeCam
+       try recorder.initializeVideoTrack(withSettings: videoSettings)
+ 
+       // 3. Set video metadata
+-      if #available(iOS 26.0, *) {
++      if #available(iOS 26.0, macOS 26.0, *) {
+         // 2.1.a. Set video timescale if available. This avoids audio/video sync-drift in super long videos.
+         recorder.setTimescale(self.output.recommendedMediaTimeScaleForAssetWriter)
+         let codec = self.getCurrentVideoCodec()
+diff --git a/ios/Hybrid Objects/Outputs/HybridCameraVideoOutput.swift b/ios/Hybrid Objects/Outputs/HybridCameraVideoOutput.swift
+index 0353452..32cc690 100644
+--- a/ios/Hybrid Objects/Outputs/HybridCameraVideoOutput.swift	
++++ b/ios/Hybrid Objects/Outputs/HybridCameraVideoOutput.swift	
+@@ -71,6 +71,9 @@ final class HybridCameraVideoOutput: HybridCameraVideoOutputSpec, NativeCameraOu
+   }
+ 
+   func getSupportedVideoCodecs() throws -> [VideoCodec] {
++#if os(macOS)
++    throw RuntimeError.error(withMessage: "Movie output codec enumeration is not available on macOS")
++#else
+     guard output.connection(with: .video) != nil else {
+       throw RuntimeError.error(
+         withMessage:
+@@ -78,9 +81,13 @@ final class HybridCameraVideoOutput: HybridCameraVideoOutputSpec, NativeCameraOu
+       )
+     }
+     return output.availableVideoCodecTypes.map { VideoCodec(avCodec: $0) }
++#endif
+   }
+ 
+   func setOutputSettings(settings: VideoOutputSettings) -> Promise<Void> {
++#if os(macOS)
++    return .rejected(withError: RuntimeError.error(withMessage: "Custom movie encoding settings are not supported by this macOS prototype"))
++#else
+     return Promise.parallel(queue) {
+       guard let connection = self.output.connection(with: .video) else {
+         throw RuntimeError.error(
+@@ -118,6 +125,7 @@ final class HybridCameraVideoOutput: HybridCameraVideoOutputSpec, NativeCameraOu
+         }
+       }
+     }
++#endif
+   }
+ 
+   func createRecorder(settings: RecorderSettings) -> Promise<any HybridRecorderSpec> {
+@@ -145,6 +153,7 @@ final class HybridCameraVideoOutput: HybridCameraVideoOutputSpec, NativeCameraOu
+   }
+ 
+   private func setOutputSettings(bitRate: Int, codec: AVVideoCodecType, for connection: AVCaptureConnection) {
++#if !os(macOS)
+     let supportedKeys = output.supportedOutputSettingsKeys(for: connection)
+     guard supportedKeys.contains(AVVideoCompressionPropertiesKey) else {
+       logger.error(
+@@ -152,6 +161,7 @@ final class HybridCameraVideoOutput: HybridCameraVideoOutputSpec, NativeCameraOu
+       return
+     }
+ 
++#endif
+     let settings: [String: Any] = [
+       AVVideoCodecKey: codec,
+       AVVideoCompressionPropertiesKey: [
+diff --git a/ios/Hybrid Objects/Utils/HybridFrameConverter.swift b/ios/Hybrid Objects/Utils/HybridFrameConverter.swift
+index 803fd8c..265f780 100644
+--- a/ios/Hybrid Objects/Utils/HybridFrameConverter.swift	
++++ b/ios/Hybrid Objects/Utils/HybridFrameConverter.swift	
+@@ -19,7 +19,11 @@ final class HybridFrameConverter: HybridFrameConverterSpec {
+     }
+     let uiOrientation = frame.metadata.uiImageOrientation
+     let uiImage = try sampleBuffer.toUIImage(orientation: uiOrientation)
++    #if os(macOS)
++    return HybridCGImage(cgImage: uiImage)
++    #else
+     return HybridUIImage(uiImage: uiImage)
++    #endif
+   }
+ 
+   func convertFrameToImageAsync(frame: any HybridFrameSpec) throws -> Promise<any HybridImageSpec> {
+@@ -37,7 +41,11 @@ final class HybridFrameConverter: HybridFrameConverterSpec {
+     }
+     let uiOrientation = depth.metadata.uiImageOrientation
+     let uiImage = try depthData.toUIImage(orientation: uiOrientation)
++    #if os(macOS)
++    return HybridCGImage(cgImage: uiImage)
++    #else
+     return HybridUIImage(uiImage: uiImage)
++    #endif
+   }
+ 
+   func convertDepthToImageAsync(depth: any HybridDepthSpec) throws -> Promise<any HybridImageSpec> {
+diff --git a/ios/Hybrid Objects/Views/HybridFrameRendererView.swift b/ios/Hybrid Objects/Views/HybridFrameRendererView.swift
+index d113a56..8d2a753 100644
+--- a/ios/Hybrid Objects/Views/HybridFrameRendererView.swift	
++++ b/ios/Hybrid Objects/Views/HybridFrameRendererView.swift	
+@@ -9,7 +9,7 @@ import Foundation
+ import NitroModules
+ 
+ final class HybridFrameRendererView: HybridFrameRendererViewSpec {
+-  var view: UIView = AutoLayerResizingView()
++  var view = AutoLayerResizingView()
+   var renderer: (any HybridFrameRendererSpec)? {
+     didSet {
+       updateRendererLayer()
+@@ -18,9 +18,9 @@ final class HybridFrameRendererView: HybridFrameRendererViewSpec {
+ 
+   private func updateRendererLayer() {
+     DispatchQueue.main.async {
+-      self.view.layer.sublayers?.removeAll()
++      self.view.contentLayer.sublayers?.removeAll()
+       if let renderer = self.renderer as? any NativeFrameRenderer {
+-        self.view.layer.addSublayer(renderer.layer)
++        self.view.contentLayer.addSublayer(renderer.layer)
+         renderer.layer.frame = self.view.bounds
+       }
+     }
+diff --git a/ios/Hybrid Objects/Views/HybridPreviewView.swift b/ios/Hybrid Objects/Views/HybridPreviewView.swift
+index 00d7532..722a5cf 100644
+--- a/ios/Hybrid Objects/Views/HybridPreviewView.swift	
++++ b/ios/Hybrid Objects/Views/HybridPreviewView.swift	
+@@ -10,7 +10,7 @@ import NitroImage
+ import NitroModules
+ 
+ final class HybridPreviewView: HybridPreviewViewSpec {
+-  var view: UIView = AutoLayerResizingView()
++  var view = AutoLayerResizingView()
+   var previewOutput: (any HybridCameraPreviewOutputSpec)? {
+     didSet {
+       updatePreviewLayer()
+@@ -86,6 +86,9 @@ final class HybridPreviewView: HybridPreviewViewSpec {
+   func convertScannedObjectCoordinatesToViewCoordinates(
+     scannedObject: (any HybridScannedObjectSpec)
+   ) throws -> (any HybridScannedObjectSpec) {
++#if os(macOS)
++    throw RuntimeError.error(withMessage: "Object scanning is not supported on macOS")
++#else
+     guard let previewLayer else {
+       throw RuntimeError.error(
+         withMessage:
+@@ -100,6 +103,7 @@ final class HybridPreviewView: HybridPreviewViewSpec {
+         withMessage: "Failed to transform the Scanned Object's coordinates into view coordinates!")
+     }
+     return HybridCameraObjectOutput.createHybridScannedObject(from: transformedObject)
++#endif
+   }
+ 
+   func createMeteringPoint(viewX: Double, viewY: Double, size: Double?) throws
+@@ -127,10 +131,10 @@ final class HybridPreviewView: HybridPreviewViewSpec {
+     DispatchQueue.main.async {
+       if let previewLayer = self.previewLayer {
+         // Remove all sublayers that are not our AVCaptureVideoPreviewLayer
+-        self.view.layer.sublayers?.removeAll { $0 != previewLayer }
+-        if self.view.layer.sublayers?.contains(previewLayer) != true {
++        self.view.contentLayer.sublayers?.removeAll { $0 != previewLayer }
++        if self.view.contentLayer.sublayers?.contains(previewLayer) != true {
+           // If we don't have the preview layer, we add it here
+-          self.view.layer.addSublayer(previewLayer)
++          self.view.contentLayer.addSublayer(previewLayer)
+         }
+         previewLayer.frame = self.view.bounds
+ 
+@@ -138,6 +142,7 @@ final class HybridPreviewView: HybridPreviewViewSpec {
+         let resizeMode = self.resizeMode ?? .cover
+         previewLayer.videoGravity = resizeMode.toAVLayerVideoGravity()
+ 
++#if !os(macOS)
+         // Add listener to `isPreviewing`
+         self.isPreviewingObserver = previewLayer.observe(
+           \.isPreviewing,
+@@ -156,9 +161,10 @@ final class HybridPreviewView: HybridPreviewViewSpec {
+               self.onPreviewStopped?()
+             }
+           })
++#endif
+       } else {
+         // Remove all sublayers (including the AVCaptureVideoPreviewLayer)
+-        self.view.layer.sublayers?.removeAll()
++        self.view.contentLayer.sublayers?.removeAll()
+         // Remove listener to `isPreviewing`
+         self.onPreviewStopped?()
+         self.isPreviewingObserver = nil
+diff --git a/ios/Public/MediaSampleMetadata.swift b/ios/Public/MediaSampleMetadata.swift
+index 4917891..b6af8b6 100644
+--- a/ios/Public/MediaSampleMetadata.swift
++++ b/ios/Public/MediaSampleMetadata.swift
+@@ -8,7 +8,11 @@
+ import AVFoundation
+ import Foundation
+ import NitroModules
++#if os(macOS)
++import ImageIO
++#else
+ import UIKit
++#endif
+ 
+ public struct MediaSampleMetadata {
+   let timestamp: CMTime
+@@ -32,7 +36,11 @@ public struct MediaSampleMetadata {
+     self.isMirrored = isMirrored
+   }
+ 
++  #if os(macOS)
++  var uiImageOrientation: CGImagePropertyOrientation { orientation.toImageOrientation(isMirrored: isMirrored) }
++  #else
+   var uiImageOrientation: UIImage.Orientation {
+     return orientation.toUIImageOrientation(isMirrored: isMirrored)
+   }
++  #endif
+ }
+diff --git a/ios/Public/NativeGestureController.swift b/ios/Public/NativeGestureController.swift
+index 7ff5397..ddbf76d 100644
+--- a/ios/Public/NativeGestureController.swift
++++ b/ios/Public/NativeGestureController.swift
+@@ -6,10 +6,16 @@
+ //
+ 
+ import Foundation
++#if os(macOS)
++import AppKit
++public typealias CameraGestureRecognizer = NSGestureRecognizer
++#else
+ import UIKit
++public typealias CameraGestureRecognizer = UIGestureRecognizer
++#endif
+ 
+ public protocol NativeGestureController: AnyObject {
+-  associatedtype GestureRecognizer: UIGestureRecognizer
++  associatedtype GestureRecognizer: CameraGestureRecognizer
+ 
+   /**
+    * Gets the underlying `UIGestureRecognizer`.
+diff --git a/ios/Utils/CameraPlatformImage.swift b/ios/Utils/CameraPlatformImage.swift
+new file mode 100644
+index 0000000..ff64ce6
+--- /dev/null
++++ b/ios/Utils/CameraPlatformImage.swift
+@@ -0,0 +1,17 @@
++import AVFoundation
++import CoreImage
++import Foundation
++import NitroImage
++#if os(macOS)
++import ImageIO
++typealias CameraImageOrientation = CGImagePropertyOrientation
++typealias CameraPlatformImage = CGImage
++extension CameraOrientation {
++  func toImageOrientation(isMirrored: Bool) -> CGImagePropertyOrientation {
++    switch self { case .up: return isMirrored ? .upMirrored : .up; case .down: return isMirrored ? .downMirrored : .down; case .left: return isMirrored ? .leftMirrored : .left; case .right: return isMirrored ? .rightMirrored : .right }
++  }
++}
++#else
++typealias CameraImageOrientation = UIImage.Orientation
++typealias CameraPlatformImage = UIImage
++#endif
+diff --git a/ios/Utils/LazyLockablePixelBuffer.swift b/ios/Utils/LazyLockablePixelBuffer.swift
+index 89434ed..bfa5edc 100644
+--- a/ios/Utils/LazyLockablePixelBuffer.swift
++++ b/ios/Utils/LazyLockablePixelBuffer.swift
+@@ -8,7 +8,7 @@
+ import AVFoundation
+ import Foundation
+ import NitroModules
+-import UIKit
++import CoreGraphics
+ 
+ protocol LazyLockableBuffer: AnyObject {
+   var isLocked: Bool { get set }
+diff --git a/ios/Utils/SubjectAreaMonitor.swift b/ios/Utils/SubjectAreaMonitor.swift
+index 3be310e..4eb4938 100644
+--- a/ios/Utils/SubjectAreaMonitor.swift
++++ b/ios/Utils/SubjectAreaMonitor.swift
+@@ -1,3 +1,4 @@
++#if !os(macOS)
+ //
+ //  SubjectAreaMonitor.swift
+ //  VisionCamera
+@@ -89,3 +90,5 @@ enum SubjectAreaMonitor {
+     }
+   }
+ }
++
++#endif
+diff --git a/ios/Views/AutoLayerResizingView.swift b/ios/Views/AutoLayerResizingView.swift
+index 65f6dd9..566bdbc 100644
+--- a/ios/Views/AutoLayerResizingView.swift
++++ b/ios/Views/AutoLayerResizingView.swift
+@@ -1,3 +1,14 @@
++#if os(macOS)
++import AppKit
++import QuartzCore
++final class AutoLayerResizingView: NSView {
++  override var isFlipped: Bool { true }
++  var contentLayer: CALayer { layer! }
++  override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
++  required init?(coder: NSCoder) { super.init(coder: coder); wantsLayer = true }
++  override func layout() { super.layout(); contentLayer.sublayers?.forEach { $0.frame = bounds } }
++}
++#else
+ //
+ //  AutoLayerResizingView.swift
+ //  VisionCamera
+@@ -10,6 +21,7 @@ import Foundation
+ 
+ /// A view that auto-resizes its sublayers each time
+ final class AutoLayerResizingView: UIView {
++  var contentLayer: CALayer { layer }
+   override func layoutSubviews() {
+     super.layoutSubviews()
+     layer.sublayers?.forEach { layer in
+@@ -17,3 +29,5 @@ final class AutoLayerResizingView: UIView {
+     }
+   }
+ }
++
++#endif
+diff --git a/nitrogen/generated/ios/VisionCamera+autolinking.rb b/nitrogen/generated/ios/VisionCamera+autolinking.rb
+index c1a02e7..518a0f8 100644
+--- a/nitrogen/generated/ios/VisionCamera+autolinking.rb
++++ b/nitrogen/generated/ios/VisionCamera+autolinking.rb
+@@ -54,6 +54,8 @@ def add_nitrogen_files(spec)
+     "CLANG_CXX_LANGUAGE_STANDARD" => "c++20",
+     # Enables C++ <-> Swift interop (by default it's only ObjC)
+     "SWIFT_OBJC_INTEROP_MODE" => "objcxx",
++    # Nitro's Fabric-only templates must not enter its Swift umbrella.
++    "HEADER_SEARCH_PATHS" => "$(inherited) $(PODS_ROOT)/Headers/Private",
+     # Enables stricter modular headers
+     "DEFINES_MODULE" => "YES",
+     # Disable auto-generated ObjC header for Swift (Static linkage on Xcode 26.4 breaks here)
+diff --git a/nitrogen/generated/ios/c++/views/HybridFrameRendererViewComponent.mm b/nitrogen/generated/ios/c++/views/HybridFrameRendererViewComponent.mm
+index 3b6dda4..361f192 100644
+--- a/nitrogen/generated/ios/c++/views/HybridFrameRendererViewComponent.mm
++++ b/nitrogen/generated/ios/c++/views/HybridFrameRendererViewComponent.mm
+@@ -12,7 +12,12 @@
+ #import <React/RCTComponentViewFactory.h>
+ #import <React/UIView+ComponentViewProtocol.h>
+ #import <NitroModules/NitroDefines.hpp>
++#import <TargetConditionals.h>
++#if TARGET_OS_OSX
++#import <AppKit/AppKit.h>
++#else
+ #import <UIKit/UIKit.h>
++#endif
+ 
+ #import "HybridFrameRendererViewSpecSwift.hpp"
+ #import "VisionCamera-Swift-Cxx-Umbrella.hpp"
+@@ -65,12 +70,21 @@ - (void) updateView {
+ 
+   // 2. Get UIView*
+   void* viewUnsafe = swiftPart.getView();
++  #if TARGET_OS_OSX
++  NSView* view = (__bridge_transfer NSView*) viewUnsafe;
++#else
+   UIView* view = (__bridge_transfer UIView*) viewUnsafe;
++#endif
+ 
+   // 3. Update RCTViewComponentView's [contentView]
+   [self setContentView:view];
+ }
+ 
++// RN < 0.82 does not call invalidate for views which opt out of recycling.
++- (void) dealloc {
++  if (_hybridView != nullptr) [self notifyOnDropView];
++}
++
+ - (void) notifyOnDropView {
+   // A recycled component can later be invalidated. Notify only once per mount.
+   if (_didDropView) {
+diff --git a/nitrogen/generated/ios/c++/views/HybridPreviewViewComponent.mm b/nitrogen/generated/ios/c++/views/HybridPreviewViewComponent.mm
+index 3251d7b..ce0265b 100644
+--- a/nitrogen/generated/ios/c++/views/HybridPreviewViewComponent.mm
++++ b/nitrogen/generated/ios/c++/views/HybridPreviewViewComponent.mm
+@@ -12,7 +12,12 @@
+ #import <React/RCTComponentViewFactory.h>
+ #import <React/UIView+ComponentViewProtocol.h>
+ #import <NitroModules/NitroDefines.hpp>
++#import <TargetConditionals.h>
++#if TARGET_OS_OSX
++#import <AppKit/AppKit.h>
++#else
+ #import <UIKit/UIKit.h>
++#endif
+ 
+ #import "HybridPreviewViewSpecSwift.hpp"
+ #import "VisionCamera-Swift-Cxx-Umbrella.hpp"
+@@ -65,12 +70,21 @@ - (void) updateView {
+ 
+   // 2. Get UIView*
+   void* viewUnsafe = swiftPart.getView();
++  #if TARGET_OS_OSX
++  NSView* view = (__bridge_transfer NSView*) viewUnsafe;
++#else
+   UIView* view = (__bridge_transfer UIView*) viewUnsafe;
++#endif
+ 
+   // 3. Update RCTViewComponentView's [contentView]
+   [self setContentView:view];
+ }
+ 
++// RN < 0.82 does not call invalidate for views which opt out of recycling.
++- (void) dealloc {
++  if (_hybridView != nullptr) [self notifyOnDropView];
++}
++
+ - (void) notifyOnDropView {
+   // A recycled component can later be invalidated. Notify only once per mount.
+   if (_didDropView) {
+diff --git a/nitrogen/generated/shared/c++/views/HybridFrameRendererViewComponent.cpp b/nitrogen/generated/shared/c++/views/HybridFrameRendererViewComponent.cpp
+index 5255f8e..ca364f4 100644
+--- a/nitrogen/generated/shared/c++/views/HybridFrameRendererViewComponent.cpp
++++ b/nitrogen/generated/shared/c++/views/HybridFrameRendererViewComponent.cpp
+@@ -7,6 +7,9 @@
+ 
+ #include "HybridFrameRendererViewComponent.hpp"
+ 
++#if defined(__APPLE__)
++#include <TargetConditionals.h>
++#endif
+ #include <NitroModules/NitroHash.hpp>
+ #include <NitroModules/ReactProp.hpp>
+ 
+@@ -19,7 +22,11 @@ namespace margelo::nitro::camera::views {
+   HybridFrameRendererViewProps::HybridFrameRendererViewProps(const react::PropsParserContext& context,
+                                                              const HybridFrameRendererViewProps& sourceProps,
+                                                              const react::RawProps& rawProps):
+-    react::ViewProps(context, sourceProps, rawProps, filterObjectKeys),
++    react::ViewProps(context, sourceProps, rawProps
++    #if !TARGET_OS_OSX
++          , filterObjectKeys
++    #endif
++        ),
+     renderer(nitro::ReactProp<std::optional<std::shared_ptr<HybridFrameRendererSpec>>>::fromRawValue("FrameRendererView", "renderer", rawProps, sourceProps.renderer)),
+     hybridRef(nitro::ReactProp<std::optional<std::function<void(const std::shared_ptr<HybridFrameRendererViewSpec>& /* ref */)>>>::fromRawValue("FrameRendererView", "hybridRef", rawProps, sourceProps.hybridRef)) { }
+ 
+diff --git a/nitrogen/generated/shared/c++/views/HybridPreviewViewComponent.cpp b/nitrogen/generated/shared/c++/views/HybridPreviewViewComponent.cpp
+index 7e6f73b..e5ac262 100644
+--- a/nitrogen/generated/shared/c++/views/HybridPreviewViewComponent.cpp
++++ b/nitrogen/generated/shared/c++/views/HybridPreviewViewComponent.cpp
+@@ -7,6 +7,9 @@
+ 
+ #include "HybridPreviewViewComponent.hpp"
+ 
++#if defined(__APPLE__)
++#include <TargetConditionals.h>
++#endif
+ #include <NitroModules/NitroHash.hpp>
+ #include <NitroModules/ReactProp.hpp>
+ 
+@@ -19,7 +22,11 @@ namespace margelo::nitro::camera::views {
+   HybridPreviewViewProps::HybridPreviewViewProps(const react::PropsParserContext& context,
+                                                  const HybridPreviewViewProps& sourceProps,
+                                                  const react::RawProps& rawProps):
+-    react::ViewProps(context, sourceProps, rawProps, filterObjectKeys),
++    react::ViewProps(context, sourceProps, rawProps
++    #if !TARGET_OS_OSX
++          , filterObjectKeys
++    #endif
++        ),
+     previewOutput(nitro::ReactProp<std::optional<std::shared_ptr<HybridCameraPreviewOutputSpec>>>::fromRawValue("PreviewView", "previewOutput", rawProps, sourceProps.previewOutput)),
+     resizeMode(nitro::ReactProp<std::optional<PreviewResizeMode>>::fromRawValue("PreviewView", "resizeMode", rawProps, sourceProps.resizeMode)),
+     implementationMode(nitro::ReactProp<std::optional<PreviewImplementationMode>>::fromRawValue("PreviewView", "implementationMode", rawProps, sourceProps.implementationMode)),
+diff --git a/package.json b/package.json
+index 341aa56..306f6a1 100644
+--- a/package.json
++++ b/package.json
+@@ -27,7 +27,8 @@
+     "cpp/**/*.cpp",
+     "nitro.json",
+     "*.podspec",
+-    "README.md"
++    "README.md",
++    "macos/**/*.swift"
+   ],
+   "scripts": {
+     "typecheck": "tsc --noEmit",
+diff --git a/react-native.config.js b/react-native.config.js
+index 3fdf8ea..e2ad767 100644
+--- a/react-native.config.js
++++ b/react-native.config.js
+@@ -7,6 +7,7 @@ module.exports = {
+        * @type {import('@react-native-community/cli-types').IOSDependencyParams}
+        */
+       ios: {},
++      macos: { podspecPath: __dirname + "/VisionCamera.podspec" },
+       /**
+        * @type {import('@react-native-community/cli-types').AndroidDependencyParams}
+        */
