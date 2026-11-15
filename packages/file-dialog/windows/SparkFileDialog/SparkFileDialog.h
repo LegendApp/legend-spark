@@ -55,7 +55,7 @@ struct SparkFileDialog {
         const auto message = args.GetNamedString(L"message", L"");
         if (!message.empty()) { auto custom = dialog.as<IFileDialogCustomize>(); check_hresult(custom->AddText(100, message.c_str())); }
         auto directory = args.GetNamedString(save ? L"directory" : L"directoryURL", L"");
-        std::wstring suggestedName = args.GetNamedString(L"defaultName", L"");
+        std::wstring suggestedName(args.GetNamedString(L"defaultName", L""));
         if (!directory.empty()) {
           std::wstring value(directory);
           if (value.rfind(L"file:", 0) == 0) { wchar_t buffer[32768]; DWORD length = 32768; check_hresult(PathCreateFromUrlW(value.c_str(), buffer, &length, 0)); value = buffer; }
