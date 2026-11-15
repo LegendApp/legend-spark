@@ -827,13 +827,13 @@ struct SparkNativeMenu {
   REACT_INIT(Initialize) void Initialize(winrt::Microsoft::ReactNative::ReactContext const &context) noexcept { if (context.Properties().Get(winrt::Microsoft::ReactNative::ReactPropertyId<bool>{L"Spark", L"SecondaryRuntime"}).value_or(false)) return; SparkWin::context = context; }
   REACT_METHOD(addListener) void addListener(std::string) noexcept {}
   REACT_METHOD(removeListeners) void removeListeners(double) noexcept {}
-  REACT_METHOD(publish) void publish(std::string json, RNW::ReactPromise<void> promise) noexcept {
+  REACT_METHOD(publish) void publish(std::string json, winrt::Microsoft::ReactNative::ReactPromise<void> promise) noexcept {
     SparkWin::context.UIDispatcher().Post([json, promise]() {
       try {
         auto next = SparkWin::Json::JsonArray::Parse(winrt::to_hstring(json));
         SparkWin::RebuildMenus(next); SparkWin::menus = next; promise.Resolve();
-      } catch (winrt::hresult_error const &error) { promise.Reject(RNW::ReactError{"E_NATIVE", winrt::to_string(error.message())}); }
-      catch (std::exception const &error) { promise.Reject(RNW::ReactError{"E_NATIVE", error.what()}); }
+      } catch (winrt::hresult_error const &error) { promise.Reject(winrt::Microsoft::ReactNative::ReactError{"E_NATIVE", winrt::to_string(error.message())}); }
+      catch (std::exception const &error) { promise.Reject(winrt::Microsoft::ReactNative::ReactError{"E_NATIVE", error.what()}); }
     });
   }
 };
