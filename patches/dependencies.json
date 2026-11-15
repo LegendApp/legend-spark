@@ -19,10 +19,10 @@
     "optional": true
   },
   "react-native-unistyles": {
-    "version": "3.6.0",
-    "url": "https://registry.npmjs.org/react-native-unistyles/-/react-native-unistyles-3.6.0.tgz",
-    "integrity": "sha512-eYqixPy6auBj6k/ica9fCYIPgFQsLzUwRoxGZ04hX3hkANTNjaz3/LzNfXPfgJbwF/fQrhaK0qII4nhtSqUPfA==",
-    "patch": "react-native-unistyles@3.6.0.patch",
+    "version": "3.7.0",
+    "url": "https://registry.npmjs.org/react-native-unistyles/-/react-native-unistyles-3.7.0.tgz",
+    "integrity": "sha512-Rh2MElgv2gCP/Q4BG0ztWz8iawH1BSyCgAvBRCpw10+lA8N8WqTT97rY4OgfJhB7m9eZLWUH2nQch2HfVNk3+Q==",
+    "patch": "react-native-unistyles@3.7.0.patch",
     "optional": true
   },
   "react-native-quick-crypto": {
