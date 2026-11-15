@@ -172,7 +172,7 @@ export function nativePackages(root: string, { applyExcludes = true } = {}): Nat
   assertEnrichedHtmlPins(root);
   const installed = installedPackages(root);
   prepareNativePatches(root, installed);
-  if (projectPlatform(root) === "windows") return windowsNativePackages(root, installed);
+  if (projectPlatform(root) === "windows") return windowsNativePackages(root, installed, applyExcludes);
   const rootOf = (name: string) => installed.find(pkg => pkg.name === name)?.root;
   const [macOS, expoCore] = [rootOf("react-native-macos"), rootOf("expo-modules-core")];
   if (macOS && expoCore) removeExpoApplicationAlias(macOS, expoCore);
@@ -479,11 +479,11 @@ export function projectEnvironment(root: string): Record<string, string> {
   };
 }
 
-function windowsNativePackages(root: string, installed: Package[]): NativePackage[] {
+function windowsNativePackages(root: string, installed: Package[], applyExcludes: boolean): NativePackage[] {
   const direct = readJson(path.join(root, "package.json")).dependencies ?? {};
   const supported = (pkg: Package) => pkg.name !== "expo-desktop-template-bare-minimum" && (existsSync(path.join(pkg.root, "windows")) ||
     ["react-native", "react-native-windows", "@legendapp/spark-desktop-host", "@legendapp/spark-desktop-app", "@legendapp/spark-desktop-windows", "@legendapp/spark-desktop-shortcuts", "@legendapp/spark-native-menu", "@legendapp/spark-updates"].includes(pkg.name));
-  const explicitlyExcluded = isUniversal(root) ? readAppConfig(root).expo?.autolinking?.exclude ?? [] : [];
+  const explicitlyExcluded = readAppConfig(root).expo?.autolinking?.exclude ?? [];
   for (const pkg of installed) {
     const platformAdapter = isUniversal(root) && ["src/index.windows.ts", "src/index.windows.tsx"].some(file => existsSync(path.join(pkg.root, file)));
     if (!platformAdapter && !explicitlyExcluded.includes(pkg.name) && direct[pkg.name] && pkg.name !== "expo" && !supported(pkg) && (pkg.json.codegenConfig || pkg.json.spark?.nativeModules || readdirSync(pkg.root).some(name => name.endsWith(".podspec") || name === "expo-module.config.json"))) {
@@ -493,7 +493,7 @@ function windowsNativePackages(root: string, installed: Package[]): NativePackag
   const adapter = installed.filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
     .map(pkg => hashFiles(pkg.root, ["package.json", "windows", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))], true, [], true)).join(":");
   const versions = installed.filter(pkg => ["react", "expo", "react-native", "react-native-windows"].includes(pkg.name)).map(pkg => [pkg.name, pkg.json.version]);
-  return installed.filter(supported).map(pkg => ({ ...pkg,
+  return installed.filter(pkg => supported(pkg) && (!applyExcludes || !explicitlyExcluded.includes(pkg.name))).map(pkg => ({ ...pkg,
     sdk: pkg.json.spark?.sdk === true || pkg.name === "@react-native-async-storage/async-storage", requires: pkg.json.spark?.requires ?? [],
     signature: digest(hashFiles(pkg.root, ["package.json", "windows", "src", "cpp", "common", "react-native.config.js"], true, [], true) + (pkg.name === "@legendapp/spark-desktop-host" ? adapter + JSON.stringify(versions) : "")),
   }));

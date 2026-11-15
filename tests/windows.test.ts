@@ -216,3 +216,19 @@ for (const fail of [false, true]) test(`Windows prebuild preserves native output
     expect(readFileSync(source, "utf8")).toBe("updated");
   } finally { f.close(); }
 });
+
+test("Windows excludes configured native projects from its graph and RNW configuration", () => {
+  const f = fixture();
+  try {
+    writeJson(path.join(f.root, "app.json"), { expo: { platforms: ["windows"], autolinking: { exclude: ["probe"] } } });
+    writeJson(path.join(f.root, "package.json"), { dependencies: { probe: "1" } });
+    writeJson(path.join(f.root, "node_modules/probe/package.json"), { name: "probe", version: "1" });
+    mkdirSync(path.join(f.root, "node_modules/probe/windows"));
+    expect(nativePackages(f.root).map(pkg => pkg.name)).not.toContain("probe");
+    expect(nativePackages(f.root, { applyExcludes: false }).map(pkg => pkg.name)).toContain("probe");
+    const { nativeConfig } = require("../packages/cli/src/universal.cjs");
+    expect(nativeConfig(f.root).dependencies.probe.platforms.windows).toBeNull();
+    writeJson(path.join(f.root, "app.json"), { expo: { platforms: ["windows"] } });
+    expect(nativePackages(f.root).map(pkg => pkg.name)).toContain("probe");
+  } finally { f.close(); }
+});

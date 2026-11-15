@@ -58,7 +58,7 @@ export async function prepareWindows(root: string, mode: "go" | "dev") {
   }
   const runtime = runtimeFor(root, packages, mode);
   writeJson(stateFile(root, "windows-build-input.json"), runtime);
-  writeJson(stateFile(root, "native-selection.json"), { included: packages.map(pkg => ({ name: pkg.name, root: pkg.root })), excluded: [] });
+  writeJson(stateFile(root, "native-selection.json"), { included: packages.map(pkg => ({ name: pkg.name, root: pkg.root })), excluded: readAppConfig(root).expo?.autolinking?.exclude ?? [] });
   const manifest = readFileSync(path.join(root, "package.json"), "utf8");
   try {
     await preserveWindowsBuildOutputs(root, async () => {
