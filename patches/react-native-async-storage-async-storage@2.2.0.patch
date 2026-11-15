@@ -1,0 +1,20 @@
+===================================================================
+--- a/windows/ReactNativeAsyncStorage/packages.config
++++ b/windows/ReactNativeAsyncStorage/packages.config
+@@ -1,4 +1,14 @@
+ ﻿<?xml version="1.0" encoding="utf-8"?>
+ <packages>
+-  <package id="Microsoft.Windows.CppWinRT" version="2.0.200316.3" targetFramework="native" />
++  <package id="Microsoft.Windows.CppWinRT" version="2.0.230706.1" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK" version="1.8.260508005" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.AI" version="1.8.76" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.Base" version="1.8.251216001" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.DWrite" version="1.8.25122902" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.Foundation" version="1.8.260505001" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.InteractiveExperiences" version="1.8.260430001" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.ML" version="1.8.2197" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.Runtime" version="1.8.260508005" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.Widgets" version="1.8.251231004" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.WinUI" version="1.8.260505002" targetFramework="native" />
+ </packages>
+\ No newline at end of file

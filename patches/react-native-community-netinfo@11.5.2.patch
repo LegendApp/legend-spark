@@ -1,13 +1,17 @@
+===================================================================
 --- a/windows/RNCNetInfoCPP/RNCNetInfoCPP.vcxproj
 +++ b/windows/RNCNetInfoCPP/RNCNetInfoCPP.vcxproj
-@@ -1,5 +1,6 @@
+@@ -1,7 +1,7 @@
  <?xml version="1.0" encoding="utf-8"?>
  <Project ToolsVersion="16.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+-  <Import Project="$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props')" />
 +  <Import Project="$(SolutionDir)\ExperimentalFeatures.props" Condition="Exists('$(SolutionDir)\ExperimentalFeatures.props')" />
-   <Import Project="$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props')" />
    <PropertyGroup Label="Globals">
      <CppWinRTOptimized>true</CppWinRTOptimized>
-@@ -10,9 +11,9 @@
+     <CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
+     <MinimalCoreWin>true</MinimalCoreWin>
+@@ -9,18 +9,19 @@
+     <ProjectName>RNCNetInfoCPP</ProjectName>
      <RootNamespace>ReactNativeNetInfo</RootNamespace>
      <DefaultLanguage>en-US</DefaultLanguage>
      <MinimumVisualStudioVersion>16.0</MinimumVisualStudioVersion>
@@ -20,7 +24,7 @@
      <WindowsTargetPlatformVersion Condition=" '$(WindowsTargetPlatformVersion)' == '' ">10.0</WindowsTargetPlatformVersion>
      <WindowsTargetPlatformMinVersion>10.0.17763.0</WindowsTargetPlatformMinVersion>
    </PropertyGroup>
-@@ -20,6 +21,7 @@
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
    <PropertyGroup Label="ReactNativeWindowsProps">
      <ReactNativeWindowsDir Condition="'$(ReactNativeWindowsDir)' == ''">$([MSBuild]::GetDirectoryNameOfFileAbove($(SolutionDir), 'node_modules\react-native-windows\package.json'))\node_modules\react-native-windows\</ReactNativeWindowsDir>
    </PropertyGroup>
@@ -28,7 +32,9 @@
    <ItemGroup Label="ProjectConfigurations">
      <ProjectConfiguration Include="Debug|ARM64">
        <Configuration>Debug</Configuration>
-@@ -47,6 +49,7 @@
+       <Platform>ARM64</Platform>
+@@ -46,8 +47,9 @@
+       <Platform>x64</Platform>
      </ProjectConfiguration>
    </ItemGroup>
    <PropertyGroup Label="Configuration">
@@ -36,7 +42,9 @@
      <ConfigurationType>DynamicLibrary</ConfigurationType>
      <CharacterSet>Unicode</CharacterSet>
      <GenerateManifest>false</GenerateManifest>
-@@ -71,7 +74,7 @@
+   </PropertyGroup>
+@@ -70,9 +72,9 @@
+   <ImportGroup Label="PropertySheets">
      <Import Project="PropertySheet.props" />
    </ImportGroup>
    <ImportGroup Label="ReactNativeWindowsPropertySheets">
@@ -45,7 +53,9 @@
    </ImportGroup>
    <PropertyGroup Label="UserMacros" />
    <ItemDefinitionGroup>
-@@ -127,14 +130,14 @@
+     <ClCompile>
+@@ -126,24 +128,14 @@
+     <None Include="PropertySheet.props" />
    </ItemGroup>
    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
    <ImportGroup Label="ReactNativeWindowsTargets">
@@ -61,9 +71,81 @@
 +    <Error Condition="!Exists('$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.props')" Text="$([System.String]::Format('$(ErrorText)', '$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.props'))" />
 +    <Error Condition="!Exists('$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.targets'))" />
    </Target>
-   <ImportGroup Label="ExtensionTargets">
-     <Import Project="$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets')" />
+-  <ImportGroup Label="ExtensionTargets">
+-    <Import Project="$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets')" />
+-  </ImportGroup>
+-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+-    <PropertyGroup>
+-      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+-    </PropertyGroup>
+-    <Error Condition="!Exists('$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.props'))" />
+-    <Error Condition="!Exists('$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)\packages\Microsoft.Windows.CppWinRT.2.0.210312.4\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+-  </Target>
+ </Project>
+===================================================================
+--- a/windows/RNCNetInfoCPP/packages.config
++++ b/windows/RNCNetInfoCPP/packages.config
+@@ -1,4 +1,14 @@
+ ﻿<?xml version="1.0" encoding="utf-8"?>
+ <packages>
+-  <package id="Microsoft.Windows.CppWinRT" version="2.0.210312.4" targetFramework="native" />
++  <package id="Microsoft.Windows.CppWinRT" version="2.0.230706.1" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK" version="1.8.260508005" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.AI" version="1.8.76" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.Base" version="1.8.251216001" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.DWrite" version="1.8.25122902" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.Foundation" version="1.8.260505001" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.InteractiveExperiences" version="1.8.260430001" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.ML" version="1.8.2197" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.Runtime" version="1.8.260508005" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.Widgets" version="1.8.251231004" targetFramework="native" />
++  <package id="Microsoft.WindowsAppSDK.WinUI" version="1.8.260505002" targetFramework="native" />
+ </packages>
+\ No newline at end of file
+===================================================================
 --- /dev/null
 +++ b/react-native.config.js
-@@ -0,0 +1 @@
+@@ -0,0 +1,1 @@
 +module.exports = process.platform === "win32" ? { dependencies: { "react-native-windows": {} } } : {};
+===================================================================
+--- a/windows/RNCNetInfoCPP/RNCNetInfo.cpp
++++ b/windows/RNCNetInfoCPP/RNCNetInfo.cpp
+@@ -129,2 +129,2 @@
+-    IAsyncAction ChainGetNetworkStatus(IAsyncAction previousRequest, std::future<NetInfoState> currentRequest, std::function<void(NetInfoState)> onComplete) {
+-        auto state = co_await currentRequest;
++    IAsyncAction ChainGetNetworkStatus(IAsyncAction previousRequest, IAsyncAction currentRequest, std::shared_ptr<NetInfoState> result, std::function<void(NetInfoState)> onComplete) {
++        co_await currentRequest;
+@@ -134,1 +134,1 @@
+-        onComplete(state);
++        onComplete(*result);
+@@ -144,1 +144,2 @@
+-                auto currentRequest = GetNetworkStatus();
++                auto result = std::make_shared<NetInfoState>();
++                auto currentRequest = GetNetworkStatus(result);
+@@ -151,1 +152,1 @@
+-                    previousRequest = ChainGetNetworkStatus(previousRequest, std::move(currentRequest), callback);
++                    previousRequest = ChainGetNetworkStatus(previousRequest, std::move(currentRequest), result, callback);
+@@ -162,1 +163,6 @@
+-        promise.Resolve(co_await GetNetworkStatus(requestedInterface));
++        try {
++            auto result = std::make_shared<NetInfoState>();
++            co_await GetNetworkStatus(result, std::move(requestedInterface));
++            promise.Resolve(*result);
++        } catch (winrt::hresult_error const& error) { promise.Reject(error.message().c_str()); }
++        catch (std::exception const& error) { promise.Reject(error.what()); }
+@@ -165,1 +171,1 @@
+-    /*static*/ std::future<NetInfoState> RNCNetInfo::GetNetworkStatus(std::string const& requestedInterface) {
++    /*static*/ IAsyncAction RNCNetInfo::GetNetworkStatus(std::shared_ptr<NetInfoState> result, std::string requestedInterface) {
+@@ -242,1 +248,1 @@
+-        co_return state;
++        *result = std::move(state);
+===================================================================
+--- a/windows/RNCNetInfoCPP/RNCNetInfo.h
++++ b/windows/RNCNetInfoCPP/RNCNetInfo.h
+@@ -6,1 +6,2 @@
+-#include <future>
++#include <memory>
++#include <mutex>
+@@ -82,1 +83,1 @@
+-        static std::future<NetInfoState> GetNetworkStatus(std::string const& requestedInterface = "");
++        static winrt::Windows::Foundation::IAsyncAction GetNetworkStatus(std::shared_ptr<NetInfoState> result, std::string requestedInterface = "");
