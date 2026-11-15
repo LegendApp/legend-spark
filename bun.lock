@@ -62,7 +62,7 @@
         "react-native-enriched-markdown": "1.1.1",
         "react-native-nitro-image": "0.15.2",
         "react-native-nitro-modules": "0.37.0",
-        "react-native-vision-camera": "5.2.3",
+        "react-native-vision-camera": "5.2.4",
         "react-native-webview": "16.0.0",
         "react-test-renderer": "19.2.0",
         "tailwindcss": "4.2.4",
@@ -2551,7 +2551,7 @@
 
     "react-native-unistyles": ["react-native-unistyles@3.7.0", "", { "dependencies": { "@babel/types": "7.29.8" }, "peerDependencies": { "@react-native/normalize-colors": "*", "react": "*", "react-native": ">=0.81.0", "react-native-edge-to-edge": "*", "react-native-nitro-modules": "*", "react-native-reanimated": "*" }, "optionalPeers": ["react-native-edge-to-edge", "react-native-reanimated"] }, "sha512-Rh2MElgv2gCP/Q4BG0ztWz8iawH1BSyCgAvBRCpw10+lA8N8WqTT97rY4OgfJhB7m9eZLWUH2nQch2HfVNk3+Q=="],
 
-    "react-native-vision-camera": ["react-native-vision-camera@5.2.3", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-nitro-image": "*", "react-native-nitro-modules": "*" }, "optionalPeers": ["react-native-nitro-modules"] }, "sha512-OHjgM8BPzxppTqbF1FEltj+fxvisj4xdghM7ypoT1p6cOe28HByhOJP1c7LkBiUiZuotbsdbQwGdJ8nU7ZvPzA=="],
+    "react-native-vision-camera": ["react-native-vision-camera@5.2.4", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-nitro-image": "*", "react-native-nitro-modules": "*" }, "optionalPeers": ["react-native-nitro-modules"] }, "sha512-bYRSYkV61CgdvcB4MdBR2pCTzqWgYaKLbXAtvg0lDQtD7dUumiXhKw76q80cxlJb0Obimdj+HD1Fci9fCVvxbQ=="],
 
     "react-native-webview": ["react-native-webview@16.0.0", "", { "dependencies": { "escape-string-regexp": "^4.0.0", "invariant": "2.2.4" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-KIg5Yhy04lQfHdXC1JQPM+0kftMfPnH6AqDH7v6YskQ9kzfUacooofOFRmbaZHASq/0WY87Fx0peiFETFjOcCg=="],
 

@@ -1,11 +1,11 @@
 # Camera
 
-Apps install VisionCamera 5.2.3 and Nitro Image 0.15.2 directly, together with
+Apps install VisionCamera 5.2.4 and Nitro Image 0.15.2 directly, together with
 Nitro Modules 0.37.0. Spark ships version-pinned macOS compatibility patches
 and applies them automatically when the app depends on these libraries.
 
 ```sh
-bun add react-native-vision-camera@5.2.3 react-native-nitro-image@0.15.2 react-native-nitro-modules@0.37.0
+bun add react-native-vision-camera@5.2.4 react-native-nitro-image@0.15.2 react-native-nitro-modules@0.37.0
 ```
 
 ```tsx

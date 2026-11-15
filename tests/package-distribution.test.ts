@@ -97,7 +97,7 @@ test("single Spark archive resolves public exports and preserves private native 
     });
     const consumerDiagnostics = ts.getPreEmitDiagnostics(consumerProgram);
     expect(consumerDiagnostics.map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"))).toEqual([]);
-    writeFileSync(path.join(app, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": VERSION, "react-native-vision-camera": "5.2.3", "react-native-nitro-image": "0.15.2", "react-native-enriched-markdown": "1.1.1", "react-native-enriched-html": "1.1.1" } }));
+    writeFileSync(path.join(app, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": VERSION, "react-native-vision-camera": "5.2.4", "react-native-nitro-image": "0.15.2", "react-native-enriched-markdown": "1.1.1", "react-native-enriched-html": "1.1.1" } }));
     writeFileSync(path.join(app, "desktop.config.json"), JSON.stringify({ name: "Packed", version: "1.0.0", projectId: "packed-test", macos: { bundleIdentifier: "org.example.packed" }, platforms: ["macos"] }));
     const req = createRequire(path.join(app, "package.json"));
     const producer = createRequire(path.join(framework, "package.json"));
@@ -174,7 +174,7 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(existsSync(path.join(destination, "camera.ts"))).toBe(false);
     expect(readFileSync(path.join(destination, "postinstall.cjs"), "utf8")).toContain("./vendor/node_modules/@legendapp/spark-desktop-config/native-patches.cjs");
     for (const name of ["react-native-vision-camera", "react-native-nitro-image"]) {
-      expect(JSON.parse(readFileSync(path.join(app, "node_modules", name, "package.json"), "utf8")).spark.dependencyPatch.version).toBe(name === "react-native-vision-camera" ? "5.2.3" : "0.15.2");
+      expect(JSON.parse(readFileSync(path.join(app, "node_modules", name, "package.json"), "utf8")).spark.dependencyPatch.version).toBe(name === "react-native-vision-camera" ? "5.2.4" : "0.15.2");
       expect(existsSync(path.join(destination, "vendor/node_modules", name))).toBe(false);
       expect(readFileSync(path.join(destination, "patches/camera", `${name}.patch`))).toEqual(readFileSync(path.join(framework, "patches/camera", `${name}.patch`)));
     }
@@ -244,7 +244,7 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(selected.included.map(pkg => pkg.name)).toContain(menus.name);
     expect(selected.excluded.map(pkg => pkg.name)).toContain("@legendapp/spark-file-system");
     writeFileSync(path.join(app, "package.json"), JSON.stringify({ dependencies: {
-      "@legendapp/spark": VERSION, "react-native-vision-camera": "5.2.3", "react-native-nitro-image": "0.15.2",
+      "@legendapp/spark": VERSION, "react-native-vision-camera": "5.2.4", "react-native-nitro-image": "0.15.2",
     } }));
     writeFileSync(path.join(app, "desktop.config.json"), JSON.stringify({ name: "Packed", version: "1.0.0", projectId: "packed-test", platforms: ["windows"] }));
     expect(() => nativePackages(app)).toThrow("react-native-nitro-image has no Windows implementation");

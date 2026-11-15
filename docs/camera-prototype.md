@@ -1,6 +1,6 @@
 # VisionCamera macOS prototype
 
-This optional kitchen-sink example ports the published VisionCamera 5.2.3 packages to native AppKit on the framework's existing React Native version. It is a working compatibility prototype, not a claim of complete upstream macOS support.
+This optional kitchen-sink example ports the published VisionCamera 5.2.4 packages to native AppKit on the framework's existing React Native version. It is a working compatibility prototype, not a claim of complete upstream macOS support.
 
 ## Compatibility evidence
 
@@ -11,7 +11,7 @@ This optional kitchen-sink example ports the published VisionCamera 5.2.3 packag
 | React Native macOS | 0.81.7, Fabric/New Architecture |
 | Nitro Modules / Nitrogen | 0.37.0 with the checked-in patches |
 | Nitro Image | 0.15.2 with the checked-in patch |
-| VisionCamera | 5.2.3 with the checked-in patch |
+| VisionCamera | 5.2.4 with the checked-in patch |
 | Target | macOS 14+, arm64 |
 | Build environment | Xcode 26.6, macOS SDK 26.5 |
 

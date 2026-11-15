@@ -15,8 +15,8 @@
     "integrity": "sha512-WiaGnORmfNIIqtRJW76TWYNet1YZx1MWDlSOxd0jfcIBN4KjkVVMDVpvO01eCfpxKVG0ez9nA2iLQkPVlGFj+A=="
   },
   "react-native-vision-camera": {
-    "version": "5.2.3",
-    "url": "https://registry.npmjs.org/react-native-vision-camera/-/react-native-vision-camera-5.2.3.tgz",
-    "integrity": "sha512-OHjgM8BPzxppTqbF1FEltj+fxvisj4xdghM7ypoT1p6cOe28HByhOJP1c7LkBiUiZuotbsdbQwGdJ8nU7ZvPzA=="
+    "version": "5.2.4",
+    "url": "https://registry.npmjs.org/react-native-vision-camera/-/react-native-vision-camera-5.2.4.tgz",
+    "integrity": "sha512-bYRSYkV61CgdvcB4MdBR2pCTzqWgYaKLbXAtvg0lDQtD7dUumiXhKw76q80cxlJb0Obimdj+HD1Fci9fCVvxbQ=="
   }
 }
