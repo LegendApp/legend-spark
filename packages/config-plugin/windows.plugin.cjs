@@ -3,20 +3,22 @@ const { statePath } = require("./config.cjs");
 const fs = require('node:fs');
 const path = require('node:path');
 
-function patchHost(source, core, metadata, defaults = {}) {
+function unpatchHost(source) {
   source = source.replace(/\r\n/g, '\n').replace(/\n\/\/ BEGIN SPARK CORE[\s\S]*?\/\/ END SPARK CORE\n/g, '')
     .replace(/\n  \/\/ BEGIN SPARK TITLE[\s\S]*?\/\/ END SPARK TITLE\n/g, '')
     .replace(/\n  \/\/ BEGIN SPARK CONNECTION[\s\S]*?\/\/ END SPARK CONNECTION\n/g, '');
   source = source.replace(/\n    \/\/ BEGIN SPARK RUNTIMES[\s\S]*?\/\/ END SPARK RUNTIMES\n/g, '');
+  return source.replace(/\n  \/\/ BEGIN SPARK LAUNCH[\s\S]*?\/\/ END SPARK LAUNCH\n/g, "").replace("SparkWin::Initialize(reactNativeWin32App);", "appWindow.Resize({1000, 1000});");
+}
+function patchHost(source, core, metadata, defaults = {}) {
+  source = unpatchHost(source);
   const include = '#include "NativeModules.h"';
   const launchAnchor = 'winrt::init_apartment(winrt::apartment_type::single_threaded);';
   const anchor = 'auto settings{reactNativeWin32App.ReactNativeHost().InstanceSettings()};';
-  if (!source.includes(include) || !source.includes(anchor) || !source.includes(launchAnchor) || (!source.includes("SparkWin::Initialize(reactNativeWin32App);") && !/appWindow\.Resize\([^\n]+\);/.test(source))) throw new Error('The pinned Windows host template changed; cannot install the Spark host hooks.');
+  if (!source.includes(include) || !source.includes(anchor) || !source.includes(launchAnchor) || !/appWindow\.Resize\([^\n]+\);/.test(source)) throw new Error('The pinned Windows host template changed; cannot install the Spark host hooks.');
   if (!['go', 'dev'].includes(metadata.mode) || !/^[a-f0-9]{64}$/.test(metadata.fingerprint)) throw new Error('Invalid Windows runtime build metadata');
   source = source.replace(/appWindow\.Title\([^\n]+\);/, title => `${title}\n  // BEGIN SPARK TITLE\n  const auto sparkTitle = SparkWindowsEnv(L"SPARK_PROJECT_NAME");\n  if (!sparkTitle.empty()) appWindow.Title(sparkTitle);\n  // END SPARK TITLE\n`);
-  source = source.replace('SparkWin::Initialize(reactNativeWin32App);', 'appWindow.Resize({1000, 1000});');
   source = source.replace(/appWindow\.Resize\([^\n]+\);/, 'SparkWin::Initialize(reactNativeWin32App);');
-  source = source.replace(/\n  \/\/ BEGIN SPARK LAUNCH[\s\S]*?\/\/ END SPARK LAUNCH\n/g, '');
   source = source.replace('winrt::init_apartment(winrt::apartment_type::single_threaded);', 'winrt::init_apartment(winrt::apartment_type::single_threaded);\n  // BEGIN SPARK LAUNCH\n  try { SparkInitializeEnvironment(); if (SparkWin::ForwardLaunch()) return 0; SparkWin::InitializeToastActivation(); }\n  catch (winrt::hresult_error const &error) { MessageBoxW(nullptr, error.message().c_str(), L"Spark launch failed", MB_OK | MB_ICONERROR); return 1; }\n  // END SPARK LAUNCH\n');
   source = source.replace(anchor, `${anchor}\n  // BEGIN SPARK CONNECTION\n  settings.SourceBundleHost(L"127.0.0.1");\n  settings.SourceBundlePort(SparkMetroPort());\n  // END SPARK CONNECTION\n`);
   if (core.includes('static void RegisterRuntimeSurface(')) {
@@ -59,6 +61,7 @@ function withoutPackaging(source) {
 }
 module.exports.withoutPackaging = withoutPackaging;
 module.exports.patchHost = patchHost;
+module.exports.unpatchHost = unpatchHost;
 
 function unpackagedApp(document) {
   const project = document.find(node => node.Project)?.Project;

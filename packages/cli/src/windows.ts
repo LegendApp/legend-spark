@@ -15,12 +15,16 @@ import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 export async function preserveWindowsBuildOutputs(root: string, prepare: () => Promise<void>) {
   const windows = path.join(root, "windows");
   const outputs: string[] = [];
+  const hosts: { file: string; source: string }[] = [];
   function visit(directory: string) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (entry.isDirectory() && entry.name !== "node_modules") {
         const file = path.join(directory, entry.name);
-        if (/^(arm64|x64|x86|win32)$/i.test(entry.name)) outputs.push(file);
+        if (/^(arm64|x64|x86|win32)$/i.test(entry.name) || (directory === windows && entry.name.toLowerCase() === "packages")) outputs.push(file);
         else visit(file);
+      } else if (entry.isFile() && entry.name.endsWith(".cpp")) {
+        const file = path.join(directory, entry.name), source = readFileSync(file, "utf8");
+        if (source.includes("// BEGIN SPARK CORE")) hosts.push({ file, source });
       }
     }
   }
@@ -38,8 +42,14 @@ export async function preserveWindowsBuildOutputs(root: string, prepare: () => P
         moved.push({ source, saved });
       }
     }
-    // Expo beta scans existing output folders as templates, including .Xaml directories.
-    await prepare();
+    const { unpatchHost } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/windows.plugin.cjs");
+    for (const { file, source } of hosts) writeFileSync(file, unpatchHost(source));
+    // Expo renders Mustache in existing Windows sources as well as fresh templates.
+    try { await prepare(); }
+    catch (error) {
+      for (const { file, source } of hosts) writeFileSync(file, source);
+      throw error;
+    }
   } finally {
     for (const { source, saved } of moved) renameSync(saved, source);
     if (temporary) rmSync(temporary, { recursive: true });

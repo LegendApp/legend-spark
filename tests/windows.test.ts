@@ -219,7 +219,7 @@ test("Windows cold-launch defaults cannot terminate the embedded C++ string", ()
 
 for (const fail of [false, true]) test(`Windows prebuild preserves native outputs after ${fail ? "failure" : "success"}`, async () => {
   const f = fixture();
-  const outputs = ["windows/ARM64/Debug/Microsoft.UI.Xaml/resources.pri", "windows/MyApp/ARM64/Debug/MyApp.obj", "windows/x64/Debug/MyApp.exe"];
+  const outputs = ["windows/ARM64/Debug/Microsoft.UI.Xaml/resources.pri", "windows/MyApp/ARM64/Debug/MyApp.obj", "windows/x64/Debug/MyApp.exe", "windows/packages/Microsoft.WindowsAppSDK.WinUI/runtimes-framework/win-x64/native/Microsoft.UI.Xaml/resources.pri"];
   try {
     for (const output of outputs) {
       mkdirSync(path.dirname(path.join(f.root, output)), { recursive: true });
@@ -300,4 +300,25 @@ test("default Windows package and app GUIDs stay distinct when removing packagin
   const packaging = `Project("{TYPE}") = "MyApp.Package", "MyApp.Package\\MyApp.Package.wapproj", "{${windows.packageGuid}}"\r\nEndProject\r\n`;
   const config = `{${windows.projectGuid}}.Debug.Build.0 = Debug|ARM64\r\n`;
   expect(withoutPackaging(project + packaging + config + `{${windows.packageGuid}}.Debug.Build.0 = Debug|ARM64\r\n`)).toBe(project + config);
+});
+
+for (const fail of [false, true]) test(`Windows prebuild protects managed host source after ${fail ? "failure" : "success"}`, async () => {
+  const f = fixture();
+  try {
+    const source = '#include "NativeModules.h"\nwinrt::init_apartment(winrt::apartment_type::single_threaded);\nappWindow.Title(L"App");\nappWindow.Resize({1000, 1000});\nauto settings{reactNativeWin32App.ReactNativeHost().InstanceSettings()};\n';
+    const core = 'constexpr int values[2]{{1, 2}};\nconst char* metadata = R"(__SPARK_METADATA__)";';
+    const file = path.join(f.root, "windows/MyApp/MyApp.cpp");
+    mkdirSync(path.dirname(file), { recursive: true });
+    const original = patchHost(source, core, { mode: "dev", fingerprint: "a".repeat(64) });
+    writeFileSync(file, original);
+    const prepare = preserveWindowsBuildOutputs(f.root, async () => {
+      const bare = readFileSync(file, "utf8");
+      expect(bare).not.toContain("BEGIN SPARK CORE");
+      if (fail) { writeFileSync(file, ""); throw new Error("partial prebuild"); }
+      const rendered = require("mustache").render(bare, {});
+      writeFileSync(file, patchHost(rendered, core, { mode: "dev", fingerprint: "b".repeat(64) }));
+    });
+    if (fail) { await expect(prepare).rejects.toThrow("partial prebuild"); expect(readFileSync(file, "utf8")).toBe(original); }
+    else { await prepare; expect(readFileSync(file, "utf8")).toContain("values[2]{{1, 2}}"); expect(readFileSync(file, "utf8")).toContain("b".repeat(64)); }
+  } finally { f.close(); }
 });
