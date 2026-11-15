@@ -44,6 +44,23 @@ export async function preserveWindowsBuildOutputs(root: string, prepare: () => P
     if (temporary) rmSync(temporary, { recursive: true });
   }
 }
+export function configureWindowsCommands(root: string) {
+  const file = path.join(root, "windows", "ExperimentalFeatures.props");
+  const original = readFileSync(file, "utf8");
+  if (!original.includes("</Project>")) throw new Error("The Windows template has no ExperimentalFeatures project element");
+  const cli = nodeCommand(root, "@react-native-community/cli", "rnc-cli")[1]!;
+  const escaped = cli.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const newline = original.includes("\r\n") ? "\r\n" : "\n";
+  const group = [
+    '  <PropertyGroup Label="SparkCLI">',
+    '    <CodegenCommand Condition="\'$(CodegenCommand)\' == \'\'">node &quot;' + escaped + '&quot; codegen-windows</CodegenCommand>',
+    '    <AutolinkCommand Condition="\'$(AutolinkCommand)\' == \'\'">node &quot;' + escaped + '&quot; autolink-windows</AutolinkCommand>',
+    '  </PropertyGroup>',
+  ].join(newline);
+  const source = original.replace(/\r?\n  <PropertyGroup Label="SparkCLI">[\s\S]*?<\/PropertyGroup>\r?\n/g, "");
+  const next = source.replace("</Project>", newline + group + newline + "</Project>");
+  if (next !== original) writeFileSync(file, next);
+}
 export async function prepareWindows(root: string, mode: "go" | "dev") {
   await ensurePatchRegistry(root);
   assertNativePatchPreflight(root);
@@ -68,6 +85,7 @@ export async function prepareWindows(root: string, mode: "go" | "dev") {
   } finally {
     writeFileSync(path.join(root, "package.json"), manifest);
   }
+  configureWindowsCommands(root);
   return runtime;
 }
 export async function buildWindows(root: string, mode: string, force: boolean): Promise<{ app: string; runtime: Runtime }> {

@@ -1,11 +1,12 @@
 import { test, expect, onTestFinished, vi } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { nativePackages, runtimeFor, incompatible, writeJson, VERSION } from "../packages/cli/src/project.ts";
 import { readRuntime, findGo, registerRuntime } from "../packages/cli/src/local.ts";
 import { architecture, projectPlatform, windowsArchitecture } from "../packages/cli/src/platform.ts";
-import { buildWindows, isWindowsDebugProduct, preserveWindowsBuildOutputs } from "../packages/cli/src/windows.ts";
+import { buildWindows, configureWindowsCommands, isWindowsDebugProduct, preserveWindowsBuildOutputs } from "../packages/cli/src/windows.ts";
+import { spawnSync } from "node:child_process";
 const { patchHost, withoutPackaging, unpackagedApp } = require("../packages/config-plugin/windows.plugin.cjs");
 function fixture() {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-windows-test-"));
@@ -13,6 +14,27 @@ function fixture() {
   writeJson(path.join(root, "app.json"), { expo: { name: "App", platforms: ["windows"] } });
   return { root, close: () => rmSync(root, { recursive: true, force: true }) };
 }
+test("Windows native commands use the installed CLI across quoted paths and preserve their working directory", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark cli & space-"));
+  try {
+    writeJson(path.join(root, "package.json"), { dependencies: { probe: "file:direct" }, overrides: { probe: "file:different" } });
+    writeJson(path.join(root, "node_modules/@react-native-community/cli/package.json"), { name: "@react-native-community/cli", bin: { "rnc-cli": "cli.js" } });
+    writeFileSync(path.join(root, "node_modules/@react-native-community/cli/cli.js"), 'process.stdout.write(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));');
+    mkdirSync(path.join(root, "windows"));
+    mkdirSync(path.join(root, "library"));
+    const file = path.join(root, "windows/ExperimentalFeatures.props");
+    writeFileSync(file, '<Project>\r\n</Project>\r\n');
+    configureWindowsCommands(root);
+    const first = readFileSync(file, "utf8");
+    configureWindowsCommands(root);
+    expect(readFileSync(file, "utf8")).toBe(first);
+    const command = first.match(/<CodegenCommand[^>]*>(.*?)<\/CodegenCommand>/)![1]!.replaceAll("&quot;", '"').replaceAll("&amp;", "&");
+    const child = spawnSync(command + " --logging", { cwd: path.join(root, "library"), shell: true, encoding: "utf8" });
+    expect(child.status, child.stderr).toBe(0);
+    expect(JSON.parse(child.stdout)).toEqual({ cwd: realpathSync(path.join(root, "library")), args: ["codegen-windows", "--logging"] });
+    expect(first).toContain('Condition="\'$(AutolinkCommand)\' == \'\'"');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 test("Windows uses the shared graph and runtime identity, including native source changes", () => {
   const f = fixture();
   try {
