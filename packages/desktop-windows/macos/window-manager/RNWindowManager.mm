@@ -1785,6 +1785,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
   toolbarItem.view = control;
   toolbarItem.label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
   toolbarItem.paletteLabel = toolbarItem.label;
+  if (@available(macOS 11.0, *)) {
+    toolbarItem.navigational = [config[@"placement"] isEqual:@"leading"];
+  }
   return toolbarItem;
 }
 
