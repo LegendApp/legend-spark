@@ -9,6 +9,8 @@ import { buildWindows, isWindowsDebugProduct, preserveWindowsBuildOutputs } from
 const { patchHost, withoutPackaging, unpackagedApp } = require("../packages/config-plugin/windows.plugin.cjs");
 function fixture() {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-windows-test-"));
+  // Bun's resolver caches a missing node_modules for the run, hiding packages a test installs later.
+  mkdirSync(path.join(root, "node_modules"));
   writeJson(path.join(root, "package.json"), { name: "app", dependencies: {} });
   writeJson(path.join(root, "app.json"), { expo: { name: "App", platforms: ["windows"] } });
   return { root, close: () => rmSync(root, { recursive: true, force: true }) };
