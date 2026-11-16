@@ -299,9 +299,7 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   _tableView.rowHeight = _defaultRowHeight;
   _tableView.usesAlternatingRowBackgroundColors = NO;
 
-  if (@available(macOS 11.0, *)) {
-    _tableView.style = NSTableViewStyleSourceList;
-  }
+  _tableView.style = NSTableViewStyleSourceList;
   // Follows the React layout direction (updateLayoutMetrics), not the application's.
   _tableView.userInterfaceLayoutDirection = NSUserInterfaceLayoutDirectionLeftToRight;
 
@@ -632,6 +630,10 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   if (itemsChanged) _dataItems = [self itemsFromJson:newProps.itemsJson];
   _selectedId = [NSString stringWithUTF8String:newProps.selectedId.c_str()];
   _scrollView.contentInsets = NSEdgeInsetsMake(_contentInsetTop, 0, 0, 0);
+  if (!previous || newProps.listStyle != previous->listStyle) {
+    _tableView.style = newProps.listStyle == SidebarListStyle::Plain ? NSTableViewStylePlain : NSTableViewStyleSourceList;
+    [self setNeedsLayout:YES];
+  }
   if (rowsChanged) [self reloadRows];
   else if (newProps.selectedId != previous->selectedId || newProps.selectionRevision != previous->selectionRevision) [self updateSelection];
   if (!previous || newProps.contentInsetTop != previous->contentInsetTop) [self setNeedsLayout:YES];

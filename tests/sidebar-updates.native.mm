@@ -10,7 +10,9 @@
 namespace facebook::react {
 struct Props { using Shared = std::shared_ptr<Props const>; virtual ~Props() = default; };
 // Codegen defaults: empty strings, zero numbers, false booleans.
+enum class SidebarListStyle { Sidebar, Plain };
 struct SidebarProps : Props {
+  SidebarListStyle listStyle = SidebarListStyle::Sidebar;
   std::string itemsJson, selectedId;
   int selectionRevision = 0;
   double contentInsetTop = 0, defaultRowHeight = 0;
@@ -150,6 +152,15 @@ int main() { @autoreleasepool {
   CHECK(Table(data).numberOfRows == 0 && Table(data).selectedRow == -1);
   CHECK([[data valueForKey:@"scrollView"] contentInsets].top == 0);
   CHECK(Table(data).rowHeight == 28);
+
+  // List style: the source list is the default; plain drops the sidebar material and insets for lists inside content.
+  CHECK(Table(data).style == NSTableViewStyleSourceList);
+  auto plain = std::make_shared<SidebarProps>(*items); plain->listStyle = SidebarListStyle::Plain;
+  [data updateProps:plain oldProps:nullptr];
+  CHECK(Table(data).style == NSTableViewStylePlain && Table(data).selectionHighlightStyle == NSTableViewSelectionHighlightStyleRegular);
+  CHECK(Table(data).selectedRow == 2);
+  [data updateProps:items oldProps:plain];
+  CHECK(Table(data).style == NSTableViewStyleSourceList);
 
   // React rows: fixed, measured (autoHeight) and default heights; selection by item id.
   RNSidebar *rows = [RNSidebar new];

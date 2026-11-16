@@ -136,6 +136,14 @@ test("sidebar data selection can be cleared and unknown/disabled choices reject"
   expect(onSelectionChange).toHaveBeenCalledWith({ id: null }); native = rendered.root.findByType("Sidebar").props; expect(native.selectedId).toBe("a"); expect(native.selectionRevision).toBe(1);
   native.onSidebarSelectionChange({ nativeEvent: { id: "b" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onSelectionChange).toHaveBeenCalledTimes(1);
 });
+test("sidebar list style defaults to the source list, passes plain through and rejects unknown styles", async () => {
+  const items = [{ id: "a", label: "A" }], onSelectionChange = vi.fn();
+  await mount(React.createElement(Sidebar, { items, selectedId: "a", onSelectionChange }));
+  expect(rendered.root.findByType("Sidebar").props.listStyle).toBe("sidebar");
+  await act(async () => rendered.update(React.createElement(Sidebar, { items, selectedId: "a", onSelectionChange, listStyle: "plain" })));
+  expect(rendered.root.findByType("Sidebar").props.listStyle).toBe("plain");
+  await expect(mount(React.createElement(Sidebar, { items, selectedId: "a", onSelectionChange, listStyle: "inset" } as never))).rejects.toThrow("Invalid sidebar list style");
+});
 test("sidebar selection has no silent write path", async () => {
   await expect(mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A" }], selectedId: null } as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
   await expect(mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A" }], selectedId: null, onSelectionChange: "nope" } as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
