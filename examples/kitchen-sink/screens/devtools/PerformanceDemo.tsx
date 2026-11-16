@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, TurboModuleRegistry } from "react-native";
+import { Platform, ScrollView, Text, TurboModuleRegistry } from "react-native";
 import performance from "react-native-performance";
 
 // Test IDs: devtools-performance-passed, or -failed with the failing cases.
 // The native startup marks (nativeLaunchStart, runJsBundleEnd…) come from the legacy bridge's performance logger,
 // which Spark's bridgeless host doesn't create, so the screen lists what arrived without requiring them.
+// Windows has no native module upstream: User Timing still runs in JavaScript, and the screen says so.
+const windows = Platform.OS === "windows";
 const ID = "devtools-performance";
 
 async function check() {
@@ -14,9 +16,9 @@ async function check() {
   const measure = performance.measure("ks-span", "ks-start", "ks-end");
   const native = performance.getEntriesByType("react-native-mark").map(entry => entry.name);
   return {
-    info: `measure ${measure.duration.toFixed(1)} ms; native marks: ${native.join(", ") || "none"}`,
+    info: `measure ${measure.duration.toFixed(1)} ms; native marks: ${native.join(", ") || "none"}${windows ? "; no native module on Windows: User Timing only, native marks and metrics are unavailable" : ""}`,
     failures: [
-      !TurboModuleRegistry.get("RNPerformanceManager") && "native module not linked",
+      !windows && !TurboModuleRegistry.get("RNPerformanceManager") && "native module not linked",
       !(measure.duration >= 15) && `measure duration (${measure.duration})`,
       (performance.getEntriesByName("ks-end")[0] as { detail?: { screen?: string } } | undefined)?.detail?.screen !== "performance" && "mark detail",
       performance.getEntriesByName("ks-span", "measure").length !== 1 && "measure entry",
