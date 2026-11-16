@@ -83,6 +83,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 | [React Native Paper](https://github.com/callstack/react-native-paper) | `react-native-paper` | Renders on macOS (5.15.4) without a patch: Material Design 3 cards, buttons and chips under `PaperProvider`. Two visual gaps remain: `Switch` draws as an empty track, and a `TextInput` with an initial value leaves its label over the text instead of floating it. Components that draw icons were not tested. |
 | [Toast Message](https://github.com/calintamas/react-native-toast-message) | `react-native-toast-message` | Works on macOS (2.5.2) without a patch: `Toast.show()` animates a toast in and calls `onShow`. |
 | [Modal](https://github.com/react-native-modal/react-native-modal) | `react-native-modal` | Install 14.0.0-rc.1 (its `latest` tag) and pass `coverScreen={false}` on macOS: the default mounts React Native's core `Modal`, which Spark's macOS host doesn't support yet (rendering it raises an error). With `coverScreen={false}` the modal draws inside its parent, so place it at the root of the window's content; the backdrop, animations, `onModalShow` and `onModalHide` work. |
+| [Animatable](https://github.com/oblador/react-native-animatable) | `react-native-animatable` | Works on macOS (1.4.0) without a patch: declarative animations on `Animated`, with `onAnimationEnd`. |
 
 ## Optional backend dependencies
 
