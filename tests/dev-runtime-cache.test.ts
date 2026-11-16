@@ -21,6 +21,7 @@ function session(startupFailure = false) {
   const prepareConfig = vi.fn(() => { if (startupFailure) throw new Error("startup stopped"); });
   const modules: Record<string, unknown> = {
     "./runtime-input-cache.ts": { createRuntimeInputCache: () => cache },
+    "@legendapp/spark-desktop-config/patch-registry.cjs": { async ensurePatchRegistry() {} },
     "./native-patch-preflight.ts": { assertNativePatchPreflight() {} },
     "./platform.ts": { projectPlatform: () => "macos", architecture: () => "arm64" },
     "./project.ts": {
