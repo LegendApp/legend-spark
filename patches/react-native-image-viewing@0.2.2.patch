@@ -8,3 +8,13 @@ index 0000000..36adc48
 + * macOS uses the iOS item: a zoomable ScrollView with double-tap zoom and swipe to close.
 + */
 +export { default } from "./ImageItem.ios";
+diff --git a/dist/components/ImageItem/ImageItem.windows.js b/dist/components/ImageItem/ImageItem.windows.js
+new file mode 100644
+index 0000000..b3f1e9a
+--- /dev/null
++++ b/dist/components/ImageItem/ImageItem.windows.js
+@@ -0,0 +1,4 @@
++/**
++ * Windows uses the Android item: Animated and PanResponder only, so dragging closes and double-click zooms.
++ */
++export { default } from "./ImageItem.android";
