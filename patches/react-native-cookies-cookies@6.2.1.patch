@@ -1,0 +1,26 @@
+diff --git a/index.js b/index.js
+index 84c890a..a3e9cd1 100644
+--- a/index.js
++++ b/index.js
+@@ -12,7 +12,7 @@ const RNCookieManagerAndroid = NativeModules.RNCookieManagerAndroid;
+ 
+ let CookieManager;
+ 
+-if (Platform.OS === 'ios') {
++if (Platform.OS === 'ios' || Platform.OS === 'macos') {
+   invariant(
+     RNCookieManagerIOS,
+     '@react-native-community/cookies: Add RNCookieManagerIOS.h and RNCookieManagerIOS.m to your Xcode project',
+diff --git a/react-native-cookies.podspec b/react-native-cookies.podspec
+index ec1b754..ca4f59c 100644
+--- a/react-native-cookies.podspec
++++ b/react-native-cookies.podspec
+@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
+   s.author              = { package["author"]["name"] => package["author"]["email"] }
+   s.source              = { :git => "git@github.com:react-native-community/cookies.git", :tag => "v#{s.version}" }
+   s.requires_arc        = true
+-  s.platform            = :ios, "7.0"
++  s.platforms           = { :ios => "7.0", :osx => "11.0" }
+   s.preserve_paths      = "*.framework"
+   s.source_files        = "ios/**/*.{h,m}"
+   s.dependency "React-Core"

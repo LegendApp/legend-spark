@@ -16,3 +16,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-community-netinfo.md"
+  WEB-COOKIES-01:
+    title: "@react-native-cookies/cookies sets, reads and clears cookies in the shared and WebKit cookie stores on macOS"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

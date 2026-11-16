@@ -297,5 +297,12 @@
     "integrity": "sha512-ARgGZpjxfCGPFByL5i9EB/tzwZIVesm0a30yyV/yvYPk1SbEjQqAQpIn55ZYEh9qO7GKinR5zQ7HUM1rAHwHYg==",
     "patch": "react-native-performance@7.0.0.patch",
     "optional": true
+  },
+  "@react-native-cookies/cookies": {
+    "version": "6.2.1",
+    "url": "https://registry.npmjs.org/@react-native-cookies/cookies/-/cookies-6.2.1.tgz",
+    "integrity": "sha512-D17wCA0DXJkGJIxkL74Qs9sZ3sA+c+kCoGmXVknW7bVw/W+Vv1m/7mWTNi9DLBZSRddhzYw8SU0aJapIaM/g5w==",
+    "patch": "react-native-cookies-cookies@6.2.1.patch",
+    "optional": true
   }
 }

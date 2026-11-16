@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@react-native-cookies/cookies on macOS"
+intent: >
+  The Cookies screen sets, reads, lists and clears a cookie in NSHTTPCookieStorage and in WebKit's data store.
+checks: [WEB-COOKIES-01]
+tags: [networking-webview]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://networking-webview/cookies" }
+- extendedWaitUntil: { visible: { id: networking-webview-cookies-passed }, timeout: 10s }

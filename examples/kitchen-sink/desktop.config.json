@@ -73,6 +73,7 @@
           "react-native-linear-gradient",
           "react-native-restart",
           "react-native-performance",
+          "@react-native-cookies/cookies",
           "@sentry/react-native",
           "@shopify/react-native-skia",
           "expo-application",

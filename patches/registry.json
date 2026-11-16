@@ -72,6 +72,19 @@
         }
       ]
     },
+    "@react-native-cookies/cookies": {
+      "kind": "patch",
+      "versions": [
+        {
+          "version": "6.2.1",
+          "minSpark": "0.0.4",
+          "patch": "react-native-cookies-cookies@6.2.1.patch",
+          "integrity": "sha512-D17wCA0DXJkGJIxkL74Qs9sZ3sA+c+kCoGmXVknW7bVw/W+Vv1m/7mWTNi9DLBZSRddhzYw8SU0aJapIaM/g5w==",
+          "optional": true,
+          "sha256": "34cf370886305e81c94747a3d1938fa525408ab1e58a629dbe128bbefcdeec30"
+        }
+      ]
+    },
     "@react-native-masked-view/masked-view": {
       "kind": "patch",
       "versions": [

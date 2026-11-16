@@ -135,7 +135,8 @@
     "@dr.pogodin/react-native-fs": "2.40.4",
     "react-native-linear-gradient": "2.8.3",
     "react-native-restart": "0.0.29",
-    "react-native-performance": "7.0.0"
+    "react-native-performance": "7.0.0",
+    "@react-native-cookies/cookies": "6.2.1"
   },
   "expo": {
     "install": {
