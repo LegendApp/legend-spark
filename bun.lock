@@ -175,6 +175,7 @@
         "react-native-safe-area-context": "5.6.2",
         "react-native-screen-corner-radius": "0.2.3",
         "react-native-screens": "4.23.0",
+        "react-native-signature-canvas": "5.1.1",
         "react-native-svg": "15.15.3",
         "react-native-toast-message": "2.5.2",
         "react-native-tracking-transparency": "0.1.2",
@@ -2600,6 +2601,8 @@
     "react-native-screen-corner-radius": ["react-native-screen-corner-radius@0.2.3", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-8JgiHI/S2Xf6swquEjopHW//wI4a/nV/dEImJMR8YXQVWVdnjbhcMi0NGk1s1cW8xuunwlFT173PozsS3Gvgxg=="],
 
     "react-native-screens": ["react-native-screens@4.23.0", "", { "dependencies": { "react-freeze": "^1.0.0", "warn-once": "^0.1.0" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-XhO3aK0UeLpBn4kLecd+J+EDeRRJlI/Ro9Fze06vo1q163VeYtzfU9QS09/VyDFMWR1qxDC1iazCArTPSFFiPw=="],
+
+    "react-native-signature-canvas": ["react-native-signature-canvas@5.1.1", "", { "peerDependencies": { "react-native-webview": ">=13" } }, "sha512-Z6+sZ7zseZvPBiMSdbPlDIqJ0rVXE8yKIw/5HRqSJmXAQGLWTUVLDcTi0zeh+32T84TB1L6rLFp6nWpef+sMMA=="],
 
     "react-native-skia-android": ["react-native-skia-android@154.0.0", "", {}, "sha512-brjJaJcrYguSOwdbvMBlh+tHJdIvzOMUZSjTmIpiIe4/V9x0HsBZM9sy3q32+WGoSPWibylR7hbDmaO12EYAUA=="],
 

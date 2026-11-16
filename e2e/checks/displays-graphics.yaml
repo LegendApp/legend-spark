@@ -91,3 +91,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  DISP-SIGNATURE-01:
+    title: react-native-signature-canvas loads its pad in react-native-webview and reports an empty pad through the bridge on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

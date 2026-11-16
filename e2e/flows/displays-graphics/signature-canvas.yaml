@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-signature-canvas on macOS
+intent: >
+  The screen reads the untouched pad through the WebView bridge until it answers, and it reports empty (drawing needs a pointer).
+checks: [DISP-SIGNATURE-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/signature-canvas" }
+- extendedWaitUntil: { visible: { id: displays-graphics-signature-canvas-empty }, timeout: 15s }
