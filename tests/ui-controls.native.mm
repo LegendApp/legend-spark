@@ -11,8 +11,12 @@ struct SparkTextInputProps : Props {
   int eventCount = 0;
 };
 struct TextInputSearchProps : SparkTextInputProps { std::string appearance, placeholder; };
-struct SFSymbolProps : Props { std::string name, scale, accessibilityLabel; double size = 24, yOffset = 0; int color = 0; };
-int redFromColor(int value) { return 0; } int greenFromColor(int value) { return 0; } int blueFromColor(int value) { return 0; } int alphaFromColor(int value) { return 255; }
+// Mirrors react-native-macos: SharedColor wraps an NSColor, and the *FromColor helpers call -getRed:..., which throws for catalog and dynamic colors.
+struct SharedColor { NSColor *color; explicit operator bool() const { return color != nil; } };
+static int channel(SharedColor value, int index) { CGFloat c[4]; [value.color getRed:&c[0] green:&c[1] blue:&c[2] alpha:&c[3]]; return (int)(c[index] * 255); }
+int redFromColor(SharedColor value) { return channel(value, 0); } int greenFromColor(SharedColor value) { return channel(value, 1); }
+int blueFromColor(SharedColor value) { return channel(value, 2); } int alphaFromColor(SharedColor value) { return channel(value, 3); }
+struct SFSymbolProps : Props { std::string name, scale, accessibilityLabel; double size = 24, yOffset = 0; SharedColor color{}; };
 struct NativeSelectProps : Props { std::string itemsJson, value, accessibilityLabel, testId; bool enabled = true; };
 struct NativeSegmentedControlProps : Props { std::string segmentsJson, value, accessibilityLabel, testId; bool enabled = true; };
 struct EventEmitter { using Shared = std::shared_ptr<const EventEmitter>; virtual ~EventEmitter() = default; };
@@ -47,6 +51,7 @@ struct SparkTextInputComponentDescriptor {};
 template<class T> int concreteComponentDescriptorProvider() { return 0; }
 }
 using namespace facebook::react;
+static NSColor *RCTUIColorFromSharedColor(const SharedColor &value) { return value.color; }
 @interface RCTViewComponentView : NSView {
 @public
   Props::Shared _props;
@@ -132,6 +137,12 @@ int main() { @autoreleasepool {
   [symbol updateProps:symbolProps oldProps:symbol->_props]; assert(missingSymbols == 1);
   symbolProps->name = "doc"; [symbol updateProps:symbolProps oldProps:symbol->_props];
   symbolProps->name = "__spark_missing_symbol__"; [symbol updateProps:symbolProps oldProps:symbol->_props]; assert(missingSymbols == 2);
+  // PlatformColor and asset-catalog colors keep their dynamic NSColor instead of being flattened (or throwing).
+  NSImageView *tinted = [symbol valueForKey:@"imageView"]; symbolProps->name = "doc";
+  for (NSColor *color in @[NSColor.systemRedColor, NSColor.controlAccentColor, [NSColor colorWithCatalogName:@"System" colorName:@"labelColor"], [NSColor colorWithSRGBRed:0.2 green:0.4 blue:0.6 alpha:1]]) {
+    symbolProps->color = SharedColor{color}; [symbol updateProps:symbolProps oldProps:symbol->_props]; assert([tinted.contentTintColor isEqual:color]);
+  }
+  symbolProps->color = SharedColor{}; [symbol updateProps:symbolProps oldProps:symbol->_props]; assert([tinted.contentTintColor isEqual:NSColor.labelColor]);
   // Layout direction: Fabric's resolved direction reaches each AppKit control and follows later updates.
   LayoutMetrics ltr{LayoutDirection::LeftToRight}, rtl{LayoutDirection::RightToLeft};
   const auto R = NSUserInterfaceLayoutDirectionRightToLeft, L = NSUserInterfaceLayoutDirectionLeftToRight;

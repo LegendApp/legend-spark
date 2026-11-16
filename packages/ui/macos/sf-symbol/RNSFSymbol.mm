@@ -1,6 +1,8 @@
 #import "RNSFSymbol.h"
 #import "RNSparkLayoutDirection.h"
 
+#import <React/RCTConversions.h>
+
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/Props.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
@@ -66,12 +68,7 @@ using namespace facebook::react;
   _imageView.symbolConfiguration = [NSImageSymbolConfiguration configurationWithPointSize:_size
                                                                                   weight:NSFontWeightRegular
                                                                                    scale:symbolScale];
-  _imageView.contentTintColor = newProps.color
-    ? [NSColor colorWithRed:(CGFloat)redFromColor(newProps.color) / 255.0
-                      green:(CGFloat)greenFromColor(newProps.color) / 255.0
-                       blue:(CGFloat)blueFromColor(newProps.color) / 255.0
-                      alpha:(CGFloat)alphaFromColor(newProps.color) / 255.0]
-    : NSColor.labelColor;
+  _imageView.contentTintColor = RCTUIColorFromSharedColor(newProps.color) ?: NSColor.labelColor;
 #else
   if (@available(iOS 13.0, *)) {
     UIImageSymbolScale symbolScale = UIImageSymbolScaleMedium;
@@ -85,12 +82,7 @@ using namespace facebook::react;
       [UIImageSymbolConfiguration configurationWithPointSize:_size weight:UIImageSymbolWeightRegular scale:symbolScale];
     _imageView.image = [[[UIImage systemImageNamed:_symbolName] imageWithConfiguration:configuration]
       imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    _imageView.tintColor = newProps.color
-      ? [UIColor colorWithRed:(CGFloat)redFromColor(newProps.color) / 255.0
-                        green:(CGFloat)greenFromColor(newProps.color) / 255.0
-                         blue:(CGFloat)blueFromColor(newProps.color) / 255.0
-                        alpha:(CGFloat)alphaFromColor(newProps.color) / 255.0]
-      : UIColor.labelColor;
+    _imageView.tintColor = RCTUIColorFromSharedColor(newProps.color) ?: UIColor.labelColor;
   }
 #endif
 
