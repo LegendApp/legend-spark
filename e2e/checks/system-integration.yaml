@@ -100,3 +100,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  SYS-GEOLOCATION-01:
+    title: "@react-native-community/geolocation links its CoreLocation module and accepts configuration on macOS"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

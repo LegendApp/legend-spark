@@ -137,6 +137,7 @@
     "react-native-restart": "0.0.29",
     "react-native-performance": "7.0.0",
     "@react-native-cookies/cookies": "6.2.1",
+    "@react-native-community/geolocation": "3.4.0",
     "react-native-config": "1.7.2"
   },
   "expo": {

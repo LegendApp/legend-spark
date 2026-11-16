@@ -1,0 +1,29 @@
+diff --git a/ios/RNCGeolocation.mm b/ios/RNCGeolocation.mm
+index 03df64d..f2b4f93 100644
+--- a/ios/RNCGeolocation.mm
++++ b/ios/RNCGeolocation.mm
+@@ -21,6 +21,11 @@
+ #import <React/RCTEventDispatcher.h>
+ #import <React/RCTLog.h>
+ 
++#if TARGET_OS_OSX
++// macOS has one granted state, kCLAuthorizationStatusAuthorized (the value of AuthorizedAlways).
++#define kCLAuthorizationStatusAuthorizedWhenInUse kCLAuthorizationStatusAuthorizedAlways
++#endif
++
+ typedef NS_ENUM(NSInteger, RNCPositionErrorCode) {
+   RNCPositionErrorDenied = 1,
+   RNCPositionErrorUnavailable,
+diff --git a/react-native-geolocation.podspec b/react-native-geolocation.podspec
+index df45e6d..75f33f1 100644
+--- a/react-native-geolocation.podspec
++++ b/react-native-geolocation.podspec
+@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
+ 
+   s.authors      = package['author']
+   s.homepage     = package['homepage']
+-  s.platforms     = { :ios => '9.0', :visionos => '1.0' }
++  s.platforms     = { :ios => '9.0', :visionos => '1.0', :osx => '11.0' }
+ 
+   s.source       = { :git => "https://github.com/react-native-community/react-native-geolocation.git", :tag => "v#{s.version}" }
+   s.source_files  = "ios/**/*.{h,m,mm}"

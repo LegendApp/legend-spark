@@ -59,6 +59,19 @@
         }
       ]
     },
+    "@react-native-community/geolocation": {
+      "kind": "patch",
+      "versions": [
+        {
+          "version": "3.4.0",
+          "minSpark": "0.0.4",
+          "patch": "react-native-community-geolocation@3.4.0.patch",
+          "integrity": "sha512-bzZH89/cwmpkPMKKveoC72C4JH0yF4St5Ceg/ZM9pA1SqX9MlRIrIrrOGZ/+yi++xAvFDiYfihtn9TvXWU9/rA==",
+          "optional": true,
+          "sha256": "d81bd06d80e090adc3faec3074c6b73429298ee45ca0ec630f4b8607d23ebf45"
+        }
+      ]
+    },
     "@react-native-community/netinfo": {
       "kind": "patch",
       "versions": [

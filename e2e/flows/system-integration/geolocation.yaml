@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@react-native-community/geolocation on macOS"
+intent: >
+  The Geolocation screen configures the library without asking for permission. Locating needs a person to answer
+  the permission prompt.
+checks: [SYS-GEOLOCATION-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/geolocation" }
+- extendedWaitUntil: { visible: { id: system-integration-geolocation-passed }, timeout: 10s }
