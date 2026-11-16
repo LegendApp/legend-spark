@@ -81,3 +81,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  DISP-QRCODE-01:
+    title: react-native-qrcode-svg generates and draws a QR code without errors on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-qrcode-svg on macOS
+intent: >
+  The QR code screen draws a 160-point code for a URL.
+checks: [DISP-QRCODE-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/qrcode" }
+- extendedWaitUntil: { visible: { id: displays-graphics-qrcode-drawn }, timeout: 10s }
+- takeScreenshot: qrcode

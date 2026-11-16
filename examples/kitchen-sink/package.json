@@ -122,7 +122,8 @@
     "punycode": "2.3.1",
     "react-native-calendars": "1.1314.0",
     "lucide-react-native": "1.73.0",
-    "phosphor-react-native": "3.0.6"
+    "phosphor-react-native": "3.0.6",
+    "react-native-qrcode-svg": "6.3.54"
   },
   "expo": {
     "install": {
