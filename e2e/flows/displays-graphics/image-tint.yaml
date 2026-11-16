@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: React Native Image tintColor on macOS
+intent: >
+  The Image tint screen loads a black arrow on a transparent background three times: plain, tinted blue, and tinted
+  blue then red after loading. Only the arrows take the tint; the yellow boxes show around them (screenshot).
+checks: [DISP-IMAGETINT-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/image-tint" }
+- extendedWaitUntil: { visible: { id: displays-graphics-image-tint-loaded }, timeout: 10s }
+- takeScreenshot: image-tint

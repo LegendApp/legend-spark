@@ -96,3 +96,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  DISP-IMAGETINT-01:
+    title: React Native's Image tintColor colors only the image's opaque pixels on macOS, and a tint changed after loading applies
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

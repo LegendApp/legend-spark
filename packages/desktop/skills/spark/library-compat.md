@@ -11,6 +11,7 @@ Export: `@legendapp/spark/contracts` (`SparkError`, `Availability`, `Subscriptio
 - **Native libraries need a custom build.** Adding one means `b` in `spark dev` or `spark build --dev`; the prebuilt Runner won't contain it.
 - **Data locations are fixed for you.** Spark moves MMKV storage from `~/Documents/mmkv` to the app's Application Support folder; Release Profiler traces and Image Manipulator output go to the app's Caches folder. Nitro SQLite uses `~/Library/Application Support/<bundle id>`. Don't override these to user-visible folders.
 - iOS-only modules on macOS typically become no-ops or report unavailable (Keyboard Controller events never fire, Tracking Transparency reports `unavailable`, Splash Screen does nothing). Don't build features that depend on them on desktop.
+- **React Native's `Image` `tintColor`** colors only the image's opaque pixels on macOS, as on iOS. (React Native macOS's own tint layer covered the whole frame; Spark replaces it.)
 
 ## Versioned patch registry
 
