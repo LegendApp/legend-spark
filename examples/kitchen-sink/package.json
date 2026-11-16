@@ -117,7 +117,9 @@
     "react-native-paper": "5.15.4",
     "react-native-toast-message": "2.5.2",
     "react-native-modal": "14.0.0-rc.1",
-    "react-native-animatable": "1.4.0"
+    "react-native-animatable": "1.4.0",
+    "react-native-markdown-display": "7.0.2",
+    "punycode": "2.3.1"
   },
   "expo": {
     "install": {

@@ -86,3 +86,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  COMP-MDDISPLAY-01:
+    title: react-native-markdown-display renders headings, lists, quotes, links and tables on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"
