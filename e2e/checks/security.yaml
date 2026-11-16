@@ -16,3 +16,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-crypto.md"
+  SEC-GETRANDOM-01:
+    title: react-native-get-random-values fills typed arrays from its native module and rejects oversized and float requests on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

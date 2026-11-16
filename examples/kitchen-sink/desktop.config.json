@@ -93,6 +93,7 @@
           "react-native-blurhash",
           "react-native-fast-image",
           "react-native-gesture-handler",
+          "react-native-get-random-values",
           "react-native-keyboard-controller",
           "react-native-mmkv",
           "react-native-nitro-fetch",

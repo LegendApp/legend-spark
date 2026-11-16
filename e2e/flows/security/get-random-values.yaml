@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-get-random-values on macOS
+intent: >
+  The Get random values screen fills Uint8 and Uint32 arrays and checks the Web Crypto error cases.
+checks: [SEC-GETRANDOM-01]
+tags: [security]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://security/get-random-values" }
+- extendedWaitUntil: { visible: { id: security-get-random-values-passed }, timeout: 10s }

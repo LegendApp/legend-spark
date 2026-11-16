@@ -94,6 +94,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 | [URL Polyfill](https://github.com/charpeni/react-native-url-polyfill) | `react-native-url-polyfill` | Works on macOS (4.0.0) without a patch: `setupURLPolyfill()` installs WHATWG `URL` and `URLSearchParams`, and `URL.createObjectURL` uses React Native's Blob module. |
 | [SSE](https://github.com/binaryminds/react-native-sse) | `react-native-sse` | Works on macOS (1.2.1) without a patch: events stream in order through React Native's `XMLHttpRequest`, with ids and named events. |
 | [PostHog](https://posthog.com/docs/libraries/react-native) | `posthog-react-native` | Works on macOS (4.87.0) without a patch: `identify`, `capture` and `flush` send batches through its `fetch`. Session replay and feature flags were not tested. |
+| [Get Random Values](https://github.com/LinusU/react-native-get-random-values) | `react-native-get-random-values` | Works on macOS (2.1.0) without a patch; upstream builds for macOS. `crypto.getRandomValues` rejects oversized and non-integer arrays; when the app also has `expo-crypto` it delegates to it, and the library's own native module works too. |
 
 ## Optional backend dependencies
 
