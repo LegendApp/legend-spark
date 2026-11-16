@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: phosphor-react-native on macOS
+intent: >
+  The Phosphor screen draws four 48-point icons in regular, fill, duotone and bold weights.
+checks: [DISP-PHOSPHOR-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/phosphor" }
+- extendedWaitUntil: { visible: { id: displays-graphics-phosphor-drawn }, timeout: 10s }
+- takeScreenshot: phosphor

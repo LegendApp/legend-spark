@@ -87,6 +87,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 | [Markdown Display](https://github.com/iamacup/react-native-markdown-display) | `react-native-markdown-display` | Works on macOS (7.0.2) without a patch: headings, inline styles, lists, quotes, links and tables. Its markdown-it 10 requires `punycode`, which Metro doesn't provide as a Node built-in: install the `punycode` package (2.3.1 tested) in the app. |
 | [Calendars](https://github.com/wix/react-native-calendars) | `react-native-calendars` | Renders on macOS (1.1314.0) without a patch: month view, header, marked dates and day cells. The month arrows draw as solid squares, because React Native's `Image` `tintColor` fills the whole image on Spark's macOS host instead of only its opaque pixels; pass `renderArrow` to draw your own. Day selection is pointer driven and was not automated. |
 | [Lucide](https://lucide.dev/guide/packages/lucide-react-native) | `lucide-react-native` | Works on macOS (1.73.0) without a patch on Spark's `react-native-svg`: size, color, fill and stroke width. |
+| [Phosphor Icons](https://github.com/duongdev/phosphor-react-native) | `phosphor-react-native` | Works on macOS (3.0.6) without a patch on Spark's `react-native-svg`, in every weight. |
 
 ## Optional backend dependencies
 

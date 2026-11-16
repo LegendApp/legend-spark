@@ -140,6 +140,7 @@
         "expo-system-ui": "55.0.22",
         "expo-web-browser": "55.0.20",
         "lucide-react-native": "1.73.0",
+        "phosphor-react-native": "3.0.6",
         "punycode": "2.3.1",
         "react": "19.2.0",
         "react-native": "0.83.10",
@@ -2437,6 +2438,8 @@
     "path-scurry": ["path-scurry@1.11.1", "", { "dependencies": { "lru-cache": "^10.2.0", "minipass": "^5.0.0 || ^6.0.2 || ^7.0.0" } }, "sha512-Xa4Nw17FS9ApQFJ9umLiJS4orGjm7ZzwUrwamcGQuHSzDyth9boKDaycYdDcZDuqYATXw4HFXgaqWTctW/v1HA=="],
 
     "path-type": ["path-type@4.0.0", "", {}, "sha512-gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw=="],
+
+    "phosphor-react-native": ["phosphor-react-native@3.0.6", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-svg": "*" } }, "sha512-mIhv+hBbDWz3yLbTOq/esVUkrMoKzEvLIcSeZo3YTdT+sbOBxzxKg5WZN3wpqt3pkkhKf0wVpOyZ3d9mNBNRhg=="],
 
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 

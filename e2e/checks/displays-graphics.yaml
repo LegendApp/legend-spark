@@ -76,3 +76,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  DISP-PHOSPHOR-01:
+    title: phosphor-react-native icons draw through react-native-svg in several weights on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"
