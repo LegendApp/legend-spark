@@ -148,6 +148,20 @@ views and every update. Like the other patches, it checks the version and exact 
 the file atomically. Existing runtimes need a native rebuild. `tests/accessibility-state-native.test.ts` compiles the
 patched methods against AppKit.
 
+## RN macOS window dimensions patch
+
+`react-native-macos@0.83.0` reported the whole display as `Dimensions.get("window")` and never followed resizes:
+`RCTDeviceInfo` read the key window, which doesn't exist yet when the module starts, observed only that window's frame,
+reported the frame (title bar included) and published changes only while the app was active. `window-dimensions.cjs`
+backports [react-native-macos#3142](https://github.com/microsoft/react-native-macos/pull/3142) (open; drop the patch
+once a release ships it): it observes every window's resize, reports the content rect, falls back from the key window
+(panels skipped) to the main window, the frontmost visible window and then any window (Spark's test driver keeps its
+windows hidden), and publishes in the background. It also reports that window's display as `screen`, and republishes
+when a window moves to another display, changes backing scale, becomes main or comes on screen. Like the other
+patches, it checks the version and exact source, is idempotent, and replaces the file atomically; existing runtimes
+need a native rebuild. `tests/window-dimensions.test.ts` covers the patch, and the Kitchen Sink's Window dimensions
+screen (`e2e/flows/windows/window-dimensions.yaml`) checks the value and a resize.
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.

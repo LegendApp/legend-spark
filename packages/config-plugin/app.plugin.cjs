@@ -80,6 +80,7 @@ module.exports = function withSparkDesktop(config) {
     require("./rtl-text-input-alignment.cjs").installRTLTextInputAlignmentPatch(mod.modRequest.projectRoot);
     require("./text-input-accessibility.cjs").installTextInputAccessibilityPatch(mod.modRequest.projectRoot);
     require("./accessibility-state.cjs").installAccessibilityStatePatch(mod.modRequest.projectRoot);
+    require("./window-dimensions.cjs").installWindowDimensionsPatch(mod.modRequest.projectRoot);
     // The beta template passes the resolved package to use_react_native!, but
     // post_install otherwise resets Xcode script paths to ../node_modules.
     mod.modResults.contents = mod.modResults.contents.replace(

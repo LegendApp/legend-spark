@@ -1,0 +1,15 @@
+appId: so.legend.spark.examples.kitchensink
+name: Dimensions follows the macOS window
+intent: >
+  The Window dimensions screen compares Dimensions.get("window") with the main window's frame: it matches the
+  window's content, not the display. The screen then resizes the main window once, which must reach
+  useWindowDimensions.
+checks: [WIN-DIMENSIONS-01]
+tags: [windows]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/window-dimensions" }
+- extendedWaitUntil: { visible: { id: windows-window-dimensions-fits }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: windows-window-dimensions-updated }, timeout: 10s }
+- assertVisible: { id: windows-window-dimensions-fits }
+- takeScreenshot: window-dimensions

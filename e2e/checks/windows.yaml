@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-safe-area-context.md"
+  WIN-DIMENSIONS-01:
+    title: Dimensions' window reports the main window's content size on macOS, not the display, and follows a resize
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/upstream-issues.md M1; react-native-macos#3142"
