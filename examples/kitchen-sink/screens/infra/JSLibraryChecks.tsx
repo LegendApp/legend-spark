@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text } from "react-native";
+import { NativeModules, ScrollView, Text } from "react-native";
 import { setupURLPolyfill } from "react-native-url-polyfill";
+import EventSource from "react-native-sse";
 
 // Test IDs: infra-js-libraries-<url-polyfill|sse|posthog>-passed, or -failed with the reason.
 const ID = "infra-js-libraries";
@@ -18,7 +19,26 @@ async function urlPolyfill() {
   if (failures.length) throw new Error(failures.join(", "));
 }
 
-const checks = { "url-polyfill": urlPolyfill };
+// The e2e bundle server serves /sse; under Metro there is no stream to read.
+function sse() {
+  const origin = String(NativeModules.SourceCode?.getConstants?.().scriptURL ?? "").match(/^https?:\/\/[^/]+/)?.[0];
+  if (!origin) return Promise.reject(new Error("no bundle server origin"));
+  return new Promise<void>((resolve, reject) => {
+    const received: string[] = [];
+    const source = new EventSource<"done">(`${origin}/sse`, { pollingInterval: 0 });
+    const timer = setTimeout(() => { source.close(); reject(new Error(`timed out after ${received.join(",")}`)); }, 5000);
+    source.addEventListener("message", event => { received.push(`${event.lastEventId}:${event.data}`); });
+    source.addEventListener("done", event => {
+      clearTimeout(timer); source.close();
+      const expected = ['1:{"sent":1}', '2:{"sent":2}'];
+      if (JSON.stringify(received) === JSON.stringify(expected) && event.data === '{"sent":3}') resolve();
+      else reject(new Error(`received ${received.join(",")} then ${event.data}`));
+    });
+    source.addEventListener("error", event => { clearTimeout(timer); source.close(); reject(new Error("message" in event ? String(event.message) : event.type)); });
+  });
+}
+
+const checks = { "url-polyfill": urlPolyfill, sse };
 
 /** Non-visual JavaScript libraries exercised on the app's own runtime: Hermes, React Native's XHR and Blob module. */
 export function JSLibraryChecks() {
@@ -28,7 +48,7 @@ export function JSLibraryChecks() {
       run().then(() => setResults(previous => ({ ...previous, [name]: "passed" })), error => setResults(previous => ({ ...previous, [name]: `failed: ${String(error)}` })));
   }, []);
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-3 p-6">
-    <Text className="text-sm text-muted">react-native-url-polyfill parses URLs and blob URLs.</Text>
+    <Text className="text-sm text-muted">react-native-url-polyfill parses URLs and blob URLs; react-native-sse reads a server-sent event stream from the e2e bundle server.</Text>
     {Object.keys(checks).map(name => <Text key={name} selectable className="font-mono text-xs text-foreground" testID={results[name] ? `${ID}-${name}-${results[name] === "passed" ? "passed" : "failed"}` : undefined}>{`${name}: ${results[name] ?? "running"}`}</Text>)}
   </ScrollView>;
 }

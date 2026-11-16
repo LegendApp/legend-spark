@@ -88,6 +88,17 @@ export class KitchenSinkApp {
         response.writeHead(200, { "Content-Type": "application/javascript" }).end(bundle);
         return;
       }
+      if (pathname === "/sse") {
+        // Server-sent events for the react-native-sse check: three events, then the stream closes.
+        response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+        let sent = 0;
+        const timer = setInterval(() => {
+          response.write(`id: ${++sent}\nevent: ${sent === 3 ? "done" : "message"}\ndata: ${JSON.stringify({ sent })}\n\n`);
+          if (sent === 3) { clearInterval(timer); response.end(); }
+        }, 100);
+        request.on("close", () => clearInterval(timer));
+        return;
+      }
       const asset = this.assets.get(decodeURIComponent(pathname));
       if (asset) {
         response.writeHead(200).end(asset);

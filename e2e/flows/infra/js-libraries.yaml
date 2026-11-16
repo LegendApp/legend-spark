@@ -9,3 +9,4 @@ platforms: [macos]
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://infra/js-libraries" }
 - extendedWaitUntil: { visible: { id: infra-js-libraries-url-polyfill-passed }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: infra-js-libraries-sse-passed }, timeout: 10s }
