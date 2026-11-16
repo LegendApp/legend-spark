@@ -76,3 +76,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  COMP-MODAL-01:
+    title: react-native-modal opens over the window, reports onModalShow, and closes with onModalHide on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

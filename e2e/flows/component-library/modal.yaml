@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-modal on macOS
+intent: >
+  The Modal screen opens the modal on mount; it fires onModalShow, closes itself and fires onModalHide.
+checks: [COMP-MODAL-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/modal" }
+- extendedWaitUntil: { visible: { id: component-library-modal-shows-1-hides-1 }, timeout: 10s }
