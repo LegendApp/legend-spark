@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: lucide-react-native on macOS
+intent: >
+  The Lucide screen draws four 48-point icons with colors, fill and stroke widths.
+checks: [DISP-LUCIDE-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/lucide" }
+- extendedWaitUntil: { visible: { id: displays-graphics-lucide-drawn }, timeout: 10s }
+- takeScreenshot: lucide

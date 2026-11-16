@@ -71,3 +71,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-graph.md"
+  DISP-LUCIDE-01:
+    title: lucide-react-native icons draw through react-native-svg at their requested size on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"
