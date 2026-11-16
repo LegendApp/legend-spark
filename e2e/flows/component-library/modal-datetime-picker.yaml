@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-modal-datetime-picker on macOS
+intent: >
+  The Modal date picker screen opens the picker sheet on mount over React Native's Modal, with Confirm and Cancel
+  buttons (choosing needs a pointer).
+checks: [COMP-MODALDATETIME-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/modal-datetime-picker" }
+- extendedWaitUntil: { visible: { id: component-library-modal-datetime-picker-confirm }, timeout: 10s }
+- assertVisible: { id: component-library-modal-datetime-picker-cancel }
+- takeScreenshot: modal-datetime-picker

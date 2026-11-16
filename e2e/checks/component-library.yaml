@@ -106,3 +106,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  COMP-MODALDATETIME-01:
+    title: react-native-modal-datetime-picker shows the native date picker with Confirm and Cancel over React Native's Modal on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

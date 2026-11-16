@@ -524,6 +524,19 @@
         }
       ]
     },
+    "react-native-modal-datetime-picker": {
+      "kind": "patch",
+      "versions": [
+        {
+          "version": "18.0.0",
+          "minSpark": "0.0.4",
+          "patch": "react-native-modal-datetime-picker@18.0.0.patch",
+          "integrity": "sha512-0jdvhhraZQlRACwr7pM6vmZ2kxgzJ4CpnmV6J3TVA6MrXMXK6Zo/upRBKkRp0+fTOiKuNblzesA2U59rYo6SGA==",
+          "optional": true,
+          "sha256": "d77c7bd2b90c890a65848c29f9db4e9caf0fe3bfa8c17101d07beb093386ae6e"
+        }
+      ]
+    },
     "react-native-nitro-fetch": {
       "kind": "patch",
       "versions": [
