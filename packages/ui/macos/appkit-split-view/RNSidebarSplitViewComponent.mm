@@ -210,6 +210,8 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 @interface RNSidebarSplitViewNativeSplitView : NSSplitView
 /// YES while the user drags a divider.
 @property (nonatomic, readonly) BOOL trackingDivider;
+@property (nonatomic, weak) NSView *contentUnderlayHost;
+@property (nonatomic, weak) NSView *contentUnderlayViewport;
 @end
 
 @implementation RNSidebarSplitViewNativeSplitView
@@ -230,13 +232,31 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
   if (_trackingDivider) {
     return NSPointInRect([self convertPoint:point fromView:self.superview], self.bounds) ? self : nil;
   }
-  return [super hitTest:point];
+  NSView *hit = [super hitTest:point];
+  NSView *host = self.contentUnderlayHost;
+  NSView *viewport = self.contentUnderlayViewport;
+  // The native pane retains divider/layout ownership, but its transparent body
+  // must not swallow input intended for content rendered beneath the split.
+  // Hits on the split itself (including expanded divider hit regions) stay native.
+  if (host && viewport && (hit == viewport || [hit isDescendantOf:viewport])) {
+    NSPoint hostPoint = [host.superview convertPoint:point fromView:self.superview];
+    return [host hitTest:hostPoint];
+  }
+  return hit;
 }
 
 - (NSColor *)dividerColor
 {
   return NSColor.separatorColor;
 }
+@end
+
+// Overriding divider drawing opts this subclass into a layout path that fails
+// with macOS 26's automaticallyAdjustsSafeAreaInsets. Keep custom painting only
+// on older systems; modern split views must retain AppKit's system drawing.
+@interface RNSidebarSplitViewLegacyDividerSplitView : RNSidebarSplitViewNativeSplitView
+@end
+@implementation RNSidebarSplitViewLegacyDividerSplitView
 
 - (void)drawDividerInRect:(NSRect)rect
 {
@@ -255,6 +275,12 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
   NSRectFillUsingOperation(rect, NSCompositingOperationSourceOver);
 }
 @end
+
+static RNSidebarSplitViewNativeSplitView *RNSidebarSplitViewCreateNativeSplitView(void)
+{
+  if (@available(macOS 26.0, *)) return [RNSidebarSplitViewNativeSplitView new];
+  return [RNSidebarSplitViewLegacyDividerSplitView new];
+}
 
 // Hosts a React pane. Fabric lays panes out in split-view coordinates, so measure() matches the screen.
 // The host's bounds start wherever the pane's frame starts, so the pane always draws at the AppKit pane's
@@ -294,6 +320,7 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 // follows a native resize one commit later; until then the newly exposed strip matches the window instead
 // of showing a white stripe. The sidebar container stays clear so its native material shows.
 @interface RNSidebarSplitViewPaneView : NSView
+@property (nonatomic) BOOL transparent;
 @end
 
 @implementation RNSidebarSplitViewPaneView
@@ -304,7 +331,14 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 
 - (void)updateLayer
 {
-  self.layer.backgroundColor = NSColor.windowBackgroundColor.CGColor;
+  self.layer.backgroundColor = (self.transparent ? NSColor.clearColor : NSColor.windowBackgroundColor).CGColor;
+}
+
+- (void)setTransparent:(BOOL)transparent
+{
+  if (_transparent == transparent) return;
+  _transparent = transparent;
+  self.needsDisplay = YES;
 }
 
 - (void)viewDidChangeEffectiveAppearance
@@ -504,6 +538,9 @@ static char RNSidebarSplitViewStartupKey;
   CGFloat _listMinWidth;
   CGFloat _listWidth;
   BOOL _hasList;
+  BOOL _contentUnderlay;
+  BOOL _contentScrollEdgeEnabled;
+  NSSplitViewItemAccessoryViewController *_contentScrollEdgeAccessory API_AVAILABLE(macos(26.1));
   // Effective collapsed state, which React knows. Follows the prop when the prop changes and the sidebar item when
   // AppKit collapses it (toggleSidebar:, the toolbar button, ...); the latter is reported via onSidebarCollapsedChange.
   BOOL _sidebarCollapsed;
@@ -621,7 +658,7 @@ static char RNSidebarSplitViewStartupKey;
     }
 
     _splitViewController = [RNSidebarSplitViewController new];
-    _splitViewController.splitView = [RNSidebarSplitViewNativeSplitView new];
+    _splitViewController.splitView = RNSidebarSplitViewCreateNativeSplitView();
     _splitViewController.minimumThicknessForInlineSidebars = 0;
     _splitViewController.splitView.vertical = YES;
     _splitViewController.splitView.dividerStyle = NSSplitViewDividerStyleThin;
@@ -882,6 +919,48 @@ static char RNSidebarSplitViewStartupKey;
   _contentContainer.layer.zPosition = 0;
 }
 
+- (void)updateContentLayout
+{
+  if (@available(macOS 26.1, *)) {
+    if (_contentScrollEdgeEnabled && !_contentScrollEdgeAccessory) {
+      NSView *edge = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 1, 1)];
+      edge.translatesAutoresizingMaskIntoConstraints = NO;
+      [edge.heightAnchor constraintEqualToConstant:1].active = YES;
+      _contentScrollEdgeAccessory = [NSSplitViewItemAccessoryViewController new];
+      _contentScrollEdgeAccessory.view = edge;
+      _contentScrollEdgeAccessory.automaticallyAppliesContentInsets = NO;
+      _contentScrollEdgeAccessory.preferredScrollEdgeEffectStyle = NSScrollEdgeEffectStyle.softStyle;
+      [_contentItem addTopAlignedAccessoryViewController:_contentScrollEdgeAccessory];
+    } else if (!_contentScrollEdgeEnabled && _contentScrollEdgeAccessory) {
+      NSUInteger index = [_contentItem.topAlignedAccessoryViewControllers indexOfObjectIdenticalTo:_contentScrollEdgeAccessory];
+      if (index != NSNotFound) [_contentItem removeTopAlignedAccessoryViewControllerAtIndex:index];
+      _contentScrollEdgeAccessory = nil;
+    }
+  }
+  // Keep the original manual underlay unless the public native edge is opted in.
+  BOOL systemUnderlay = NO;
+  if (@available(macOS 26.1, *)) {
+    systemUnderlay = _contentUnderlay && _contentScrollEdgeEnabled;
+    if (_contentItem.automaticallyAdjustsSafeAreaInsets != systemUnderlay) {
+      _contentItem.automaticallyAdjustsSafeAreaInsets = systemUnderlay;
+    }
+  }
+  BOOL manualUnderlay = _contentUnderlay && !systemUnderlay;
+  NSView *parent = manualUnderlay ? self : _contentContainer;
+  if (_contentHost.superview != parent) {
+    [_contentHost removeFromSuperview];
+    if (manualUnderlay) {
+      [self addSubview:_contentHost positioned:NSWindowBelow relativeTo:_splitViewController.view];
+    } else {
+      [_contentContainer addSubview:_contentHost];
+    }
+  }
+  ((RNSidebarSplitViewPaneView *)_contentContainer).transparent = _contentUnderlay;
+  RNSidebarSplitViewNativeSplitView *split = (RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView;
+  split.contentUnderlayHost = manualUnderlay ? _contentHost : nil;
+  split.contentUnderlayViewport = manualUnderlay ? _contentContainer : nil;
+}
+
 - (void)syncReactSubviewFrames
 {
   CGRect sidebarBounds = [self sidebarPaneBounds];
@@ -911,8 +990,12 @@ static char RNSidebarSplitViewStartupKey;
     return;
   }
 
+  BOOL underlay = _contentUnderlay && subview == _contentReactView;
+  if (subview == _contentReactView) [self updateContentLayout];
+  if (underlay) nativeBounds = [self currentLayoutBounds];
+
   NSView *host = subview.superview;
-  CGPoint origin = [self splitViewOriginOfPane:host.superview];
+  CGPoint origin = underlay ? CGPointZero : [self splitViewOriginOfPane:host.superview];
   host.frame = host.superview.bounds;
   subview.hidden = nativeBounds.size.width <= 0 || nativeBounds.size.height <= 0;
   subview.translatesAutoresizingMaskIntoConstraints = YES;
@@ -950,8 +1033,20 @@ static char RNSidebarSplitViewStartupKey;
     return;
   }
 
+  if (_contentUnderlay) {
+    CGRect renderBounds = [self currentLayoutBounds];
+    contentWidth = renderBounds.size.width;
+    contentHeight = renderBounds.size.height;
+  }
+
   if (contentWidth <= 0 || height <= 0) {
     return;
+  }
+
+  if (_contentUnderlay) {
+    CGRect renderBounds = [self currentLayoutBounds];
+    contentWidth = renderBounds.size.width;
+    contentHeight = renderBounds.size.height;
   }
 
   BOOL panesReady = layoutReady && _sidebarReactView && _contentReactView && (!_hasList || _listReactView);
@@ -963,7 +1058,7 @@ static char RNSidebarSplitViewStartupKey;
                                                         object:self];
   }
   CGPoint sidebarOrigin = [self splitViewOriginOfPane:_sidebarContainer];
-  CGPoint contentOrigin = [self splitViewOriginOfPane:_contentContainer];
+  CGPoint contentOrigin = _contentUnderlay ? CGPointZero : [self splitViewOriginOfPane:_contentContainer];
   CGPoint listOrigin = _hasList ? [self splitViewOriginOfPane:_listContainer] : CGPointZero;
   if (fabs(sidebarWidth - _lastSidebarWidth) < 0.5 &&
       fabs(contentWidth - _lastContentWidth) < 0.5 &&
@@ -1365,6 +1460,8 @@ static char RNSidebarSplitViewStartupKey;
     _hasList != newProps.hasList ||
     effectiveCollapsedChanged;
   BOOL shouldRelayout =
+    _contentUnderlay != (newProps.contentLayout == "underlay") ||
+    _contentScrollEdgeEnabled != (newProps.contentScrollEdgeEffect == "soft") ||
     preferredWidthsChanged ||
     fabs(_sidebarMinWidth - newProps.sidebarMinWidth) >= 0.5 ||
     fabs(_contentMinWidth - newProps.contentMinWidth) >= 0.5 ||
@@ -1401,6 +1498,9 @@ static char RNSidebarSplitViewStartupKey;
   _listMinWidth = newProps.listMinWidth;
   _listWidth = newProps.listWidth;
   _hasList = newProps.hasList;
+  _contentUnderlay = newProps.contentLayout == "underlay";
+  _contentScrollEdgeEnabled = newProps.contentScrollEdgeEffect == "soft";
+  [self updateContentLayout];
   _sidebarCollapsedProp = newProps.sidebarCollapsed;
   if (collapsedPropChanged) {
     _sidebarCollapsed = newProps.sidebarCollapsed;
@@ -1509,6 +1609,9 @@ static char RNSidebarSplitViewStartupKey;
   [super prepareForRecycle];
 
 #if TARGET_OS_OSX
+  _contentUnderlay = NO;
+  _contentScrollEdgeEnabled = NO;
+  [self updateContentLayout];
   [_sidebarReactView removeFromSuperview];
   [_contentReactView removeFromSuperview];
   [_listReactView removeFromSuperview];

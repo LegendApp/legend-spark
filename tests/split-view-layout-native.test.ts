@@ -16,11 +16,12 @@ test.skipIf(process.platform !== "darwin")("native split views preserve divider 
     };
     const classes = source.slice(source.indexOf("@interface RNSidebarSplitViewNativeSplitView"), source.indexOf("static char RNSidebarSplitViewStartupKey;"));
     const methods = ["- (void)mountChildComponentView:", "- (void)unmountChildComponentView:", "- (CGPoint)splitViewOriginOfPane:", "- (void)syncReactSubview:", "- (void)splitViewDidResize", "- (void)syncReactSubviewFrames", "- (void)updateSplitItemSizing", "- (void)updateListItem", "- (void)updateItemLayoutDirection", "- (CGFloat)listReserveWidth", "- (CGFloat)preferredSidebarWidthForBounds:", "- (CGFloat)preferredListWidthForBounds:", "- (void)updateSidebarCollapsed", "- (void)adoptNativeSidebarCollapsed", "- (CGRect)sidebarPaneBounds", "- (CGRect)currentLayoutBounds", "- (void)applyDividerPositionForBounds:", "- (void)layoutSplitView", "- (void)setPane:", "- (BOOL)applyEstimatedSplitViewLayoutForBounds:", "- (void)publishSplitViewLayoutAllowEstimatedReady:"];
+    methods.unshift("- (void)updateContentLayout");
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     const fixture = readFileSync(path.join(root, "tests/split-view-layout.native.mm"), "utf8");
     writeFileSync(input, fixture.replace("// ACTUAL_CLASSES", classes).replace("// ACTUAL_METHODS", methods.map(method).join("\n")));
     await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", input, "-o", output]);
-    for (const scenario of ["anchor", "metrics", "events", "clamp", "resize", "ownership", "toggle", "mount"]) {
+    for (const scenario of ["underlay", "anchor", "metrics", "events", "clamp", "resize", "ownership", "toggle", "mount"]) {
       expect(await runOk(output, [scenario], { timeout: 15000 })).toContain("Native split-view probe passed");
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }

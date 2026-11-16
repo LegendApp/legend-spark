@@ -39,6 +39,10 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
 @interface FakeReactView : NSView<RCTComponentViewProtocol>
 @end
 @implementation FakeReactView
+- (instancetype)initWithFrame:(NSRect)frame {
+  if ((self = [super initWithFrame:frame])) self.postsFrameChangedNotifications = YES;
+  return self;
+}
 - (void)updateLayoutMetrics:(const LayoutMetrics &)metrics oldLayoutMetrics:(const LayoutMetrics &)oldMetrics {}
 - (void)finalizeUpdates:(NSUInteger)mask {}
 @end
@@ -61,6 +65,9 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
   NSView<RCTComponentViewProtocol> *_contentReactView;
   CGFloat _sidebarMinWidth, _sidebarWidth, _contentMinWidth, _listMinWidth, _listWidth;
   BOOL _hasList, _sidebarCollapsed, _needsPreferredDividerPositions, _layingOutSplitView;
+  BOOL _contentUnderlay;
+  BOOL _contentScrollEdgeEnabled;
+  NSSplitViewItemAccessoryViewController *_contentScrollEdgeAccessory;
   LayoutMetrics _currentLayoutMetrics, _sidebarReactLayoutMetrics, _contentReactLayoutMetrics, _listReactLayoutMetrics;
   NSView<RCTComponentViewProtocol> *_sidebarReactView, *_listReactView;
   NSMutableArray<NSDictionary *> *_events;
@@ -76,8 +83,8 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
     _sidebarMinWidth = 180; _sidebarWidth = 200; _contentMinWidth = 320;
     _listMinWidth = 240; _listWidth = 300; _needsPreferredDividerPositions = YES;
     _events = [NSMutableArray new];
-    _sidebarContainer = [NSView new]; _contentContainer = [NSView new]; _listContainer = [NSView new];
-    _sidebarHost = [NSView new]; _contentHost = [NSView new]; _listHost = [NSView new];
+    _sidebarContainer = [NSView new]; _contentContainer = [RNSidebarSplitViewPaneView new]; _listContainer = [NSView new];
+    _sidebarHost = [RNSidebarSplitViewPaneHost new]; _contentHost = [RNSidebarSplitViewPaneHost new]; _listHost = [RNSidebarSplitViewPaneHost new];
     [_sidebarContainer addSubview:_sidebarHost]; [_contentContainer addSubview:_contentHost]; [_listContainer addSubview:_listHost];
     _sidebarViewController = [NSViewController new]; _contentViewController = [NSViewController new]; _listViewController = [NSViewController new];
     _sidebarViewController.view = _sidebarContainer; _contentViewController.view = _contentContainer; _listViewController.view = _listContainer;
@@ -109,7 +116,31 @@ int main(int argc, char **argv) { @autoreleasepool {
   Probe *p = [[Probe alloc] initWithFrame:NSMakeRect(0,0,1200,500)];
   NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,1200,500) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
   window.contentView = p;
-  if ([mode isEqual:@"anchor"]) {
+  if ([mode isEqual:@"underlay"]) {
+    p->_contentUnderlay = YES;
+    p->_hasList = YES;
+    [p layoutSplitView];
+    FakeReactView *sidebar = [FakeReactView new], *content = [FakeReactView new], *list = [FakeReactView new];
+    [p mountChildComponentView:sidebar index:0];
+    [p mountChildComponentView:content index:1];
+    [p mountChildComponentView:list index:2];
+    NSRect rendered = [content convertRect:content.bounds toView:p];
+    require(fabs(rendered.origin.x) < 1 && fabs(rendered.size.width - NSWidth(p.bounds)) < 1,
+      @"Underlay content does not span the split view beneath its panes");
+    require(content.superview == p->_contentHost && p->_contentHost.superview == p,
+      @"Underlay changed stable content mount ownership");
+    p.frame = NSMakeRect(0,0,1400,600);
+    [p layoutSplitView];
+    rendered = [content convertRect:content.bounds toView:p];
+    require(fabs(rendered.origin.x) < 1 && fabs(rendered.size.width - 1400) < 1 && fabs(rendered.size.height - 600) < 1,
+      @"Underlay did not follow split-view resize");
+    p->_contentUnderlay = NO;
+    [p layoutSplitView];
+    rendered = [content convertRect:content.bounds toView:p];
+    require(fabs(rendered.origin.x - [p splitViewOriginOfPane:p->_contentContainer].x) < 1 &&
+      fabs(rendered.size.width - NSWidth(p->_contentContainer.bounds)) < 1,
+      @"Returning to pane layout did not restore the visible content viewport");
+  } else if ([mode isEqual:@"anchor"]) {
     p->_contentContainer.frame = NSMakeRect(201,0,999,500);
     p->_contentReactView = [[FakeReactView alloc] initWithFrame:NSMakeRect(0,0,999,500)];
     [p->_contentContainer addSubview:p->_contentReactView];
