@@ -9,6 +9,7 @@ if (!process.env.SPARK_EXPO_PRELOADED) {
   // Expo 55 binds --localhost to "localhost", which Node resolves to ::1 first;
   // desktop runtimes and Spark's Metro clients connect to 127.0.0.1.
   require('node:dns').setDefaultResultOrder('ipv4first');
+  if (process.platform === 'win32') require('./metro-cache-limit.cjs').installMetroCacheLimit(process.cwd());
   const patches = preparePatch(process.cwd());
   const load = Module._extensions['.js'];
   Module._extensions['.js'] = function(module, filename) {
