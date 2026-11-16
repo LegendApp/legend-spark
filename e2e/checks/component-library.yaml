@@ -96,3 +96,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  COMP-RNMODAL-01:
+    title: React Native's core Modal presents over the window on macOS, fires onShow, and Escape fires onRequestClose
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

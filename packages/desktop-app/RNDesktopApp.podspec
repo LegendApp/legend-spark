@@ -21,7 +21,9 @@ Pod::Spec.new do |s|
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) SPARK_TEST_DRIVER=$(SPARK_TEST_DRIVER)",
     "SPARK_TEST_DRIVER_SOURCES_0" => "SparkTestDriver*.mm",
     "EXCLUDED_SOURCE_FILE_NAMES" => "$(SPARK_TEST_DRIVER_SOURCES_$(SPARK_TEST_DRIVER))",
+    "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/Headers/Private/Yoga\"",
   )
   s.dependency "React-Core"
+  s.dependency "React-RCTFabric"
   s.dependency "ReactCodegen"
 end
