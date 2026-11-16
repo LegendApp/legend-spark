@@ -1,0 +1,12 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@shopify/flash-list on macOS"
+intent: >
+  The FlashList screen renders 1,000 rows of varying height; onLoad fires and the first rows are visible, the last is not.
+checks: [COMP-FLASHLIST-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/flash-list" }
+- extendedWaitUntil: { visible: { id: component-library-flash-list-loaded }, timeout: 10s }
+- assertVisible: { id: component-library-flash-list-row-0 }
+- assertNotVisible: { id: component-library-flash-list-row-999 }

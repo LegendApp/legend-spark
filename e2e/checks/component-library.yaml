@@ -56,3 +56,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  COMP-FLASHLIST-01:
+    title: "@shopify/flash-list v2 lays out and recycles a 1,000-row list on macOS and reports onLoad"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"
