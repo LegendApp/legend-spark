@@ -15,4 +15,6 @@ docs/evidence/
 .env
 .env.*
 !.env.example
+# react-native-config's Kitchen Sink fixture (no secrets).
+!examples/kitchen-sink/.env
 .frame/

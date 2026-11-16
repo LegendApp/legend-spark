@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-config on macOS
+intent: >
+  The Config screen reads two values from examples/kitchen-sink/.env, compiled in at build time.
+checks: [SYS-CONFIG-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/config" }
+- extendedWaitUntil: { visible: { id: system-integration-config-passed }, timeout: 10s }
