@@ -429,7 +429,7 @@
           "patch": "react-native-fast-image@10.11.0.patch",
           "integrity": "sha512-YeRYN/KUBdN0/aIXFegx+o4itmFEILS37HGBOxYUW1Mth1+zLM9oOYidVzUnGM2jOapEC0aoZ8jvdL2AjRyMtw==",
           "optional": true,
-          "sha256": "689e49d8793c8f39c01052d14cd03e5c929ccdd2d965b1d35cf385351860660a"
+          "sha256": "2b3cba58edf2de37c019302ed21922b82b107e535360b68e1b4d9acf9af332d3"
         }
       ]
     },

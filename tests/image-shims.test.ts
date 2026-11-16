@@ -126,3 +126,74 @@ test("expo-image none sizes authenticated sources and ignores a previous source'
   await act(async () => resolvePrevious({ width: 900, height: 800 }));
   expect(style(images()[0].props.style)).toMatchObject({ width: 400, height: 200 });
 });
+
+test("Windows FastImage warns once for unsupported image/source options without forwarding them to View", async () => {
+  const { default: FastImage } = shim("react-native-fast-image@10.11.0", "index.windows.tsx");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const props = { source: { uri: "photo", priority: "high", cache: "cacheOnly", diskCache: false }, transition: 200, testID: "image" };
+  await mount(FastImage, props);
+  await act(async () => rendered.update(React.createElement(FastImage, { ...props, tintColor: "red" })));
+  expect(warn.mock.calls.map(args => args[0])).toEqual(expect.arrayContaining([
+    expect.stringContaining("source.priority"), expect.stringContaining("source.cache"), expect.stringContaining("source.diskCache"), expect.stringContaining("transition"),
+  ]));
+  expect(warn).toHaveBeenCalledTimes(4);
+  expect(rendered.root.findByType("View").props).not.toHaveProperty("transition");
+  expect(images()[0].props.source).toEqual({ uri: "photo", headers: undefined, scale: undefined });
+});
+
+test("Windows FastImage reloads, resets placeholders on source changes and drops a previous source's late size", async () => {
+  const { default: FastImage } = shim("react-native-fast-image@10.11.0", "index.windows.tsx");
+  const onLoad = vi.fn(), onLoadEnd = vi.fn(), ref = React.createRef<any>();
+  const props = { ref, source: { uri: "previous" }, placeholder: { uri: "preview" }, onLoad, onLoadEnd };
+  await mount(FastImage, props);
+  let resolvePrevious!: (size: { width: number; height: number }) => void;
+  native.Image.getSize.mockImplementationOnce(() => new Promise(resolve => { resolvePrevious = resolve; }));
+  await act(async () => images()[1].props.onLoad({ nativeEvent: { source: { width: 0, height: 0 } } }));
+  await act(async () => rendered.update(React.createElement(FastImage, { ...props, source: { uri: "next" } })));
+  await act(async () => resolvePrevious({ width: 800, height: 600 }));
+  expect(onLoad).not.toHaveBeenCalled();
+  expect(images()).toHaveLength(2);
+  native.Image.getSize.mockResolvedValueOnce({ width: 4, height: 2 });
+  await act(async () => images()[1].props.onLoad({ nativeEvent: { source: { width: 160, height: 80 } } }));
+  expect(images()).toHaveLength(1);
+  expect(onLoad).toHaveBeenCalledWith({ nativeEvent: { width: 4, height: 2 } });
+  expect(onLoadEnd).toHaveBeenCalledExactlyOnceWith({ ok: true, width: 4, height: 2 });
+  await act(async () => ref.current.reload());
+  expect(images()).toHaveLength(2);
+});
+
+test("Windows FastImage reads missing native dimensions with the source's request headers", async () => {
+  const { default: FastImage } = shim("react-native-fast-image@10.11.0", "index.windows.tsx");
+  const onLoad = vi.fn(), headers = { Authorization: "fixture" };
+  await mount(FastImage, { source: { uri: "private", headers }, onLoad });
+  await act(async () => images()[0].props.onLoad({ nativeEvent: { source: { width: 0, height: 0 } } }));
+  expect(native.Image.getSizeWithHeaders).toHaveBeenCalledWith("private", headers);
+  expect(onLoad).toHaveBeenCalledWith({ nativeEvent: { width: 400, height: 200 } });
+});
+
+test("Windows FastImage rejects preload instead of using RNW’s unimplemented prefetch", async () => {
+  const { default: FastImage } = shim("react-native-fast-image@10.11.0", "index.windows.tsx");
+  const prefetch = vi.fn();
+  Object.assign(native.Image, { prefetch });
+  expect(await FastImage.preload([{ uri: "private", headers: { Authorization: "fixture" } }, { uri: "photo" }])).toEqual([
+    { ok: false, uri: "private", error: "FastImage.preload is not supported on Windows" },
+    { ok: false, uri: "photo", error: "FastImage.preload is not supported on Windows" },
+  ]);
+  expect(prefetch).not.toHaveBeenCalled();
+  for (const name of ["clearMemoryCache", "clearDiskCache", "getCachePath", "writeToCache", "configureCache"]) {
+    expect(await FastImage[name]()).toEqual({ ok: false, error: `FastImage.${name} is not supported on Windows` });
+  }
+});
+
+
+test("Windows FastImage translates native byte counts to its progress fraction", async () => {
+  const { default: FastImage } = shim("react-native-fast-image@10.11.0", "index.windows.tsx");
+  const onProgress = vi.fn();
+  await mount(FastImage, { source: { uri: "photo" }, onProgress });
+  await act(async () => images()[0].props.onProgress({ nativeEvent: { loaded: 25, total: 100 } }));
+  await act(async () => images()[0].props.onProgress({ nativeEvent: { loaded: 25, total: 0 } }));
+  expect(onProgress.mock.calls.map(args => args[0])).toEqual([
+    { nativeEvent: { loaded: 25, total: 100, progress: 0.25 } },
+    { nativeEvent: { loaded: 25, total: 0, progress: 0 } },
+  ]);
+});

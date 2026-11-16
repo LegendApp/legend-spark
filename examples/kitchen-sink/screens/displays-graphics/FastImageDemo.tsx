@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Platform, ScrollView, Text, View } from "react-native";
 import FastImage, { FastImageBackground, type FastImageRef } from "react-native-fast-image";
 import { toByteArray } from "base64-js";
 import { getDirectory, writeBytes } from "@legendapp/spark/files";
@@ -9,7 +9,7 @@ import { getDirectory, writeBytes } from "@legendapp/spark/files";
 const ID = "displays-graphics-fast-image";
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEklEQVR4nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
 
-/** react-native-fast-image through its own API; on macOS Spark's stand-in renders it with Image. */
+/** react-native-fast-image through its own API; on desktop Spark maps it to RN Image. */
 export function FastImageDemo() {
   const [uri, setUri] = useState<string>();
   const [result, setResult] = useState<string>();
@@ -31,17 +31,17 @@ export function FastImageDemo() {
     const [preloaded] = await FastImage.preload([{ uri: uri! }]);
     const configured = await FastImage.configureCache() as { ok?: boolean; error?: string };
     const failures = [
-      !(configured.ok === false && configured.error === "FastImage.configureCache is not supported on macOS") && "configureCache",
+      !(configured.ok === false && configured.error === `FastImage.configureCache is not supported on ${Platform.OS === "windows" ? "Windows" : "macOS"}`) && "configureCache",
       loads.current.join() !== "4x2,4x2" && `onLoad (${loads.current.join()})`,
-      !(preloaded?.ok && preloaded.width === 4 && preloaded.height === 2) && `preload (${JSON.stringify(preloaded)})`,
+      !(Platform.OS === "windows" ? preloaded?.ok === false && preloaded.error === "FastImage.preload is not supported on Windows" : preloaded?.ok && preloaded.width === 4 && preloaded.height === 2) && `preload (${JSON.stringify(preloaded)})`,
       FastImage.priority.high !== "high" && "constants",
     ].filter(Boolean);
     setResult(failures.length ? `failed: ${failures.join(", ")}` : "passed");
   }
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-3 p-6">
-    <Text className="text-sm text-muted">Loads a local PNG, reloads it through the ref, then preloads it; the tinted copy uses objectFit contain.</Text>
+    <Text className="text-sm text-muted">Uses RN Image on desktop. Loads a local PNG, reloads through the ref, checks preload; the tinted copy uses contain. Windows preload and cache configuration are explicitly unavailable; priority and cache options warn once.</Text>
     <View style={{ flexDirection: "row", gap: 16 }}>
-      {uri && <FastImage ref={image} source={{ uri, width: 800, height: 600 }} objectFit="cover" style={{ width: 160, height: 80, borderRadius: 8 }}
+      {uri && <FastImage ref={image} source={{ uri, width: 800, height: 600, ...(Platform.OS === "windows" ? { priority: FastImage.priority.high, cache: FastImage.cacheControl.web } : {}) }} objectFit="cover" style={{ width: 160, height: 80, borderRadius: 8 }}
         onLoad={event => void onLoad(event.nativeEvent.width, event.nativeEvent.height)}
         onError={event => setResult(`failed: onError ${event.nativeEvent.error}`)} />}
       {uri && <FastImage source={{ uri }} objectFit="contain" tintColor="#3b82f6" style={{ width: 160, height: 160, borderWidth: 1, borderColor: "#888" }} />}

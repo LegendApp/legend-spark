@@ -129,3 +129,125 @@ index 0000000..0d10daf
 +const styles = StyleSheet.create({ container: { overflow: 'hidden' } })
 +
 +export default FastImage
+diff --git a/src/index.windows.tsx b/src/index.windows.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/index.windows.tsx
+@@ -0,0 +1,117 @@
++import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
++import { Image, StyleSheet, View, type ImageResizeMode } from 'react-native'
++import { cacheControl, priority, resizeMode } from './constants'
++import { splitBackgroundProps } from './backgroundProps'
++import type { ClearCacheResult, FastImageBackgroundProps, FastImageProps, FastImageRef, FastImageStaticProperties, ObjectFit, PreloadResult } from './index'
++
++export type * from './index'
++
++const warned = new Set<string>()
++function warn(option: string) {
++    if (warned.has(option)) return
++    warned.add(option)
++    console.warn(`FastImage on Windows uses React Native Image; ${option} is not supported.`)
++}
++const fits: Record<ObjectFit, ImageResizeMode> = { fill: 'stretch', contain: 'contain', cover: 'cover', none: 'center', 'scale-down': 'center' }
++const unsupported = (name: string) => Promise.resolve({ ok: false as const, error: `FastImage.${name} is not supported on Windows` })
++
++function imageSource(source: FastImageProps['source']) {
++    const sources = Array.isArray(source) ? source : [source]
++    if (sources.length > 1) warn('source arrays (the largest source is used)')
++    let selected = sources[0]
++    for (const next of sources) {
++        const area = (value: typeof next) => typeof value === 'object' && value ? (value.width ?? 0) * (value.height ?? 0) : 0
++        if (area(next) > area(selected)) selected = next
++        if (next && typeof next === 'object') {
++            for (const key of Object.keys(next)) {
++                if (!['uri', 'headers', 'scale', 'width', 'height'].includes(key)) warn(`source.${key}`)
++            }
++            if (next.width !== undefined || next.height !== undefined) warn('source dimensions for automatic layout (set style dimensions)')
++        }
++    }
++    const resolved = typeof selected === 'number' ? Image.resolveAssetSource(selected) : selected
++    return resolved?.uri ? { uri: resolved.uri, headers: 'headers' in resolved ? resolved.headers : undefined, scale: resolved.scale } : undefined
++}
++
++function ImageContent({ source, placeholder, defaultSource, objectFit = 'cover', tintColor, onLoadStart, onProgress, onLoad, onError, onLoadEnd }: FastImageProps) {
++    const [loaded, setLoaded] = useState(false)
++    const active = useRef(false)
++    useEffect(() => { active.current = true; return () => { active.current = false } }, [])
++    const resolved = imageSource(source)
++    const fallback = typeof placeholder === 'string' ? { uri: placeholder } : placeholder ?? defaultSource
++    return <>
++        {!loaded && fallback != null && <Image source={imageSource(fallback as FastImageProps['source'])} resizeMode={fits[objectFit]} style={StyleSheet.absoluteFill} />}
++        <Image source={resolved} resizeMode={fits[objectFit]} tintColor={tintColor}
++            style={[StyleSheet.absoluteFill, tintColor === undefined ? null : { tintColor }]}
++            onLoadStart={onLoadStart}
++            onProgress={event => {
++                const { loaded, total } = event.nativeEvent
++                onProgress?.({ nativeEvent: { loaded, total, progress: total > 0 ? loaded / total : 0 } })
++            }}
++            onLoad={event => {
++                const finish = ({ width, height }: { width: number; height: number }) => {
++                    if (!active.current) return
++                    setLoaded(true)
++                    onLoad?.({ nativeEvent: { width, height } })
++                    onLoadEnd?.({ ok: true, width, height })
++                }
++                // RNW's onLoad reports the view's dimensions, not the image's pixels.
++                if (resolved?.uri) {
++                    const size = resolved.headers ? Image.getSizeWithHeaders(resolved.uri, resolved.headers) : Image.getSize(resolved.uri)
++                    void size.then(finish, error => {
++                        if (!active.current) return
++                        onError?.({ nativeEvent: { error: String(error) } })
++                        onLoadEnd?.({ ok: false, error: String(error) })
++                    })
++                }
++            }}
++            onError={event => {
++                const error = String(event.nativeEvent.error)
++                onError?.({ nativeEvent: { error } })
++                onLoadEnd?.({ ok: false, error })
++            }} />
++    </>
++}
++
++const FastImageComponent = forwardRef<FastImageRef, FastImageProps>((props, ref) => {
++    const view = useRef<View>(null)
++    const [attempt, setAttempt] = useState(0)
++    const [image, container] = splitBackgroundProps(props, undefined)
++    if (props.children != null) warn("children (use FastImageBackground)")
++    for (const key of Object.keys(image)) {
++        if (!['source', 'placeholder', 'defaultSource', 'objectFit', 'tintColor', 'onLoadStart', 'onProgress', 'onLoad', 'onError', 'onLoadEnd'].includes(key) && image[key as keyof FastImageProps] !== undefined) warn(key)
++    }
++    if (image.objectFit === 'none' || image.objectFit === 'scale-down') warn(`objectFit=${image.objectFit} (mapped to center)`)
++    useImperativeHandle(ref, () => Object.assign(view.current ?? {}, { reload: () => setAttempt(value => value + 1) }) as FastImageRef, [])
++    return <View {...container} ref={view} style={[styles.container, props.style]}>
++        <ImageContent key={JSON.stringify([image.source, image.placeholder, image.defaultSource, attempt])} {...image} />
++    </View>
++})
++FastImageComponent.displayName = 'FastImage'
++
++const statics: FastImageStaticProperties = {
++    resizeMode, priority, cacheControl,
++    preload: sources => Promise.resolve(sources.map((source): PreloadResult => ({
++        ok: false, uri: source?.uri, error: 'FastImage.preload is not supported on Windows',
++    }))),
++    clearMemoryCache: () => unsupported('clearMemoryCache') as Promise<ClearCacheResult>,
++    clearDiskCache: () => unsupported('clearDiskCache') as Promise<ClearCacheResult>,
++    getCachePath: () => unsupported('getCachePath') as never,
++    writeToCache: () => unsupported('writeToCache') as never,
++    configureCache: () => unsupported('configureCache') as never,
++    setDefaults: () => { warn('setDefaults') },
++}
++const FastImage = Object.assign(FastImageComponent, statics)
++
++export const FastImageBackground = forwardRef<View, FastImageBackgroundProps>(
++    ({ style, imageStyle, imageRef, imageProps, children, ...props }, ref) => {
++        const [image, container] = splitBackgroundProps(props, imageProps)
++        return <View {...container} ref={ref} style={style}>
++            <FastImageComponent {...image} style={[StyleSheet.absoluteFill, imageStyle]} ref={imageRef} />
++            {children}
++        </View>
++    },
++)
++FastImageBackground.displayName = 'FastImageBackground'
++const styles = StyleSheet.create({ container: { overflow: 'hidden' } })
++export default FastImage

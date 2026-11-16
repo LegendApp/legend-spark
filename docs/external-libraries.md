@@ -44,7 +44,7 @@ Our documentation provides a shared place to discover integrations, with attribu
 | [Nitro Fetch](https://github.com/margelo/react-native-nitro-fetch) | `react-native-nitro-fetch` | Install 1.10.0. Spark adds macOS to its podspec and runs its launch prefetch on `NSApplicationDidFinishLaunching`. Its peer range asks for Nitro 0.37.1; it runs on Spark's 0.37.0. |
 | [Blur](https://github.com/Kureev/react-native-blur) | `@react-native-community/blur` | Install 4.4.1. Spark patches in AppKit `BlurView`/`VibrancyView` on `NSVisualEffectView` materials (`blurAmount` has no macOS equivalent; materials follow the window's active state; `VibrancyView` children mount inside the material, but React Native views don't opt into AppKit vibrancy, so they draw unblended) and declares the components in its codegen config instead of relying on React Native's deprecated source scan. |
 | [Worklets Core](https://github.com/margelo/react-native-worklets-core) | `react-native-worklets-core` | Install 1.6.3. Spark adds macOS to its podspec; the native code is platform-neutral, and on the bridgeless host it reaches the runtime through React Native's deprecated `RCTBridgeProxy` interop. Its Babel plugin needs `@babel/plugin-transform-shorthand-properties`, `@babel/plugin-transform-arrow-functions`, `@babel/plugin-proposal-optional-chaining`, `@babel/plugin-proposal-nullish-coalescing-operator` and `@babel/plugin-transform-template-literals` installed, as on iOS; scope it to your worklet files if the app also uses Skia without Reanimated. |
-| [FastImage](https://github.com/DylanVann/react-native-fast-image) | `react-native-fast-image` | Install 10.11.0. Its native view is UIKit only, so on macOS Spark adds a JavaScript stand-in on React Native's `Image`: sources, `objectFit`, `tintColor`, placeholders while loading, load events, `reload()` and `preload`. Its own caches, thumbhash/blurhash placeholders, transitions and cache APIs are not available on macOS. |
+| [FastImage](https://github.com/DylanVann/react-native-fast-image) | `react-native-fast-image` | Install 10.11.0. Its native view is UIKit only, so on macOS Spark adds a JavaScript stand-in on React Native's `Image`: sources, `objectFit`, `tintColor`, placeholders while loading, load events, `reload()` and `preload`. Its own caches, thumbhash/blurhash placeholders, transitions and cache APIs are not available on macOS. Windows also maps 10.11.0 to RN Image with explicit unsupported-option warnings; preload and cache APIs return unsupported results. |
 | [Release Profiler](https://github.com/margelo/react-native-release-profiler) | `react-native-release-profiler` | Install 0.4.5. Spark adds macOS to its podspec and writes traces to the app's namespaced Caches folder instead of the shared `~/Library/Caches`. |
 | [Tracking Transparency](https://github.com/mrousavy/react-native-tracking-transparency) | `react-native-tracking-transparency` | Works on macOS without a patch: it reports `unavailable`. App Tracking Transparency is a no-op on the Mac (Apple's header: the status is always `not-determined` and requests never prompt), so there is nothing native to enable. |
 | [Skia](https://github.com/Shopify/react-native-skia) | `@shopify/react-native-skia` | Supports macOS upstream (2.14.0 verified, no patch). Without Reanimated, keep other worklet Babel plugins (such as Worklets Core's) off Skia's sources: they read Skia's optional Reanimated proxy at load and the app never renders. |
@@ -172,3 +172,23 @@ Markdown math and syntax-highlighting assets retain the upstream per-application
 configuration (`enriched-markdown` in the application's `package.json`). Those
 features can download and compile additional assets; automatic compatibility
 patching does not change that configuration.
+
+## FastImage on Windows
+
+Spark 0.0.4 maps `react-native-fast-image@10.11.0` to React Native Windows
+`Image`, without a FastImage native view. Supported: URI and bundled sources,
+request headers for views, `cover`/`contain`/`fill`, tint, URI/bundled placeholders,
+load events, ref `reload()`, and background children.
+Set the view size with `style`; source dimensions do not size the container.
+Source changes restore the placeholder while the replacement loads. `reload()`
+remounts RN Image and does not invalidate its cache. Image decoding, formats and
+caching follow RN Windows rather than FastImage.
+
+Unsupported options warn once per option, including priority, cache/cacheKey,
+memory/disk cache controls, hashed placeholders, transitions, object positioning,
+animation controls and defaults. Source arrays warn and select the largest source;
+`none`/`scale-down` warn and use RN's centered fit. Preload, cache configuration, cache
+clearing, cache paths and cache writes return `{ ok: false, error }`. RN Windows
+0.83.2 has an unimplemented `Image.prefetch` that returns success, so Spark does
+not use it to claim preloading support. These limitations
+also apply to `FastImageBackground` and its `imageProps`.
