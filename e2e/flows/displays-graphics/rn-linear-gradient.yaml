@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-linear-gradient on macOS
+intent: >
+  The RN linear gradient screen registers BVLinearGradient and lays out a vertical, a diagonal located and an angled
+  translucent gradient (screenshot).
+checks: [DISP-RNGRADIENT-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/rn-linear-gradient" }
+- extendedWaitUntil: { visible: { id: displays-graphics-rn-linear-gradient-native }, timeout: 15s }
+- assertVisible: { id: displays-graphics-rn-linear-gradient-laid-out }
+- takeScreenshot: rn-linear-gradient

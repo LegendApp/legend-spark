@@ -459,6 +459,19 @@
         }
       ]
     },
+    "react-native-linear-gradient": {
+      "kind": "patch",
+      "versions": [
+        {
+          "version": "2.8.3",
+          "minSpark": "0.0.4",
+          "patch": "react-native-linear-gradient@2.8.3.patch",
+          "integrity": "sha512-KflAXZcEg54PXkLyflaSZQ3PJp4uC4whM7nT/Uot9m0e/qxFV3p6uor1983D1YOBJbJN7rrWdqIjq0T42jOJyA==",
+          "optional": true,
+          "sha256": "daa35572ae07fd6b240ef96d3960da02d105a8dbfd67eb105d36abbf5244e83f"
+        }
+      ]
+    },
     "react-native-mmkv": {
       "kind": "patch",
       "versions": [

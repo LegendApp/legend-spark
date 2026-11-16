@@ -101,3 +101,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  DISP-RNGRADIENT-01:
+    title: react-native-linear-gradient registers its view and lays out point, location and angle gradients on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

@@ -1,0 +1,221 @@
+diff --git a/BVLinearGradient.podspec b/BVLinearGradient.podspec
+index 6215cee..1ba7d00 100644
+--- a/BVLinearGradient.podspec
++++ b/BVLinearGradient.podspec
+@@ -11,10 +11,13 @@ Pod::Spec.new do |s|
+   s.author          = { "Brent Vatne" => "brentvatne@gmail.com" }
+   s.ios.deployment_target = '9.0'
+   s.tvos.deployment_target = '9.0'
++  s.osx.deployment_target = '10.15'
+   s.source          = { :git => "https://github.com/brentvatne/react-native-linear-gradient.git", :tag => "v#{s.version}" }
+   s.source_files    = 'ios/*.{h,m}'
+   s.preserve_paths  = "**/*.js"
+-  s.frameworks = 'UIKit', 'QuartzCore', 'Foundation'
++  s.ios.frameworks = 'UIKit', 'QuartzCore', 'Foundation'
++  s.tvos.frameworks = 'UIKit', 'QuartzCore', 'Foundation'
++  s.osx.frameworks = 'AppKit', 'QuartzCore', 'Foundation'
+ 
+   s.dependency 'React-Core'
+ 
+diff --git a/index.js b/index.js
+index d040355..1dbdf10 100644
+--- a/index.js
++++ b/index.js
+@@ -3,7 +3,7 @@ import LinearGradientIos from "./index.ios.js";
+ import LinearGradientAndroid from "./index.android.js";
+ import LinearGradientWindows from "./index.windows.js";
+ 
+-export const LinearGradient = Platform.OS === "ios"
++export const LinearGradient = Platform.OS === "ios" || Platform.OS === "macos"
+   ? LinearGradientIos : Platform.OS === "android"
+   ? LinearGradientAndroid : LinearGradientWindows;
+ 
+diff --git a/ios/BVLinearGradient.h b/ios/BVLinearGradient.h
+index 74a3f87..2d2602e 100644
+--- a/ios/BVLinearGradient.h
++++ b/ios/BVLinearGradient.h
+@@ -1,8 +1,9 @@
+ #import <React/RCTView.h>
++#import "BVLinearGradientLayer.h"
+ 
+ @interface BVLinearGradient : RCTView
+ 
+-@property (nullable, nonatomic, copy) NSArray<UIColor *> *colors;
++@property (nullable, nonatomic, copy) NSArray<BVColor *> *colors;
+ @property (nullable, nonatomic, copy) NSArray<NSNumber *> *locations;
+ @property (nonatomic) CGPoint startPoint;
+ @property (nonatomic) CGPoint endPoint;
+diff --git a/ios/BVLinearGradient.m b/ios/BVLinearGradient.m
+index 71f804e..dc20ce9 100644
+--- a/ios/BVLinearGradient.m
++++ b/ios/BVLinearGradient.m
+@@ -1,13 +1,16 @@
+ #import "BVLinearGradient.h"
+ 
+ #import <React/RCTConvert.h>
++#if !TARGET_OS_OSX
+ #import <UIKit/UIKit.h>
++#endif
+ #import <QuartzCore/QuartzCore.h>
+ 
+ #import "BVLinearGradientLayer.h"
+ 
+ @implementation BVLinearGradient
+ 
++#if !TARGET_OS_OSX
+ + (Class)layerClass
+ {
+   return [BVLinearGradientLayer class];
+@@ -17,6 +20,44 @@ - (BVLinearGradientLayer *)gradientLayer
+ {
+   return (BVLinearGradientLayer *)self.layer;
+ }
++#else
++// RCTView draws its background and borders into its own layer's contents on macOS, so the gradient is a sublayer.
++{
++  BVLinearGradientLayer *_gradientLayer;
++}
++
++- (instancetype)initWithFrame:(NSRect)frame
++{
++  if ((self = [super initWithFrame:frame])) {
++    self.wantsLayer = YES;
++    _gradientLayer = [BVLinearGradientLayer new];
++    _gradientLayer.frame = self.bounds;
++    [self.layer insertSublayer:_gradientLayer atIndex:0];
++  }
++  return self;
++}
++
++- (BVLinearGradientLayer *)gradientLayer
++{
++  return _gradientLayer;
++}
++
++- (void)setFrameSize:(NSSize)size
++{
++  [super setFrameSize:size];
++  [CATransaction begin];
++  [CATransaction setDisableActions:YES];
++  if (_gradientLayer.superlayer != self.layer) [self.layer insertSublayer:_gradientLayer atIndex:0];
++  _gradientLayer.frame = self.bounds;
++  [CATransaction commit];
++}
++
++- (void)viewDidChangeBackingProperties
++{
++  [super viewDidChangeBackingProperties];
++  [_gradientLayer setNeedsDisplay];
++}
++#endif
+ 
+ - (NSArray *)colors
+ {
+@@ -28,9 +69,9 @@ - (void)setColors:(NSArray *)colorStrings
+     NSMutableArray *colors = [NSMutableArray arrayWithCapacity:colorStrings.count];
+     for (NSString *colorString in colorStrings)
+     {
+-        if ([colorString isKindOfClass:UIColor.class])
++        if ([colorString isKindOfClass:BVColor.class])
+         {
+-            [colors addObject:(UIColor *)colorString];
++            [colors addObject:(BVColor *)colorString];
+         }
+         else
+         {
+diff --git a/ios/BVLinearGradientLayer.h b/ios/BVLinearGradientLayer.h
+index 9283fe0..1a47506 100644
+--- a/ios/BVLinearGradientLayer.h
++++ b/ios/BVLinearGradientLayer.h
+@@ -1,11 +1,18 @@
+ #import <Foundation/Foundation.h>
+ #import <QuartzCore/QuartzCore.h>
+ 
++#include <TargetConditionals.h>
++#if TARGET_OS_OSX
++#import <AppKit/AppKit.h>
++#define BVColor NSColor
++#else
+ @class UIColor;
++#define BVColor UIColor
++#endif
+ 
+ @interface BVLinearGradientLayer : CALayer
+ 
+-@property (nullable, nonatomic, copy) NSArray<UIColor *> *colors;
++@property (nullable, nonatomic, copy) NSArray<BVColor *> *colors;
+ @property (nullable, nonatomic, copy) NSArray<NSNumber *> *locations;
+ @property (nonatomic) CGPoint startPoint;
+ @property (nonatomic) CGPoint endPoint;
+diff --git a/ios/BVLinearGradientLayer.m b/ios/BVLinearGradientLayer.m
+index bda0a1b..4574118 100644
+--- a/ios/BVLinearGradientLayer.m
++++ b/ios/BVLinearGradientLayer.m
+@@ -1,7 +1,9 @@
+ #import "BVLinearGradientLayer.h"
+ 
+ #include <math.h>
++#if !TARGET_OS_OSX
+ #import <UIKit/UIKit.h>
++#endif
+ 
+ @implementation BVLinearGradientLayer
+ 
+@@ -60,6 +62,24 @@ - (void)display {
+         hasAlpha = hasAlpha || CGColorGetAlpha(self.colors[i].CGColor) < 1.0;
+     }
+ 
++#if TARGET_OS_OSX
++    CGFloat scale = self.contentsScale > 0 ? self.contentsScale : 1;
++    for (NSScreen *screen in NSScreen.screens) scale = MAX(scale, screen.backingScaleFactor);
++    size_t width = ceil(self.bounds.size.width * scale), height = ceil(self.bounds.size.height * scale);
++    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
++    CGContextRef ref = CGBitmapContextCreate(NULL, width, height, 8, 0, space, hasAlpha ? kCGImageAlphaPremultipliedLast : kCGImageAlphaNoneSkipLast);
++    CGColorSpaceRelease(space);
++    if (!ref) return;
++    // Draw with a top-left origin, as UIKit's renderer does on iOS.
++    CGContextTranslateCTM(ref, 0, height);
++    CGContextScaleCTM(ref, scale, -scale);
++    [self drawInContext:ref];
++    CGImageRef image = CGBitmapContextCreateImage(ref);
++    CGContextRelease(ref);
++    self.contents = (__bridge_transfer id)image;
++    self.contentsScale = scale;
++}
++#else
+     if (@available(iOS 10.0, *)) {
+         UIGraphicsImageRendererFormat *format;
+         if (@available(iOS 11.0, *)) {
+@@ -87,6 +107,7 @@ - (void)display {
+         UIGraphicsEndImageContext();
+     }
+ }
++#endif
+ 
+ - (void)setUseAngle:(BOOL)useAngle
+ {
+@@ -199,7 +220,7 @@ - (void)drawInContext:(CGContextRef)ctx
+ 
+     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+     NSMutableArray *colors = [[NSMutableArray alloc] initWithCapacity:self.colors.count];
+-    for (UIColor *color in self.colors) {
++    for (BVColor *color in self.colors) {
+         [colors addObject:(id)color.CGColor];
+     }
+ 
+diff --git a/ios/BVLinearGradientManager.m b/ios/BVLinearGradientManager.m
+index 78e9fd5..ef827ce 100644
+--- a/ios/BVLinearGradientManager.m
++++ b/ios/BVLinearGradientManager.m
+@@ -8,7 +8,11 @@ @implementation BVLinearGradientManager
+ 
+ @synthesize bridge = _bridge;
+ 
++#if TARGET_OS_OSX
++- (RCTUIView *)view
++#else
+ - (UIView *)view
++#endif
+ {
+   return [[BVLinearGradient alloc] init];
+ }

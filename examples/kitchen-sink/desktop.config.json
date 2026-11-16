@@ -70,6 +70,7 @@
           "@react-native-clipboard/clipboard",
           "@react-native-masked-view/masked-view",
           "@dr.pogodin/react-native-fs",
+          "react-native-linear-gradient",
           "@sentry/react-native",
           "@shopify/react-native-skia",
           "expo-application",
