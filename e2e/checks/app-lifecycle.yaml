@@ -51,3 +51,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-splash-screen.md"
+  LIFE-RESTART-01:
+    title: react-native-restart reloads the JavaScript bundle and reports the restart reason on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

@@ -1,0 +1,13 @@
+diff --git a/react-native-restart.podspec b/react-native-restart.podspec
+index bf23660..be0ef2f 100644
+--- a/react-native-restart.podspec
++++ b/react-native-restart.podspec
+@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+ 
+-  s.platforms    = { :ios => "15.1", :tvos => "15.1" }
++  s.platforms    = { :ios => "15.1", :tvos => "15.1", :osx => "11.0" }
+   s.source       = { :git => "https://github.com/avishayil/react-native-restart.git", :tag => "#{s.version}" }
+ 
+   s.source_files = "ios/**/*.{h,m,mm}"

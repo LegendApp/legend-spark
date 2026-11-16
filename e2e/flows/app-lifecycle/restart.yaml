@@ -1,0 +1,15 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-restart on macOS
+intent: >
+  The Restart screen restarts the JavaScript runtime with a reason, which reloads the app to its home screen.
+  Reopening the screen reads the reason back.
+checks: [LIFE-RESTART-01]
+tags: [app-lifecycle]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://app-lifecycle/restart" }
+- extendedWaitUntil: { visible: { id: app-lifecycle-restart-restarting }, timeout: 10s }
+- extendedWaitUntil: { notVisible: { id: app-lifecycle-restart-restarting }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: infra-shell-catalog }, timeout: 15s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://app-lifecycle/restart" }
+- extendedWaitUntil: { visible: { id: app-lifecycle-restart-passed }, timeout: 10s }

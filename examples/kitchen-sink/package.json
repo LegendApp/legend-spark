@@ -133,7 +133,8 @@
     "react-native-localize": "3.7.2",
     "@react-native-clipboard/clipboard": "1.16.3",
     "@dr.pogodin/react-native-fs": "2.40.4",
-    "react-native-linear-gradient": "2.8.3"
+    "react-native-linear-gradient": "2.8.3",
+    "react-native-restart": "0.0.29"
   },
   "expo": {
     "install": {

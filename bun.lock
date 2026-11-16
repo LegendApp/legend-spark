@@ -178,6 +178,7 @@
         "react-native-quick-crypto": "1.1.9",
         "react-native-reanimated": "4.2.1",
         "react-native-release-profiler": "0.4.5",
+        "react-native-restart": "0.0.29",
         "react-native-safe-area-context": "5.6.2",
         "react-native-screen-corner-radius": "0.2.3",
         "react-native-screens": "4.23.0",
@@ -2623,6 +2624,8 @@
     "react-native-reanimated": ["react-native-reanimated@4.2.1", "", { "dependencies": { "react-native-is-edge-to-edge": "1.2.1", "semver": "7.7.3" }, "peerDependencies": { "react": "*", "react-native": "*", "react-native-worklets": ">=0.7.0" } }, "sha512-/NcHnZMyOvsD/wYXug/YqSKw90P9edN0kEPL5lP4PFf1aQ4F1V7MKe/E0tvfkXKIajy3Qocp5EiEnlcrK/+BZg=="],
 
     "react-native-release-profiler": ["react-native-release-profiler@0.4.5", "", { "dependencies": { "@margelo/hermes-profile-transformer": "^0.0.10", "commander": "^11.1.0" }, "peerDependencies": { "@react-native-community/cli-tools": "*", "react": "*", "react-native": "*" }, "bin": { "react-native-release-profiler": "lib/commonjs/cli.js" } }, "sha512-1w05jDlKRdIMxTuSPep67eMc+FW805SJZjWJwBVsPIQHmRYttxBdrdbzF0mG5XVvMVRNji4RHLidu54+V54lRQ=="],
+
+    "react-native-restart": ["react-native-restart@0.0.29", "", { "peerDependencies": { "react": "*", "react-native": "*", "react-native-windows": "*" }, "optionalPeers": ["react-native-windows"] }, "sha512-AJDAww9cW7F6d4g9TABhuFR1E0j00p5ktv0Rls0BA6Ymz/8J+HwMxeR6KPZmHfkMtAguH4H2kw2xhqXjjSiUlg=="],
 
     "react-native-safe-area-context": ["react-native-safe-area-context@5.6.2", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-4XGqMNj5qjUTYywJqpdWZ9IG8jgkS3h06sfVjfw5yZQZfWnRFXczi0GnYyFyCc2EBps/qFmoCH8fez//WumdVg=="],
 
