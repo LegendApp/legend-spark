@@ -87,6 +87,7 @@
         "@expo/ui": "55.0.17",
         "@expo/vector-icons": "15.1.1",
         "@gorhom/bottom-sheet": "5.2.14",
+        "@gorhom/portal": "1.0.14",
         "@legendapp/spark": "0.0.4",
         "@op-engineering/op-sqlite": "18.2.1",
         "@react-native-async-storage/async-storage": "2.2.0",

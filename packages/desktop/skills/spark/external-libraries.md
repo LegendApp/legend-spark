@@ -77,6 +77,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 | [Keyboard Controller](https://github.com/kirillzyusko/react-native-keyboard-controller) | `react-native-keyboard-controller` | Install 1.22.9. Its native module is iOS and Android only and threw at import on macOS; Spark's patch selects the package's own web bindings there, so its components and hooks render and report the keyboard hidden. A Mac has no software keyboard to avoid, so keyboard events never fire. |
 | [Sentry](https://docs.sentry.io/platforms/react-native/) | `@sentry/react-native` | Declare 8.35.0 in the app. Its native module and sentry-cocoa build for macOS; Spark's patch keeps the session replay mask views as plain containers there, because codegen still registers them and a missing class aborted the app at launch. Errors carry native macOS device and OS context; session replay is iOS only. |
 | [Expo Router](https://docs.expo.dev/router/introduction/) | `expo-router` | Works on macOS (55.0.18) without a patch: file-based routes, `Stack`, dynamic segments, search params and `Link` run on React Navigation and Spark's react-native-screens patch. Its native module (native tabs, toolbar, link previews, `expo-router/head`) is iOS only. Wrap layouts in React Navigation's `ThemeProvider` to follow the app's appearance. |
+| [Portal](https://github.com/gorhom/react-native-portal) | `@gorhom/portal` | Works on macOS (1.0.14) without a patch: `Portal` content renders inside a named `PortalHost` elsewhere in the tree. |
 
 ## Optional backend dependencies
 

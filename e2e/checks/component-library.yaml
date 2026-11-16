@@ -51,3 +51,8 @@ checks:
     platforms: [macos]
     blocking: false
     spec: "docs/test-driver.md#real-pointer-input-macos"
+  COMP-PORTAL-01:
+    title: "@gorhom/portal renders Portal content inside a named PortalHost elsewhere in the tree on macOS"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

@@ -110,7 +110,8 @@
     "@sentry/react-native": "8.35.0",
     "expo-router": "55.0.18",
     "react-native-graph": "1.4.0",
-    "expo-document-picker": "55.0.17"
+    "expo-document-picker": "55.0.17",
+    "@gorhom/portal": "1.0.14"
   },
   "expo": {
     "install": {

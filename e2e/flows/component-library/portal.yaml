@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@gorhom/portal on macOS"
+intent: >
+  The Portal screen declares a box in its first section and renders it through a PortalHost in the second; the content lays out.
+checks: [COMP-PORTAL-01]
+tags: [component-library]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://component-library/portal" }
+- extendedWaitUntil: { visible: { id: component-library-portal-content }, timeout: 10s }
+- assertVisible: { id: component-library-portal-host }
