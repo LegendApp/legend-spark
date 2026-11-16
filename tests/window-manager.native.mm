@@ -390,6 +390,26 @@ int main() { @autoreleasepool {
     }
     assert([[window.toolbar.items valueForKey:@"itemIdentifier"] isEqualToArray:(@[NSToolbarFlexibleSpaceItemIdentifier, @"legend.toolbar.search", @"legend.toolbar.go"])]);
   }
+  // A disabled button item stays disabled through AppKit's toolbar validation and enables again when the option flips.
+  for (NSNumber *enabled in @[@NO, @YES, @NO]) {
+    [manager applyToolbarItemsFromOptions:@{ @"windowStyle": @{ @"toolbarItems": @[@{ @"id": @"fetch", @"type": @"button", @"label": @"Fetch", @"systemImageName": @"arrow.down", @"enabled": enabled }] } } toWindow:window identifier:@"brightness-probe"];
+    [window.toolbar validateVisibleItems];
+    assert(toolbarItem(@"fetch").enabled == enabled.boolValue);
+  }
+  // Re-sending window options (identical or changed title bar options) keeps the frame and size limits.
+  LegendWindowRegistry.sharedRegistry.windows[@"brightness-probe"] = window;
+  window.minSize = NSMakeSize(600, 400);
+  [window setFrame:NSMakeRect(40, 40, 900, 450) display:YES];
+  NSRect titleBarFrame = window.frame;
+  NSSize titleBarMinSize = window.minSize;
+  NSDictionary *gitTitleBar = @{ @"appearance": @"system", @"contentLayoutMode": @"fullSize", @"titlebarAppearsTransparent": @YES, @"titleVisibility": @"visible" };
+  for (NSDictionary *titleBarStyle in @[gitTitleBar, gitTitleBar, @{ @"contentLayoutMode": @"fullSize", @"titlebarAppearsTransparent": @NO, @"titleVisibility": @"hidden" }, gitTitleBar]) {
+    CallWindow(module, @"options", @{ @"id": @"brightness-probe", @"options": @{ @"appearance": @"system", @"title": @"Probe" } });
+    [manager setWindowOptions:@"brightness-probe" optionsJson:SparkJSON(@{ @"windowStyle": titleBarStyle }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+    [window layoutIfNeeded];
+    assert(NSEqualRects(window.frame, titleBarFrame));
+    assert(NSEqualSizes(window.minSize, titleBarMinSize));
+  }
   [window close];
   puts("Window manager controls passed");
 } }

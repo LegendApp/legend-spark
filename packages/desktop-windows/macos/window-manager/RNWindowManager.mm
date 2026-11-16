@@ -1555,6 +1555,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       @"value": [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"",
       @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
       @"instanceId": config[@"instanceId"] ?: @"",
+      @"enabled": @(toolbarItem.enabled),
     };
     if (isMenuButton) {
       // The fallback name identifies the item; it is never what the control displays, so an
@@ -1821,6 +1822,13 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
   [self sendWindowEventWithName:@"onToolbarItemSelected"
                            body:@{@"identifier": identifier, @"itemId": itemId, @"action": @{ @"type": @"action", @"itemId": value }, @"instanceId": representedObject[@"instanceId"] ?: @""}];
+}
+
+// AppKit validation enables any item whose target answers its action, so the item's `enabled` option is the answer.
+- (BOOL)validateToolbarItem:(NSToolbarItem *)item
+{
+  NSDictionary *metadata = objc_getAssociatedObject(item, &LegendToolbarControlMetadataKey);
+  return ![metadata isKindOfClass:NSDictionary.class] || ![metadata[@"enabled"] isEqual:@NO];
 }
 
 - (void)toolbarSearchButtonPressed:(id)sender
