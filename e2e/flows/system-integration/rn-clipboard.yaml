@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@react-native-clipboard/clipboard on macOS"
+intent: >
+  The RN Clipboard screen writes a token, reads it back, checks hasString and restores the previous text.
+checks: [SYS-RNCLIPBOARD-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://system-integration/rn-clipboard" }
+- extendedWaitUntil: { visible: { id: system-integration-rn-clipboard-passed }, timeout: 10s }

@@ -96,6 +96,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 | [PostHog](https://posthog.com/docs/libraries/react-native) | `posthog-react-native` | Works on macOS (4.87.0) without a patch: `identify`, `capture` and `flush` send batches through its `fetch`. Session replay and feature flags were not tested. |
 | [Get Random Values](https://github.com/LinusU/react-native-get-random-values) | `react-native-get-random-values` | Works on macOS (2.1.0) without a patch; upstream builds for macOS. `crypto.getRandomValues` rejects oversized and non-integer arrays; when the app also has `expo-crypto` it delegates to it, and the library's own native module works too. |
 | [Localize](https://github.com/zoontek/react-native-localize) | `react-native-localize` | Works on macOS (3.7.2) without a patch; upstream builds for macOS. Locales, country, time zone, currencies, calendar, temperature unit and number format come from the user's macOS settings. |
+| [Clipboard](https://github.com/react-native-clipboard/clipboard) | `@react-native-clipboard/clipboard` | Builds on macOS (1.16.3) without a patch, but upstream's macOS module implements only `getString` and `setString`; `hasString`, the image, URL and number methods and `setStrings`/`getStrings` are undefined there and throw. Prefer `expo-clipboard`, which Spark backs with its own clipboard. |
 
 ## Optional backend dependencies
 

@@ -130,7 +130,8 @@
     "react-native-sse": "1.2.1",
     "posthog-react-native": "4.87.0",
     "react-native-get-random-values": "2.1.0",
-    "react-native-localize": "3.7.2"
+    "react-native-localize": "3.7.2",
+    "@react-native-clipboard/clipboard": "1.16.3"
   },
   "expo": {
     "install": {

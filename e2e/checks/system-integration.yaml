@@ -90,3 +90,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-location.md"
+  SYS-RNCLIPBOARD-01:
+    title: "@react-native-clipboard/clipboard writes and reads plain text on the macOS pasteboard and restores the previous text"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

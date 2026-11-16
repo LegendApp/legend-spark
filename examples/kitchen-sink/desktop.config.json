@@ -67,6 +67,7 @@
           "react-native-enriched-html",
           "react-native-enriched-markdown",
           "@react-native-community/blur",
+          "@react-native-clipboard/clipboard",
           "@react-native-masked-view/masked-view",
           "@sentry/react-native",
           "@shopify/react-native-skia",
