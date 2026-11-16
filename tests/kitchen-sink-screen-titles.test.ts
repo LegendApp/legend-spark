@@ -12,7 +12,7 @@ const root = path.join(import.meta.dirname, "../examples/kitchen-sink/screens");
 
 // Screen components need the native runtime, so each screens/<area>/index.tsx loads with its components stubbed;
 // its *-messages modules (the screens' own titles) load for real.
-vi.mock("react-native", () => ({ View: "View" }));
+vi.mock("react-native", () => ({ View: "View", Platform: { OS: "windows" } }));
 vi.mock("../examples/kitchen-sink/shell/app-controller", () => ({ useI18n: () => { throw new Error("Screens do not render here."); } }));
 const stub = new Proxy({}, { has: () => true, get: (_, key) => key === "then" ? undefined : () => null });
 async function loadScreens() {
