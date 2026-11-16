@@ -80,6 +80,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 | [Portal](https://github.com/gorhom/react-native-portal) | `@gorhom/portal` | Works on macOS (1.0.14) without a patch: `Portal` content renders inside a named `PortalHost` elsewhere in the tree. |
 | [FlashList](https://github.com/Shopify/flash-list) | `@shopify/flash-list` | Works on macOS (2.3.3) without a patch: v2 is JavaScript only. Recycled rows with varying heights, `onLoad` and viewability callbacks. |
 | [RecyclerListView](https://github.com/Flipkart/recyclerlistview) | `recyclerlistview` | Works on macOS (4.2.3) without a patch; give it a sized parent, as on mobile. |
+| [React Native Paper](https://github.com/callstack/react-native-paper) | `react-native-paper` | Renders on macOS (5.15.4) without a patch: Material Design 3 cards, buttons and chips under `PaperProvider`. Two visual gaps remain: `Switch` draws as an empty track, and a `TextInput` with an initial value leaves its label over the text instead of floating it. Components that draw icons were not tested. |
 
 ## Optional backend dependencies
 
