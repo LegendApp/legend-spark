@@ -127,6 +127,12 @@ export async function prepareWindows(root: string, mode: "go" | "dev") {
   pruneWindowsSolutions(root);
   return runtime;
 }
+export function windowsBuildProperties(root: string) {
+  const source = readFileSync(path.join(root, "windows/MyApp/MyApp.vcxproj"), "utf8");
+  const sdk = source.match(/<WindowsTargetPlatformVersion>\s*(10\.0(?:\.\d+\.\d+)?)\s*<\/WindowsTargetPlatformVersion>/)?.[1];
+  if (!sdk) throw new Error("The generated Windows app has no supported WindowsTargetPlatformVersion");
+  return `PreferredToolArchitecture=x64,PlatformToolset=v145,WindowsTargetPlatformVersion=${sdk}`;
+}
 export async function buildWindows(root: string, mode: string, force: boolean): Promise<{ app: string; runtime: Runtime }> {
   if (mode !== "go" && mode !== "dev") throw new Error("Windows currently supports Spark Runner runtimes and development builds. Use spark build --dev; production builds and packaging are not implemented.");
   await ensurePatchRegistry(root);
@@ -143,7 +149,7 @@ export async function buildWindows(root: string, mode: string, force: boolean): 
   const target = runtime.arch === "arm64" ? "ARM64" : "x64";
   // RNW invokes x64 MSBuild even on ARM64 hosts. Match its compiler host to avoid
   // falling back to x86 and exhausting address space while loading large PCHs.
-  await run(root, nodeCommand(root, "react-native", "react-native", ["run-windows", "--arch", target, "--msbuildprops", "PreferredToolArchitecture=x64,PlatformToolset=v145", "--no-packager", "--no-launch", "--no-deploy", "--no-telemetry", "--logging", "--buildLogDirectory", stateFile(root, "logs/msbuild")]), { capture: true });
+  await run(root, nodeCommand(root, "react-native", "react-native", ["run-windows", "--arch", target, "--msbuildprops", windowsBuildProperties(root), "--no-packager", "--no-launch", "--no-deploy", "--no-telemetry", "--logging", "--buildLogDirectory", stateFile(root, "logs/msbuild")]), { capture: true });
   if (runtimeFor(root, nativePackages(root), mode).fingerprint !== runtime.fingerprint) throw new Error("Native inputs changed during the build. Retry; no Windows runtime was registered.");
   const products: string[] = [];
   function visit(dir: string) {

@@ -5,7 +5,7 @@ import path from "node:path";
 import { nativePackages, runtimeFor, incompatible, writeJson, VERSION } from "../packages/cli/src/project.ts";
 import { readRuntime, findGo, registerRuntime } from "../packages/cli/src/local.ts";
 import { architecture, projectPlatform, windowsArchitecture } from "../packages/cli/src/platform.ts";
-import { buildWindows, pruneWindowsSolutions, configureWindowsCommands, isWindowsDebugProduct, preserveWindowsBuildOutputs } from "../packages/cli/src/windows.ts";
+import { buildWindows, windowsBuildProperties, pruneWindowsSolutions, configureWindowsCommands, isWindowsDebugProduct, preserveWindowsBuildOutputs } from "../packages/cli/src/windows.ts";
 import { spawnSync } from "node:child_process";
 const { patchHost, withoutPackaging, unpackagedApp } = require("../packages/config-plugin/windows.plugin.cjs");
 function fixture() {
@@ -320,5 +320,19 @@ for (const fail of [false, true]) test(`Windows prebuild protects managed host s
     });
     if (fail) { await expect(prepare).rejects.toThrow("partial prebuild"); expect(readFileSync(file, "utf8")).toBe(original); }
     else { await prepare; expect(readFileSync(file, "utf8")).toContain("values[2]{{1, 2}}"); expect(readFileSync(file, "utf8")).toContain("b".repeat(64)); }
+  } finally { f.close(); }
+});
+
+test("Windows builds use the app SDK for every native project", () => {
+  const f = fixture();
+  try {
+    mkdirSync(path.join(f.root, "windows/MyApp"), { recursive: true });
+    const project = path.join(f.root, "windows/MyApp/MyApp.vcxproj");
+    for (const sdk of ["10.0.22621.0", "10.0.26100.0", "10.0"]) {
+      writeFileSync(project, `<Project><PropertyGroup><WindowsTargetPlatformVersion>${sdk}</WindowsTargetPlatformVersion></PropertyGroup></Project>`);
+      expect(windowsBuildProperties(f.root)).toContain(`WindowsTargetPlatformVersion=${sdk}`);
+    }
+    writeFileSync(project, "<Project />");
+    expect(() => windowsBuildProperties(f.root)).toThrow("WindowsTargetPlatformVersion");
   } finally { f.close(); }
 });
