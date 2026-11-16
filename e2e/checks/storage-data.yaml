@@ -16,3 +16,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/react-native-nitro-sqlite.md"
+  DATA-RNFS-01:
+    title: "@dr.pogodin/react-native-fs writes, appends, reads, stats, lists and deletes a UTF-8 file in the app's caches folder on macOS"
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

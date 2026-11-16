@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: "@dr.pogodin/react-native-fs on macOS"
+intent: >
+  The React Native FS screen writes, appends to, reads, stats and lists a UTF-8 file in a temporary caches folder, then deletes it.
+checks: [DATA-RNFS-01]
+tags: [storage-data]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://storage-data/rn-fs" }
+- extendedWaitUntil: { visible: { id: storage-data-rn-fs-passed }, timeout: 10s }

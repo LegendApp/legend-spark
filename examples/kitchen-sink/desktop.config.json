@@ -69,6 +69,7 @@
           "@react-native-community/blur",
           "@react-native-clipboard/clipboard",
           "@react-native-masked-view/masked-view",
+          "@dr.pogodin/react-native-fs",
           "@sentry/react-native",
           "@shopify/react-native-skia",
           "expo-application",
