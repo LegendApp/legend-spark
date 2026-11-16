@@ -101,6 +101,7 @@ Our documentation provides a shared place to discover integrations, with attribu
 | [Lucide](https://lucide.dev/guide/packages/lucide-react-native) | `lucide-react-native` | Works on macOS (1.73.0) without a patch on Spark's `react-native-svg`: size, color, fill and stroke width. |
 | [Phosphor Icons](https://github.com/duongdev/phosphor-react-native) | `phosphor-react-native` | Works on macOS (3.0.6) without a patch on Spark's `react-native-svg`, in every weight. |
 | [QR Code SVG](https://github.com/Expensify/react-native-qrcode-svg) | `react-native-qrcode-svg` | Works on macOS (6.3.54) without a patch on Spark's `react-native-svg`. |
+| [Progress](https://github.com/oblador/react-native-progress) | `react-native-progress` | Works on macOS (5.0.1) without a patch: `Bar`, `Circle` (with text), `Pie`, `CircleSnail` and indeterminate bars, on `Animated` and Spark's `react-native-svg`. |
 
 The `/webview` export owns its source, props, events and ref types. Its adapter currently delegates to React Native WebView; applications needing the complete upstream surface can import that package directly. Spark does not forward arbitrary backend props. The `/sqlite` adapter owns `Database`, `SqlExecutor`, row/value and mutation result types. It adds project-scoped storage, queued queries, transaction lifetime and safe numeric/blob conversion; OP-SQLite objects do not cross its public boundary. Specialized OP-SQLite features remain direct upstream integrations. Neither adapter is a template for wrapping new libraries automatically.
 

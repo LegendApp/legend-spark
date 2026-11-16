@@ -86,3 +86,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  DISP-PROGRESS-01:
+    title: react-native-progress draws bar, circle, pie and indeterminate indicators on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

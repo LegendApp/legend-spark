@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-progress on macOS
+intent: >
+  The Progress screen lays out a bar, a circle with text, a pie, a snail and an indeterminate bar.
+checks: [DISP-PROGRESS-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://displays-graphics/progress" }
+- extendedWaitUntil: { visible: { id: displays-graphics-progress-drawn }, timeout: 10s }
