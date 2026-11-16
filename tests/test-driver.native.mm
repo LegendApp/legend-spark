@@ -231,10 +231,14 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check([dark[@"ok"] boolValue] && [dark[@"changed"] boolValue], @"dark appearance waits for the UI update");
     Request(fd, @{ @"command": @"setAppAppearance", @"appearance": @"light", @"timeoutMs": @0 });
     // Captures wait for mounts to settle.
+    // While mounting, every main run-loop pass records a mount before the driver's checks run, so a
+    // stalled or late timer on a loaded runner cannot open a settle window.
     mounting = true;
     dispatch_sync(dispatch_get_main_queue(), ^{
       SparkTestDriverDidMount();
-      [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer) { if (mounting) SparkTestDriverDidMount(); else [timer invalidate]; }];
+      CFRunLoopObserverRef mounts = CFRunLoopObserverCreateWithHandler(NULL, kCFRunLoopAllActivities, true, 0, ^(CFRunLoopObserverRef, CFRunLoopActivity) { if (mounting) SparkTestDriverDidMount(); });
+      CFRunLoopAddObserver(CFRunLoopGetMain(), mounts, kCFRunLoopCommonModes);
+      CFRelease(mounts);
     });
     Check([Code(Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"busy", @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"capture waits for mounts to settle");
     Check([Code(Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60, @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"pointer input waits for mounts and gesture attachment to settle");
@@ -287,10 +291,7 @@ int main(int argc, char **argv) { @autoreleasepool {
         Check(window.isVisible, @"pointerEvents explicitly shows the hidden window");
       }
       mounting = true;
-      dispatch_sync(dispatch_get_main_queue(), ^{
-        SparkTestDriverDidMount();
-        [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer) { if (mounting) SparkTestDriverDidMount(); else [timer invalidate]; }];
-      });
+      dispatch_sync(dispatch_get_main_queue(), ^{ SparkTestDriverDidMount(); });
       Check([Request(fd, @{ @"command": @"pointerEvents", @"window": @"main", @"x": @50, @"y": @60, @"timeoutMs": @0 })[@"ok"] boolValue], @"a zero timeout prepares pointer input without waiting to settle");
       mounting = false;
       for (id x in @[@-1, @400, @"bad", NSNull.null])
