@@ -125,7 +125,8 @@
     "phosphor-react-native": "3.0.6",
     "react-native-qrcode-svg": "6.3.54",
     "react-native-progress": "5.0.1",
-    "react-native-signature-canvas": "5.1.1"
+    "react-native-signature-canvas": "5.1.1",
+    "react-native-url-polyfill": "4.0.0"
   },
   "expo": {
     "install": {

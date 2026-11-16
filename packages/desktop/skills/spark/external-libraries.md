@@ -91,6 +91,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 | [QR Code SVG](https://github.com/Expensify/react-native-qrcode-svg) | `react-native-qrcode-svg` | Works on macOS (6.3.54) without a patch on Spark's `react-native-svg`. |
 | [Progress](https://github.com/oblador/react-native-progress) | `react-native-progress` | Works on macOS (5.0.1) without a patch: `Bar`, `Circle` (with text), `Pie`, `CircleSnail` and indeterminate bars, on `Animated` and Spark's `react-native-svg`. |
 | [Signature Canvas](https://github.com/YanYuanFE/react-native-signature-canvas) | `react-native-signature-canvas` | Works on macOS (5.1.1) without a patch on Spark's `react-native-webview`: the pad loads and `readSignature()` answers through the WebView bridge (`onEmpty` for an untouched pad). Drawing with the mouse was not automated. |
+| [URL Polyfill](https://github.com/charpeni/react-native-url-polyfill) | `react-native-url-polyfill` | Works on macOS (4.0.0) without a patch: `setupURLPolyfill()` installs WHATWG `URL` and `URLSearchParams`, and `URL.createObjectURL` uses React Native's Blob module. |
 
 ## Optional backend dependencies
 
