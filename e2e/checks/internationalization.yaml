@@ -11,3 +11,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/expo-localization.md"
+  I18N-LOCALIZE-01:
+    title: react-native-localize reads locales, region, time zone, currencies and number format from macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

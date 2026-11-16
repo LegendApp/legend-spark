@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-localize on macOS
+intent: >
+  The Localize screen reads every react-native-localize value and checks their shapes.
+checks: [I18N-LOCALIZE-01]
+tags: [internationalization]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://internationalization/localize" }
+- extendedWaitUntil: { visible: { id: internationalization-localize-passed }, timeout: 10s }

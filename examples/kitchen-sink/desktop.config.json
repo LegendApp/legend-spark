@@ -95,6 +95,7 @@
           "react-native-gesture-handler",
           "react-native-get-random-values",
           "react-native-keyboard-controller",
+          "react-native-localize",
           "react-native-mmkv",
           "react-native-nitro-fetch",
           "react-native-nitro-image",
