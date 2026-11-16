@@ -273,7 +273,6 @@ test.each(["no app", "malformed", "duplicate", "mismatched", "matching"])("docto
   // installed-app transition coverage in migrations.test.ts.
   const projectVersion = await import("../packages/cli/src/project-version.ts");
   vi.spyOn(projectVersion, "ensureProjectVersion").mockImplementation(() => {});
-  vi.spyOn(projectVersion, "projectSparkVersion").mockReturnValue("");
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
