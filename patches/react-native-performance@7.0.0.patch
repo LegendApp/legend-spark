@@ -1,0 +1,13 @@
+diff --git a/react-native-performance.podspec b/react-native-performance.podspec
+index 023156d..478e803 100644
+--- a/react-native-performance.podspec
++++ b/react-native-performance.podspec
+@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
+   s.license      = package['license']
+   s.source       = { :git => 'https://github.com/oblador/react-native-performance.git', :tag => "v#{s.version}" }
+ 
+-  s.platform     = :ios, "11.0"
++  s.platforms    = { :ios => "11.0", :osx => "11.0" }
+   s.source_files = "ios/**/*.{h,m,mm}"
+ 
+   s.dependency 'React-Core'

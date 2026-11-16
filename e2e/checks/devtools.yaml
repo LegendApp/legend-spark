@@ -16,3 +16,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/desktop-libs/sentry-react-native.md"
+  DEVT-PERFORMANCE-01:
+    title: react-native-performance records User Timing marks and measures through its native module on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

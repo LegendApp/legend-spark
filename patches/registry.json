@@ -559,6 +559,19 @@
         }
       ]
     },
+    "react-native-performance": {
+      "kind": "patch",
+      "versions": [
+        {
+          "version": "7.0.0",
+          "minSpark": "0.0.4",
+          "patch": "react-native-performance@7.0.0.patch",
+          "integrity": "sha512-ARgGZpjxfCGPFByL5i9EB/tzwZIVesm0a30yyV/yvYPk1SbEjQqAQpIn55ZYEh9qO7GKinR5zQ7HUM1rAHwHYg==",
+          "optional": true,
+          "sha256": "01ffda26099353d511ed94d0e6689d9f6af7afa6e8ec76a0ed63bdba283eadf9"
+        }
+      ]
+    },
     "react-native-quick-base64": {
       "kind": "patch",
       "versions": [

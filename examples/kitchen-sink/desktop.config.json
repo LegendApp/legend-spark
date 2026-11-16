@@ -72,6 +72,7 @@
           "@dr.pogodin/react-native-fs",
           "react-native-linear-gradient",
           "react-native-restart",
+          "react-native-performance",
           "@sentry/react-native",
           "@shopify/react-native-skia",
           "expo-application",

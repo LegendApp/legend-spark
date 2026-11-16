@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: react-native-performance on macOS
+intent: >
+  The Performance screen records two marks with detail and measures between them, through the linked native module.
+  Native startup marks need the legacy bridge and are not required.
+checks: [DEVT-PERFORMANCE-01]
+tags: [devtools]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://devtools/performance" }
+- extendedWaitUntil: { visible: { id: devtools-performance-passed }, timeout: 10s }

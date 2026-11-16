@@ -290,5 +290,12 @@
     "integrity": "sha512-AJDAww9cW7F6d4g9TABhuFR1E0j00p5ktv0Rls0BA6Ymz/8J+HwMxeR6KPZmHfkMtAguH4H2kw2xhqXjjSiUlg==",
     "patch": "react-native-restart@0.0.29.patch",
     "optional": true
+  },
+  "react-native-performance": {
+    "version": "7.0.0",
+    "url": "https://registry.npmjs.org/react-native-performance/-/react-native-performance-7.0.0.tgz",
+    "integrity": "sha512-ARgGZpjxfCGPFByL5i9EB/tzwZIVesm0a30yyV/yvYPk1SbEjQqAQpIn55ZYEh9qO7GKinR5zQ7HUM1rAHwHYg==",
+    "patch": "react-native-performance@7.0.0.patch",
+    "optional": true
   }
 }
