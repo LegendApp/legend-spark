@@ -10,11 +10,11 @@ vi.mock("../packages/ui/src/SparkSelectNativeComponent", () => ({ default: "Spar
 vi.mock("../packages/ui/src/native-select/NativeSelectNativeComponent", () => ({ default: "NativeSelect" }));
 vi.mock("../packages/ui/src/native-select/NativeSegmentedControlNativeComponent", () => ({ default: "NativeSegmentedControl" }));
 vi.mock("expo-modules-core", () => ({ requireOptionalNativeModule: () => ({}) }));
-import { Button, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index.macos";
+import { Button, Checkbox, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index.macos";
 import { TextInput as MobileTextInput } from "../packages/ui/src/mobile-input";
-import { Button as WebButton, TextInput as WebTextInput, Select as WebSelect } from "../packages/ui/src/index.web";
+import { Button as WebButton, Checkbox as WebCheckbox, TextInput as WebTextInput, Select as WebSelect, SegmentedControl as WebSegmentedControl } from "../packages/ui/src/index.web";
 import { selectionIndex } from "../packages/ui/src/select";
-import { Select as AndroidSelect } from "../packages/ui/src/index.android";
+import { Select as AndroidSelect, Checkbox as AndroidCheckbox, Button as AndroidButton } from "../packages/ui/src/index.android";
 let rendered: any;
 const event = (text: string, eventCount: number) => ({ nativeEvent: { text, eventCount } });
 const options = [{ label: "One", value: "one" }, { label: "Two", value: "two" }];
@@ -99,4 +99,68 @@ test("Android Select segments expose radio semantics with their checked state", 
   const semantics = rendered.root.findAll((node: any) => node.type.name === "SegmentedButton").map((segment: any) => segment.props.modifiers[0]);
   expect(semantics.map(({ role, selected }: any) => ({ role, selected }))).toEqual([{ role: "radioButton", selected: false }, { role: "radioButton", selected: true }]);
   await act(async () => semantics[0].handler()); expect(onValueChange).toHaveBeenCalledWith("one");
+});
+
+const style = (props: any) => Object.assign({}, ...[props.style].flat(Infinity).filter(Boolean));
+test("desktop buttons take the native intrinsic size unless a style sets one; WinUI keeps its default frame", async () => {
+  const onError = vi.fn();
+  await mount(React.createElement(Button, { children: "Save", onError }));
+  let native = rendered.root.findByType("SparkButton").props; expect(style(native).width).toBeUndefined();
+  await act(async () => native.onIntrinsicSize({ nativeEvent: { width: 64, height: 22 } }));
+  native = rendered.root.findByType("SparkButton").props; expect(style(native)).toEqual({ width: 64, height: 22 });
+  await act(async () => rendered.update(React.createElement(Button, { children: "Save", onError, style: { width: 200 } })));
+  expect(style(rendered.root.findByType("SparkButton").props)).toEqual({ width: 200, height: 22 });
+  native.onIntrinsicSize({ nativeEvent: { width: NaN, height: 22 } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  platform.OS = "windows"; await mount(React.createElement(Button, { children: "Save" }));
+  expect(style(rendered.root.findByType("SparkButton").props)).toEqual({ width: 160, height: 36 });
+});
+test("disclosure buttons are controlled by expanded, reassert it on press and are unavailable where the OS lacks them", async () => {
+  const onPress = vi.fn();
+  await mount(React.createElement(Button, { children: "Details", variant: "disclosure", expanded: false, onPress }));
+  let native = rendered.root.findByType("SparkButton").props; expect(native.variant).toBe("disclosure"); expect(native.checked).toBe(false);
+  await act(async () => native.onButtonPress());
+  native = rendered.root.findByType("SparkButton").props; expect(onPress).toHaveBeenCalledTimes(1); expect(native.checked).toBe(false); expect(native.checkedRevision).toBe(1);
+  await expect(mount(React.createElement(Button, { children: "Details", variant: "disclosure" }))).rejects.toThrow("Disclosure buttons require a boolean expanded");
+  await expect(mount(React.createElement(Button, { children: "Save", expanded: true }))).rejects.toThrow("Disclosure buttons require a boolean expanded");
+  for (const [os, Component] of [["windows", Button], ["android", AndroidButton]] as const) {
+    platform.OS = os; const onError = vi.fn();
+    await mount(React.createElement(Component, { children: "Details", variant: "disclosure", expanded: true, onError }));
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
+  }
+});
+test("checkboxes are controlled native switch buttons with validated labels", async () => {
+  const onValueChange = vi.fn();
+  await mount(React.createElement(Checkbox, { children: "Amend", value: false, onValueChange }));
+  let native = rendered.root.findByType("SparkButton").props;
+  expect(native).toMatchObject({ variant: "checkbox", title: "Amend", checked: false, checkedRevision: 0, accessibilityLabel: "Amend" });
+  await act(async () => native.onButtonPress());
+  native = rendered.root.findByType("SparkButton").props; expect(onValueChange).toHaveBeenCalledWith(true); expect(native.checked).toBe(false); expect(native.checkedRevision).toBe(1);
+  await act(async () => rendered.update(React.createElement(Checkbox, { children: "Amend", value: true, disabled: true, onValueChange })));
+  native = rendered.root.findByType("SparkButton").props; expect(native.checked).toBe(true); expect(native.disabled).toBe(true);
+  native.onButtonPress(); expect(onValueChange).toHaveBeenCalledTimes(1);
+  await expect(mount(React.createElement(Checkbox, { value: false, onValueChange }))).rejects.toThrow("requires accessibilityLabel");
+  await expect(mount(React.createElement(Checkbox, { children: "Amend", value: "yes", onValueChange } as never))).rejects.toThrow("Invalid checkbox options");
+  await mount(React.createElement(Checkbox, { value: true, accessibilityLabel: "Select row", onValueChange }));
+  expect(rendered.root.findByType("SparkButton").props.title).toBe("");
+  for (const [os, Component] of [["windows", Checkbox], ["android", AndroidCheckbox]] as const) {
+    platform.OS = os; const onError = vi.fn();
+    await mount(React.createElement(Component, { children: "Amend", value: true, onValueChange, onError }));
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" })); expect(rendered.root.findAllByType("SparkButton")).toHaveLength(0);
+  }
+});
+test("segmented control size and distribution reach AppKit and web, and unknown values reject", async () => {
+  await mount(React.createElement(SegmentedControl, { options, value: "one", onValueChange: vi.fn() }));
+  expect(rendered.root.findByType("NativeSegmentedControl").props).toMatchObject({ controlSize: "regular", distribution: "fit" });
+  await act(async () => rendered.update(React.createElement(SegmentedControl, { options, value: "one", onValueChange: vi.fn(), size: "small", distribution: "fill" })));
+  expect(rendered.root.findByType("NativeSegmentedControl").props).toMatchObject({ controlSize: "small", distribution: "fill" });
+  await expect(mount(React.createElement(SegmentedControl, { options, value: "one", onValueChange: vi.fn(), size: "large" } as never))).rejects.toThrow("Invalid segmented control options");
+  await mount(React.createElement(WebSegmentedControl, { options, value: "one", onValueChange: vi.fn(), size: "small", distribution: "fill" }));
+  expect(rendered.root.findAllByType("button").map((button: any) => [button.props.style.flex, button.props.style.font])).toEqual([[1, "12px system-ui"], [1, "12px system-ui"]]);
+});
+test("web checkbox and disclosure use native input and expanded semantics", async () => {
+  const onValueChange = vi.fn();
+  await mount(React.createElement(React.Fragment, null, React.createElement(WebCheckbox, { children: "Amend", value: false, onValueChange }), React.createElement(WebButton, { children: "Details", variant: "disclosure", expanded: true })));
+  const input = rendered.root.findByType("input").props; expect(input.type).toBe("checkbox"); expect(input.checked).toBe(false);
+  input.onChange(); expect(onValueChange).toHaveBeenCalledWith(true);
+  const button = rendered.root.findByType("button").props; expect(button["aria-expanded"]).toBe(true); expect(button["aria-label"]).toBe("Details");
 });

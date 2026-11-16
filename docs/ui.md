@@ -1,6 +1,6 @@
 # Common controls
 
-Import `Button`, `TextInput`, `Select`, and `SegmentedControl` from `@legendapp/spark/ui`. Spark owns their props and consumer events; React Native, Expo UI and AppKit/WinUI implement the controls internally. The separate ordinary `NativeSelect` API and `/ui/select-controls` path are removed. Generated native components and their event envelopes are internal.
+Import `Button`, `Checkbox`, `TextInput`, `Select`, and `SegmentedControl` from `@legendapp/spark/ui`. Spark owns their props and consumer events; React Native, Expo UI and AppKit/WinUI implement the controls internally. The separate ordinary `NativeSelect` API and `/ui/select-controls` path are removed. Generated native components and their event envelopes are internal.
 
 All controls accept `disabled`, `accessibilityLabel`, `testID`, layout `style`, `onError`, and a `ref` to `ControlRef`. The ref exposes only `measureInWindow(callback)`, in React Native logical coordinates. A retained ref rejects after unmount; it does not expose backend objects, text setters, or a focus API that every backend cannot support. Button labels default to their text children. Layout styles size the native control; they do not restyle all OS chrome.
 
@@ -20,6 +20,18 @@ import { Button, Select, TextInput } from '@legendapp/spark/ui';
 
 TextInput is single-line. A controlled input receives `value`; an uncontrolled input receives optional `defaultValue`, read once on mount. They are mutually exclusive types. Switching modes requires a remount. Controlled desktop editing acknowledges native event counts so a render from before a keystroke cannot erase a newer edit. Returning the same controlled value restores that value after an edit. Mobile uses React Native's native TextInput for controlled editing and IME/selection handling: the pinned Expo UI fields provide an uncontrolled contract and are not exposed as Spark refs.
 
+On macOS, `Button` and `Checkbox` take their AppKit intrinsic size (from the label and variant) unless a style sets `width` or `height`; the size arrives just after mount. Other platforms keep a fixed default button frame (Windows 160x36).
+
+`Button`'s `variant="disclosure"` is AppKit's disclosure button (a chevron in a rounded button, no visible title). It requires a boolean `expanded`, and its text children become its accessible name; toggle `expanded` in `onPress`. A press that the parent does not apply leaves the chevron as rendered. `expanded` with any other variant throws. Disclosure buttons are macOS and web only; Windows, iOS and Android render the disabled fallback and report `E_UNSUPPORTED_PLATFORM`.
+
+`Checkbox` is a controlled checkbox: `value`, `onValueChange(next)` and optional string `children` as its label (without a label, `accessibilityLabel` is required). It is an AppKit checkbox (`NSButton` switch) on macOS and an HTML checkbox on web; Windows, iOS and Android render the disabled fallback and report `E_UNSUPPORTED_PLATFORM`.
+
+```tsx
+<Checkbox value={amend} onValueChange={setAmend}>Amend last commit</Checkbox>
+<Button variant="disclosure" expanded={open} onPress={() => setOpen(!open)}>Details</Button>
+<SegmentedControl size="small" distribution="fill" options={modes} value={mode} onValueChange={setMode} />
+```
+
 Select and SegmentedControl use the same `SelectOption` array and controlled `value`/`onValueChange`. Values are unique strings, including an empty string if desired; labels are nonempty strings and may repeat. There is no implicit selection of the first option when the requested value is missing. A native selection callback reports only a validated value, and a parent that retains its current value retains that selection.
 
 | Control | macOS | Windows | iOS | Android | React Native Web |
@@ -28,12 +40,16 @@ Select and SegmentedControl use the same `SelectOption` array and controlled `va
 | TextInput | AppKit | WinUI | RN TextInput | RN TextInput | HTML input |
 | Select | Popup | ComboBox | Menu picker | Inline choices | HTML select |
 | SegmentedControl | Segmented control | Unsupported | Segmented picker | Inline choices | Button group |
+| Checkbox | Checkbox (`NSButton` switch) | Unsupported | Unsupported | Unsupported | HTML checkbox |
+| Button `disclosure` | Disclosure button | Unsupported | Unsupported | Unsupported | `aria-expanded` button |
+
+SegmentedControl `size` (`regular` default, `small`) and `distribution` (`fit` default: segments sized to their labels; `fill`: equal segments across the control's width) apply on macOS and web. iOS and Android pickers have one size and fill their frame, so they keep those defaults.
 
 Android retains inline selection instead of promising a dropdown absent from the pinned backend. Its choices use native Compose buttons, which support disabled state; the pinned Compose Picker does not. Windows has no segmented-control backend and reports that limitation explicitly.
 
-`getControlAvailability('button' | 'text-input' | 'select' | 'segmented-control')` is a synchronous capability query. Missing or unsupported controls report `SparkError` through `onError` (default `console.error`) and render a disabled fallback containing the current label/text. Runtime host failure also uses this callback. Framework error instructions are not inserted into the application UI. Invalid props throw a shared argument/option error during render; an error boundary can handle them. Optional Expo view implementations load only when their native module is present.
+`getControlAvailability('button' | 'text-input' | 'select' | 'segmented-control' | 'checkbox')` is a synchronous capability query. Missing or unsupported controls report `SparkError` through `onError` (default `console.error`) and render a disabled fallback containing the current label/text. Runtime host failure also uses this callback. Framework error instructions are not inserted into the application UI. Invalid props throw a shared argument/option error during render; an error boundary can handle them. Optional Expo view implementations load only when their native module is present.
 
-`/ui/uniwind` provides the same four components with its explicit Uniwind integration. Specialized search, split-view, sidebar, glass and symbol components retain separate imports while their contracts are reviewed.
+`/ui/uniwind` provides the same five components with its explicit Uniwind integration. Specialized search, split-view, sidebar, glass and symbol components retain separate imports while their contracts are reviewed.
 
 Validation includes mounted React tests for disabled controls, controlled input/selection reconciliation, invalid events, callbacks, unavailable modules, refs and mobile/web adapters. An AppKit fixture executes the actual text and selector implementations for stale edits, defaults, repeated labels and empty values. It substitutes RN bridge declarations, so it does not establish full Fabric integration. Mobile/desktop interactive UI acceptance and Windows compilation remain pending.
 
@@ -55,7 +71,7 @@ On macOS these views and the controls above follow their React layout direction,
 
 `TextInputSearch` under `/ui/search` is an AppKit search field with the same controlled/default-value distinction and disabled behavior as TextInput. It adds `placeholder`, explicit `appearance`, and a `TextInputSearchRef` with `focus`, `blur`, and measurement. Empty controlled values clear the field, and stale native edit counts cannot overwrite newer typing. Native arrow-key handling is left to the search field instead of unconditionally swallowing arrows. Retained refs reject after unmount.
 
-`Sidebar` under `/ui/sidebar` takes either `items: readonly { id, label, selectable? }[]` or direct `SidebarItem` children (fragments are allowed), never both. IDs are unique nonempty strings. `selectedId` is controlled and nullable; it must reference a selectable row, and `onSelectionChange({ id })` — required, since a controlled selection needs its write path — reports a requested choice or `null` for deselection. `onContentLayout({ width, height })` reports native content size separately from the standard RN `onLayout` event. Custom rows use `SidebarItem` with `id`, optional numeric/`'auto'` row height, and `onContextMenu({ id, position, windowPosition, modifiers })`. Each row takes the width of the native list's cell (inside the source-list insets and any scroller), applied after the first native layout; `'auto'` measures the row's React height at that width. Rows mirror with the React layout direction. Positions use logical top-left coordinates; windowPosition is relative to the owning window's content, suitable for a context menu with that window's explicit ID.
+`Sidebar` under `/ui/sidebar` takes either `items: readonly { id, label, selectable? }[]` or direct `SidebarItem` children (fragments are allowed), never both. IDs are unique nonempty strings. `selectedId` is controlled and nullable; it must reference a selectable row, and `onSelectionChange({ id })` — required, since a controlled selection needs its write path — reports a requested choice or `null` for deselection. `onContentLayout({ width, height })` reports native content size separately from the standard RN `onLayout` event. `listStyle` is `'sidebar'` (default: the source list for a window's sidebar) or `'plain'`, a plain table with standard selection for lists inside content such as files or commits. Custom rows use `SidebarItem` with `id`, optional numeric/`'auto'` row height, and `onContextMenu({ id, position, windowPosition, modifiers })`. Each row takes the width of the native list's cell (inside the source-list insets and any scroller), applied after the first native layout; `'auto'` measures the row's React height at that width. Rows mirror with the React layout direction. Positions use logical top-left coordinates; windowPosition is relative to the owning window's content, suitable for a context menu with that window's explicit ID.
 
 `SidebarSplitView` under `/ui/split-view` uses named `sidebar` and `content` panes, rather than interpreting child positions. It retains width/minimum/collapsed settings and initial pane metrics. Title-bar customization is grouped:
 

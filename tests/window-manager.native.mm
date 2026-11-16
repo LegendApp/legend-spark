@@ -141,7 +141,12 @@ int main() { @autoreleasepool {
     @{ @"id": @"labelled", @"type": @"menuButton", @"label": @"Elapsed", @"systemImageName": @"sun.max", @"menuItems": @[] },
     @{ @"id": @"text-only", @"type": @"menuButton", @"label": @"Start", @"menuItems": @[] },
     @{ @"id": @"empty-label", @"type": @"menuButton", @"label": @"", @"menuItems": @[] },
+    @{ @"id": @"mode-leading", @"type": @"segmented", @"placement": @"leading", @"segments": @[@{ @"label": @"A", @"value": @"a" }] },
+    @{ @"id": @"mode-trailing", @"type": @"segmented", @"segments": @[@{ @"label": @"A", @"value": @"a" }] },
   ];
+  // Segmented items follow placement like buttons: leading ones are navigational (beside the title).
+  assert([manager toolbar:toolbar itemForItemIdentifier:@"legend.toolbar.mode-leading" willBeInsertedIntoToolbar:YES].navigational);
+  assert(![manager toolbar:toolbar itemForItemIdentifier:@"legend.toolbar.mode-trailing" willBeInsertedIntoToolbar:YES].navigational);
   NSToolbarItem *iconOnly = [manager toolbar:toolbar itemForItemIdentifier:@"legend.toolbar.icon-only" willBeInsertedIntoToolbar:YES];
   assert([iconOnly.view isKindOfClass:NSButton.class]);
   assert([(NSButton *)iconOnly.view title].length == 0);

@@ -16,8 +16,11 @@ export interface SidebarContextMenuEvent {
   windowPosition: { x: number; y: number };
   modifiers: { alt: boolean; control: boolean; meta: boolean; shift: boolean };
 }
+export type SidebarListStyle = "sidebar" | "plain";
 export interface SidebarBaseProps extends Omit<SpecializedViewProps, "children"> {
   contentInsetTop?: number;
+  /** `sidebar` (default) is the source list for window sidebars; `plain` is a content list with standard selection. */
+  listStyle?: SidebarListStyle;
   defaultRowHeight?: number;
   selectedId: string | null;
   onContentLayout?: (event: SidebarContentLayoutEvent) => void;
@@ -47,9 +50,10 @@ function childRows(children: ReactNode): ReactElement<SidebarItemProps>[] {
   });
   return rows;
 }
-export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defaultRowHeight = 28, onContentLayout, onSelectionChange, ref, onError, ...props }: SidebarProps) {
+export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defaultRowHeight = 28, listStyle = "sidebar", onContentLayout, onSelectionChange, ref, onError, ...props }: SidebarProps) {
   finite(contentInsetTop, "content inset"); finite(defaultRowHeight, "row height", 1);
   callback(onContentLayout, "content layout");
+  if (listStyle !== "sidebar" && listStyle !== "plain") throw new SparkError("E_INVALID_ARGUMENT", "Invalid sidebar list style");
   if (typeof onSelectionChange !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Sidebar selection is controlled and requires onSelectionChange");
   if (items !== undefined && (children !== undefined || !Array.isArray(items))) throw new SparkError("E_INVALID_ARGUMENT", "Use either items or SidebarItem children");
   const { selectableIds, itemsJson } = useMemo(() => {
@@ -90,7 +94,7 @@ export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defa
   }
   const context = useMemo(() => ({ rowWidth }), [rowWidth]);
   if (control.failed) return <View {...props} ref={control.ref}><SidebarContext.Provider value={context}>{items?.map(item => <Text key={item.id}>{item.label}</Text>) ?? children}</SidebarContext.Provider></View>;
-  return <NativeSidebar {...props} ref={control.ref} itemsJson={itemsJson} selectedId={selectedId ?? ""} selectionRevision={selectionRevision} contentInsetTop={contentInsetTop} defaultRowHeight={defaultRowHeight} onSidebarLayout={layout} onSidebarRowLayout={rowLayout} onSidebarSelectionChange={selection}>
+  return <NativeSidebar {...props} ref={control.ref} itemsJson={itemsJson} listStyle={listStyle} selectedId={selectedId ?? ""} selectionRevision={selectionRevision} contentInsetTop={contentInsetTop} defaultRowHeight={defaultRowHeight} onSidebarLayout={layout} onSidebarRowLayout={rowLayout} onSidebarSelectionChange={selection}>
     <SidebarContext.Provider value={context}>{children}</SidebarContext.Provider>
   </NativeSidebar>;
 }

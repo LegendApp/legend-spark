@@ -11,11 +11,22 @@ export interface ControlProps {
   ref?: Ref<ControlRef>;
   onError?: (error: SparkError) => void;
 }
-/** A native text button. Layout styles affect its frame, not OS-managed chrome. */
+/**
+ * A native text button. Without a width or height style it takes its intrinsic size on desktop.
+ * `disclosure` is the macOS disclosure button (a chevron); it requires `expanded`, and its text names it for accessibility.
+ */
 export interface ButtonProps extends ControlProps {
   children: string;
   onPress?: () => void;
-  variant?: "default" | "bordered" | "borderless";
+  variant?: "default" | "bordered" | "borderless" | "disclosure";
+  /** Controlled expansion of a `disclosure` button; toggle it in `onPress`. Only valid with that variant. */
+  expanded?: boolean;
+}
+/** A controlled native checkbox. `children` is its label; without one, set `accessibilityLabel`. */
+export interface CheckboxProps extends ControlProps {
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  children?: string;
 }
 export interface ControlledTextInputProps extends ControlProps {
   value: string;
@@ -35,5 +46,10 @@ export interface SelectProps extends ControlProps {
   value: string;
   onValueChange: (value: string) => void;
 }
-export interface SegmentedControlProps extends SelectProps {}
-export type ControlKind = "button" | "text-input" | "select" | "segmented-control";
+export interface SegmentedControlProps extends SelectProps {
+  /** `small` is the compact control size. Defaults to `regular`. */
+  size?: "regular" | "small";
+  /** `fit` sizes segments to their labels; `fill` shares the control's width equally. Defaults to `fit`. */
+  distribution?: "fit" | "fill";
+}
+export type ControlKind = "button" | "text-input" | "select" | "segmented-control" | "checkbox";

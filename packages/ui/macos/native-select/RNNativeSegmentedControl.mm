@@ -17,6 +17,7 @@ using namespace facebook::react;
   NSArray<NSString *> *_values;
   NSString *_segmentsJson;
   NSString *_value;
+  NSArray<NSString *> *_labels;
   BOOL _isUpdatingSelection;
 #else
   UIView *_segmentedControl;
@@ -29,11 +30,14 @@ using namespace facebook::react;
     _props = std::make_shared<const NativeSegmentedControlProps>();
 #if TARGET_OS_OSX
     _values = @[];
+    _labels = @[];
     _segmentsJson = @"";
     _value = @"";
     _segmentedControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
     _segmentedControl.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     _segmentedControl.controlSize = NSControlSizeRegular;
+    _segmentedControl.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
+    _segmentedControl.segmentDistribution = NSSegmentDistributionFit;
     _segmentedControl.segmentStyle = NSSegmentStyleAutomatic;
     _segmentedControl.trackingMode = NSSegmentSwitchTrackingSelectOne;
     _segmentedControl.target = self;
@@ -85,22 +89,22 @@ using namespace facebook::react;
   }
 
   _values = values;
+  _labels = labels;
   _segmentedControl.segmentCount = labels.count;
+  for (NSInteger index = 0; index < labels.count; index += 1) [_segmentedControl setLabel:labels[index] forSegment:index];
+  [self sizeSegments];
+}
 
-  CGFloat totalWidth = 0;
-  NSFont *font = _segmentedControl.font ?: [NSFont systemFontOfSize:[NSFont systemFontSize]];
-  for (NSInteger index = 0; index < labels.count; index += 1) {
-    NSString *label = labels[index];
-    [_segmentedControl setLabel:label forSegment:index];
-    CGFloat segmentWidth = MAX(64, [label sizeWithAttributes:@{NSFontAttributeName: font}].width + 28);
-    [_segmentedControl setWidth:segmentWidth forSegment:index];
-    totalWidth += segmentWidth;
+// Fit gives each segment its label's width; fill shares the control's whole width equally.
+- (void)sizeSegments
+{
+  BOOL fill = _segmentedControl.segmentDistribution == NSSegmentDistributionFillEqually;
+  BOOL small = _segmentedControl.controlSize == NSControlSizeSmall;
+  NSFont *font = _segmentedControl.font;
+  for (NSInteger index = 0; index < _labels.count; index += 1) {
+    CGFloat fitWidth = MAX(small ? 48 : 64, [_labels[index] sizeWithAttributes:@{NSFontAttributeName: font}].width + (small ? 20 : 28));
+    [_segmentedControl setWidth:fill ? 0 : fitWidth forSegment:index];
   }
-
-  CGRect frame = _segmentedControl.frame;
-  frame.size.width = totalWidth;
-  frame.size.height = MAX(28, _segmentedControl.fittingSize.height);
-  _segmentedControl.frame = frame;
 }
 
 - (void)selectValue:(NSString *)value
@@ -153,6 +157,14 @@ using namespace facebook::react;
     [self selectValue:_value];
   }
 
+  NSControlSize controlSize = newProps.controlSize == NativeSegmentedControlControlSize::Small ? NSControlSizeSmall : NSControlSizeRegular;
+  NSSegmentDistribution distribution = newProps.distribution == NativeSegmentedControlDistribution::Fill ? NSSegmentDistributionFillEqually : NSSegmentDistributionFit;
+  if (controlSize != _segmentedControl.controlSize || distribution != _segmentedControl.segmentDistribution) {
+    _segmentedControl.controlSize = controlSize;
+    _segmentedControl.font = [NSFont systemFontOfSize:[NSFont systemFontSizeForControlSize:controlSize]];
+    _segmentedControl.segmentDistribution = distribution;
+    [self sizeSegments];
+  }
   _segmentedControl.enabled = newProps.enabled;
   _segmentedControl.accessibilityLabel = [NSString stringWithUTF8String:newProps.accessibilityLabel.c_str()];
   _segmentedControl.accessibilityIdentifier = [NSString stringWithUTF8String:newProps.testId.c_str()];
@@ -165,6 +177,7 @@ using namespace facebook::react;
   [super prepareForRecycle];
 #if TARGET_OS_OSX
   _values = @[];
+  _labels = @[];
   _segmentsJson = @"";
   _value = @"";
   _isUpdatingSelection = NO;

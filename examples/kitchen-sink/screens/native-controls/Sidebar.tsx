@@ -71,3 +71,13 @@ export function SidebarReactRows() {
     </Sidebar>
   </Panel>;
 }
+
+// A content list (files, commits) rather than a window sidebar: plain table style with standard selection.
+export function SidebarPlainList() {
+  const { selectedId, status, onSelectionChange } = useSelection("playlists");
+  return <Panel title="Sidebar: plain list">
+    <Status testID="native-controls-sidebar-plain-selected">Selected: {selectedId}</Status>
+    <Status testID="native-controls-sidebar-plain-status">{status}</Status>
+    <Sidebar testID="native-controls-sidebar-plain-list" listStyle="plain" style={frame} defaultRowHeight={24} items={dataItems} selectedId={selectedId} onSelectionChange={onSelectionChange} />
+  </Panel>;
+}

@@ -508,6 +508,8 @@
   "./ui": [
     "Button",
     "ButtonProps",
+    "Checkbox",
+    "CheckboxProps",
     "ControlKind",
     "ControlProps",
     "ControlRef",
@@ -546,6 +548,7 @@
     "SidebarItem",
     "SidebarItemData",
     "SidebarItemProps",
+    "SidebarListStyle",
     "SidebarProps",
     "SidebarRowHeight",
     "SidebarSelectionEvent",
@@ -577,6 +580,7 @@
   ],
   "./ui/uniwind": [
     "Button",
+    "Checkbox",
     "SegmentedControl",
     "Select",
     "TextInput"

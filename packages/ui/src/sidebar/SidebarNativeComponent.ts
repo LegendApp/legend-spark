@@ -1,6 +1,6 @@
 import type { HostComponent, ViewProps } from "react-native";
 import { codegenNativeComponent } from "react-native";
-import type { DirectEventHandler, Double, Int32 } from "react-native/Libraries/Types/CodegenTypes";
+import type { DirectEventHandler, Double, Int32, WithDefault } from "react-native/Libraries/Types/CodegenTypes";
 
 export type SidebarSelectionChangeEvent = Readonly<{
   id: string;
@@ -19,6 +19,7 @@ export interface NativeProps extends ViewProps {
   contentInsetTop?: Double;
   defaultRowHeight?: Double;
   itemsJson?: string;
+  listStyle?: WithDefault<"sidebar" | "plain", "sidebar">;
   onSidebarLayout?: DirectEventHandler<SidebarLayoutEvent>;
   onSidebarRowLayout?: DirectEventHandler<SidebarRowLayoutEvent>;
   onSidebarSelectionChange?: DirectEventHandler<SidebarSelectionChangeEvent>;

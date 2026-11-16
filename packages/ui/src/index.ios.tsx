@@ -19,23 +19,25 @@ import { frame, buttonStyle, pickerStyle, tag, disabled as disabledModifier, acc
 import { View, Text } from "react-native";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { requireOptionalNativeModule } from "expo-modules-core";
-import { useControl, validateButton } from "./control";
+import { controlKinds, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
+import { UnavailableCheckbox } from "./checkbox-unavailable";
 import { selectionIndex } from "./select";
-import type { ButtonProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
-export type { ButtonProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+import type { ButtonProps, CheckboxProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
+export type { ButtonProps, CheckboxProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { TextInput } from "./mobile-input";
 export function getControlAvailability(control: ControlKind): Availability {
-  if (!["button", "text-input", "select", "segmented-control"].includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
+  if (!controlKinds.includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
+  if (control === "checkbox") return unsupportedPlatform;
   return control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
 }
 const fill = [frame({ maxWidth: Infinity, maxHeight: Infinity })];
 export function Button(props: ButtonProps) {
-  validateButton(props); const control = useControl(props, getControlAvailability("button"));
+  validateButton(props); const control = useControl(props, props.variant === "disclosure" ? unsupportedPlatform : getControlAvailability("button"));
   const { children, onPress, variant = "default", style, testID, accessibilityLabel = children } = props;
   return <View ref={control.ref} style={[{ width: 160, height: 44 }, style]}>
     {control.failed ? <Text accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }} testID={testID}>{children}</Text> :
       <Host style={{ flex: 1 }}><ExpoButton label={children} onPress={() => { if (control.active()) onPress?.(); }}
-        modifiers={[...fill, buttonStyle(variant === "default" ? "automatic" : variant), disabledModifier(control.disabled), labelModifier(accessibilityLabel)]} testID={testID} /></Host>}
+        modifiers={[...fill, buttonStyle(variant === "default" ? "automatic" : variant as "bordered" | "borderless"), disabledModifier(control.disabled), labelModifier(accessibilityLabel)]} testID={testID} /></Host>}
   </View>;
 }
 function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }) {
@@ -61,4 +63,6 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
   </View>;
 }
 export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
-export function SegmentedControl(props: SegmentedControlProps) { return <Selection {...props} segmented />; }
+export function Checkbox(props: CheckboxProps) { return <UnavailableCheckbox {...props} availability={getControlAvailability("checkbox")} />; }
+/** Native mobile segmented pickers have one size and fill their frame; `size` and `distribution` keep those defaults here. */
+export function SegmentedControl(props: SegmentedControlProps) { validateSegmented(props); return <Selection {...props} segmented />; }

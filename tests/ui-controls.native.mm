@@ -18,7 +18,15 @@ int redFromColor(SharedColor value) { return channel(value, 0); } int greenFromC
 int blueFromColor(SharedColor value) { return channel(value, 2); } int alphaFromColor(SharedColor value) { return channel(value, 3); }
 struct SFSymbolProps : Props { std::string name, scale, accessibilityLabel; double size = 24, yOffset = 0; SharedColor color{}; };
 struct NativeSelectProps : Props { std::string itemsJson, value, accessibilityLabel, testId; bool enabled = true; };
-struct NativeSegmentedControlProps : Props { std::string segmentsJson, value, accessibilityLabel, testId; bool enabled = true; };
+enum class NativeSegmentedControlControlSize { Regular, Small };
+enum class NativeSegmentedControlDistribution { Fit, Fill };
+struct NativeSegmentedControlProps : Props {
+  std::string segmentsJson, value, accessibilityLabel, testId; bool enabled = true;
+  NativeSegmentedControlControlSize controlSize = NativeSegmentedControlControlSize::Regular;
+  NativeSegmentedControlDistribution distribution = NativeSegmentedControlDistribution::Fit;
+};
+enum class SparkButtonVariant { Default, Bordered, Borderless, Checkbox, Disclosure };
+struct SparkButtonProps : Props { std::string title, accessibilityLabel, testId; bool disabled = false, checked = false; int checkedRevision = 0; SparkButtonVariant variant = SparkButtonVariant::Default; };
 struct EventEmitter { using Shared = std::shared_ptr<const EventEmitter>; virtual ~EventEmitter() = default; };
 struct TextChange { std::string text; int eventCount; };
 static std::vector<TextChange> changes;
@@ -40,6 +48,13 @@ struct SFSymbolEventEmitter : EventEmitter {
   struct OnSymbolError { std::string name, message; };
   void onSymbolError(OnSymbolError event) const { ++missingSymbols; }
 };
+static int buttonPresses = 0; static std::vector<std::pair<double, double>> intrinsicSizes;
+struct SparkButtonEventEmitter : EventEmitter {
+  struct OnButtonPress {}; struct OnIntrinsicSize { double height, width; };
+  void onButtonPress(OnButtonPress) const { ++buttonPresses; }
+  void onIntrinsicSize(OnIntrinsicSize event) const { intrinsicSizes.push_back({event.width, event.height}); }
+};
+struct SparkButtonComponentDescriptor {};
 struct TextInputSearchComponentDescriptor {};
 struct SFSymbolComponentDescriptor {};
 struct NativeSelectComponentDescriptor {};
@@ -79,6 +94,7 @@ static NSColor *RCTUIColorFromSharedColor(const SharedColor &value) { return val
 @protocol RCTSFSymbolViewProtocol @end
 @interface RNTextInputSearch : RCTViewComponentView @end
 @interface RNSFSymbol : RCTViewComponentView @end
+@interface RNSparkButton : RCTViewComponentView @end
 static void RCTTextInputSearchHandleCommand(id view, const NSString *name, const NSArray *args) {}
 // ACTUAL_IMPLEMENTATION
 static void Update(RNSparkTextInput *view, std::shared_ptr<SparkTextInputProps> props) { [view updateProps:props oldProps:view->_props]; }
@@ -143,6 +159,46 @@ int main() { @autoreleasepool {
     symbolProps->color = SharedColor{color}; [symbol updateProps:symbolProps oldProps:symbol->_props]; assert([tinted.contentTintColor isEqual:color]);
   }
   symbolProps->color = SharedColor{}; [symbol updateProps:symbolProps oldProps:symbol->_props]; assert([tinted.contentTintColor isEqual:NSColor.labelColor]);
+  // Buttons report their intrinsic size so JS needs no fixed width; a longer title reports a wider size.
+  RNSparkButton *button = [RNSparkButton new]; auto buttonProps = std::make_shared<SparkButtonProps>(); buttonProps->title = "Save";
+  [button updateProps:buttonProps oldProps:nullptr]; assert(intrinsicSizes.empty());
+  [button updateEventEmitter:std::make_shared<SparkButtonEventEmitter>()];
+  assert(intrinsicSizes.size() == 1 && intrinsicSizes[0].first > 20 && intrinsicSizes[0].first < 160 && intrinsicSizes[0].second > 10 && intrinsicSizes[0].second < 36);
+  [button updateProps:buttonProps oldProps:button->_props]; assert(intrinsicSizes.size() == 1);
+  buttonProps = std::make_shared<SparkButtonProps>(*buttonProps); buttonProps->title = "Save a much longer document title";
+  [button updateProps:buttonProps oldProps:button->_props]; assert(intrinsicSizes.size() == 2 && intrinsicSizes[1].first > intrinsicSizes[0].first);
+  // Checkbox: a native switch button whose state is controlled by `checked`; a press reports and a rejected change reverts.
+  buttonProps = std::make_shared<SparkButtonProps>(*buttonProps); buttonProps->variant = SparkButtonVariant::Checkbox; buttonProps->title = "Amend";
+  [button updateProps:buttonProps oldProps:button->_props];
+  NSButton *box = [button valueForKey:@"button"];
+  assert([box.title isEqual:@"Amend"] && box.state == NSControlStateValueOff && box.allowsMixedState == NO && !box.bordered);
+  [box performClick:nil]; assert(buttonPresses == 1 && box.state == NSControlStateValueOn);
+  buttonProps = std::make_shared<SparkButtonProps>(*buttonProps); buttonProps->checkedRevision = 1;
+  [button updateProps:buttonProps oldProps:button->_props]; assert(box.state == NSControlStateValueOff);
+  buttonProps = std::make_shared<SparkButtonProps>(*buttonProps); buttonProps->checked = true; buttonProps->disabled = true;
+  [button updateProps:buttonProps oldProps:button->_props]; assert(box.state == NSControlStateValueOn && !box.enabled);
+  // Disclosure: the push-disclosure chevron; `checked` is its expanded state and the title is its accessible name.
+  buttonProps = std::make_shared<SparkButtonProps>(*buttonProps); buttonProps->variant = SparkButtonVariant::Disclosure; buttonProps->title = "Details"; buttonProps->disabled = false;
+  [button updateProps:buttonProps oldProps:button->_props];
+  NSButton *disclosure = [button valueForKey:@"button"];
+  assert(disclosure != box && disclosure.superview == button && box.superview == nil);
+  assert(disclosure.bezelStyle == NSBezelStylePushDisclosure && disclosure.title.length == 0 && [disclosure.accessibilityLabel isEqual:@"Details"] && disclosure.state == NSControlStateValueOn);
+  [disclosure performClick:nil]; assert(buttonPresses == 2);
+  buttonProps = std::make_shared<SparkButtonProps>(*buttonProps); buttonProps->checked = false; buttonProps->checkedRevision = 2;
+  [button updateProps:buttonProps oldProps:button->_props]; assert(disclosure.state == NSControlStateValueOff);
+  [button prepareForRecycle]; NSButton *recycled = [button valueForKey:@"button"]; assert(recycled.bezelStyle == NSBezelStyleRounded && recycled.state == NSControlStateValueOff);
+  // Segmented control size and distribution.
+  RNNativeSegmentedControl *sized = [RNNativeSegmentedControl new];
+  auto sizedProps = std::make_shared<NativeSegmentedControlProps>(); sizedProps->segmentsJson = R"([{"label":"A","value":"a"},{"label":"Longer","value":"b"}])"; sizedProps->value = "a";
+  [sized updateProps:sizedProps oldProps:nullptr];
+  NSSegmentedControl *sizedView = [sized valueForKey:@"segmentedControl"];
+  assert(sizedView.controlSize == NSControlSizeRegular && sizedView.segmentDistribution == NSSegmentDistributionFit && [sizedView widthForSegment:0] >= 64);
+  sizedProps = std::make_shared<NativeSegmentedControlProps>(*sizedProps); sizedProps->controlSize = NativeSegmentedControlControlSize::Small;
+  [sized updateProps:sizedProps oldProps:sized->_props];
+  assert(sizedView.controlSize == NSControlSizeSmall && sizedView.font.pointSize == [NSFont systemFontSizeForControlSize:NSControlSizeSmall] && [sizedView widthForSegment:0] < 64);
+  sizedProps = std::make_shared<NativeSegmentedControlProps>(*sizedProps); sizedProps->distribution = NativeSegmentedControlDistribution::Fill;
+  [sized updateProps:sizedProps oldProps:sized->_props];
+  assert(sizedView.segmentDistribution == NSSegmentDistributionFillEqually && [sizedView widthForSegment:0] == 0 && [sizedView widthForSegment:1] == 0);
   // Layout direction: Fabric's resolved direction reaches each AppKit control and follows later updates.
   LayoutMetrics ltr{LayoutDirection::LeftToRight}, rtl{LayoutDirection::RightToLeft};
   const auto R = NSUserInterfaceLayoutDirectionRightToLeft, L = NSUserInterfaceLayoutDirectionLeftToRight;
