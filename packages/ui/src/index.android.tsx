@@ -18,20 +18,22 @@ import { View, Text } from "react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { selectionIndex } from "./select";
-import { useControl, validateButton } from "./control";
-import type { ButtonProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
-export type { ButtonProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+import { controlKinds, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
+import { UnavailableCheckbox } from "./checkbox-unavailable";
+import type { ButtonProps, CheckboxProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
+export type { ButtonProps, CheckboxProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { TextInput } from "./mobile-input";
 export function getControlAvailability(control: ControlKind): Availability {
-  if (!["button", "text-input", "select", "segmented-control"].includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
+  if (!controlKinds.includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
+  if (control === "checkbox") return unsupportedPlatform;
   return control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
 }
 export function Button(props: ButtonProps) {
-  validateButton(props); const control = useControl(props, getControlAvailability("button"));
+  validateButton(props); const control = useControl(props, props.variant === "disclosure" ? unsupportedPlatform : getControlAvailability("button"));
   const { children, onPress, variant = "default", style, testID, accessibilityLabel = children } = props;
   return <View ref={control.ref} style={[{ width: 160, height: 48 }, style]} testID={testID} accessibilityLabel={accessibilityLabel}>
     {control.failed ? <Text accessibilityState={{ disabled: true }}>{children}</Text> :
-      <ExpoButton onClick={() => { if (control.active()) onPress?.(); }} enabled={!control.disabled} variant={variant} label={children} />}
+      <ExpoButton onClick={() => { if (control.active()) onPress?.(); }} enabled={!control.disabled} variant={variant as keyof typeof buttons} label={children} />}
   </View>;
 }
 function Selection(props: SelectProps) {
@@ -46,4 +48,6 @@ function Selection(props: SelectProps) {
 }
 /** Android presents its choices inline; there is no dropdown backend in the pinned Expo UI. */
 export function Select(props: SelectProps) { return <Selection {...props} />; }
-export function SegmentedControl(props: SegmentedControlProps) { return <Selection {...props} />; }
+export function Checkbox(props: CheckboxProps) { return <UnavailableCheckbox {...props} availability={getControlAvailability("checkbox")} />; }
+/** Native mobile segmented pickers have one size and fill their frame; `size` and `distribution` keep those defaults here. */
+export function SegmentedControl(props: SegmentedControlProps) { validateSegmented(props); return <Selection {...props} />; }

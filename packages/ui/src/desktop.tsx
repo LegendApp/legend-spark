@@ -6,20 +6,45 @@ import NativeSelect from "./native-select/NativeSelectNativeComponent";
 import WindowsSelect from "./SparkSelectNativeComponent";
 import NativeSegmentedControl from "./native-select/NativeSegmentedControlNativeComponent";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
-import { useControl, useTextValue, validateButton } from "./control";
+import { unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateSegmented } from "./control";
 import { getControlAvailability } from "./availability";
 import { selectionIndex } from "./select";
-import type { ButtonProps, TextInputProps, SelectProps, SegmentedControlProps } from "./types";
-export type { ButtonProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+import type { ButtonProps, CheckboxProps, TextInputProps, SelectProps, SegmentedControlProps } from "./types";
+export type { ButtonProps, CheckboxProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { getControlAvailability } from "./availability";
 
+// AppKit buttons report their intrinsic size, which sizes the view unless a style sets width or height.
+// WinUI buttons do not, so they keep a fixed default frame.
+function useIntrinsicSize(control: ReturnType<typeof useControl>) {
+  const [size, setSize] = useState<{ width: number; height: number }>();
+  function measured(event: NativeSyntheticEvent<{ width: number; height: number }>) {
+    if (!control.mounted()) return;
+    const { width, height } = event?.nativeEvent ?? {};
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 0 || height < 0) { control.error(new SparkError("E_INVALID_DATA", "Invalid native control size")); return; }
+    setSize(previous => previous?.width === width && previous.height === height ? previous : { width, height });
+  }
+  return { frame: Platform.OS === "windows" ? { width: 160, height: 36 } : size, measured };
+}
 export function Button(props: ButtonProps) {
   validateButton(props);
-  const control = useControl(props, getControlAvailability("button"));
-  const { children, variant = "default", onPress, accessibilityLabel = children, style, testID } = props;
-  if (control.failed) return <View ref={control.ref} style={[{ width: 160, height: 36 }, style]} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}><Text>{children}</Text></View>;
-  return <NativeButton ref={control.ref} title={children} disabled={control.disabled} variant={variant} accessibilityLabel={accessibilityLabel}
-    onButtonPress={() => { if (control.active()) onPress?.(); }} onUnavailable={control.unavailable} testID={testID} style={[{ width: 160, height: 36 }, style]} />;
+  const { children, variant = "default", expanded, onPress, accessibilityLabel = children, style, testID } = props;
+  const disclosure = variant === "disclosure";
+  const control = useControl(props, disclosure && Platform.OS === "windows" ? unsupportedPlatform : getControlAvailability("button"));
+  const intrinsic = useIntrinsicSize(control);
+  const [revision, revise] = useState(0);
+  if (control.failed) return <View ref={control.ref} style={[{ width: 160, height: 36 }, style]} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true, expanded }}><Text>{children}</Text></View>;
+  return <NativeButton ref={control.ref} title={children} disabled={control.disabled} variant={variant} checked={expanded ?? false} checkedRevision={revision} accessibilityLabel={accessibilityLabel}
+    onButtonPress={() => { if (!control.active()) return; if (disclosure) revise(value => value + 1); onPress?.(); }} onIntrinsicSize={intrinsic.measured} onUnavailable={control.unavailable} testID={testID} style={[intrinsic.frame, style]} />;
+}
+export function Checkbox(props: CheckboxProps) {
+  validateCheckbox(props);
+  const control = useControl(props, getControlAvailability("checkbox"));
+  const intrinsic = useIntrinsicSize(control);
+  const [revision, revise] = useState(0);
+  const { children = "", value, onValueChange, accessibilityLabel = children, style, testID } = props;
+  if (control.failed) return <View ref={control.ref} style={style} testID={testID} accessible accessibilityRole="checkbox" accessibilityLabel={accessibilityLabel} accessibilityState={{ checked: value, disabled: true }}><Text>{children}</Text></View>;
+  return <NativeButton ref={control.ref} title={children} disabled={control.disabled} variant="checkbox" checked={value} checkedRevision={revision} accessibilityLabel={accessibilityLabel}
+    onButtonPress={() => { if (!control.active()) return; revise(count => count + 1); onValueChange(!value); }} onIntrinsicSize={intrinsic.measured} onUnavailable={control.unavailable} testID={testID} style={[intrinsic.frame, style]} />;
 }
 export function TextInput(props: TextInputProps) {
   const control = useControl(props, getControlAvailability("text-input"));
@@ -48,9 +73,9 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
   }
   const common = { ref: control.ref, value, accessibilityLabel, testID, style: [{ width: 240, height: 36 }, style], selectionRevision };
   if (control.failed) return <View ref={control.ref} style={common.style} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}><Text>{options.find(option => option.value === value)!.label}</Text></View>;
-  if (segmented) return <NativeSegmentedControl {...common} segmentsJson={JSON.stringify(options)} enabled={!control.disabled} onValueChange={changed} />;
+  if (segmented) return <NativeSegmentedControl {...common} segmentsJson={JSON.stringify(options)} enabled={!control.disabled} controlSize={(props as SegmentedControlProps).size ?? "regular"} distribution={(props as SegmentedControlProps).distribution ?? "fit"} onValueChange={changed} />;
   if (Platform.OS === "windows") return <WindowsSelect {...common} itemsJson={JSON.stringify(options)} disabled={control.disabled} onSelectionChange={changed} onUnavailable={control.unavailable} />;
   return <NativeSelect {...common} itemsJson={JSON.stringify(options)} enabled={!control.disabled} onValueChange={changed} />;
 }
 export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
-export function SegmentedControl(props: SegmentedControlProps) { return <Selection {...props} segmented />; }
+export function SegmentedControl(props: SegmentedControlProps) { validateSegmented(props); return <Selection {...props} segmented />; }

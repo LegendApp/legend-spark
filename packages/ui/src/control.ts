@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
-import type { ButtonProps, ControlProps, ControlRef, TextInputProps } from "./types";
+import type { ButtonProps, CheckboxProps, ControlProps, ControlRef, SegmentedControlProps, TextInputProps } from "./types";
 export type MeasureTarget = ControlRef | null;
 export function useControl(props: ControlProps, availability: Availability = { available: true }) {
   const { disabled = false, onError = console.error } = props;
@@ -27,10 +27,20 @@ export function useControl(props: ControlProps, availability: Availability = { a
     setFailed(true); error(new SparkError("E_UNAVAILABLE", event.nativeEvent.message));
   }
   const ref = useCallback((value: MeasureTarget) => { target.current = value; }, []);
-  return { ref, disabled, failed: failed || !availability.available, error, unavailable, active: () => mounted.current && !disabled && !failed && availability.available };
+  return { ref, disabled, failed: failed || !availability.available, error, unavailable, mounted: () => mounted.current, active: () => mounted.current && !disabled && !failed && availability.available };
 }
+export const controlKinds = ["button", "text-input", "select", "segmented-control", "checkbox"] as const;
+export const unsupportedPlatform: Availability = { available: false, reason: "unsupported-platform" };
 export function validateButton(props: ButtonProps) {
-  if (typeof props.children !== "string" || !props.children.length || (props.onPress !== undefined && typeof props.onPress !== "function") || (props.variant !== undefined && !["default", "bordered", "borderless"].includes(props.variant))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid button options");
+  if (typeof props.children !== "string" || !props.children.length || (props.onPress !== undefined && typeof props.onPress !== "function") || (props.variant !== undefined && !["default", "bordered", "borderless", "disclosure"].includes(props.variant))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid button options");
+  if ((props.variant === "disclosure") !== (props.expanded !== undefined) || (props.expanded !== undefined && typeof props.expanded !== "boolean")) throw new SparkError("E_INVALID_ARGUMENT", "Disclosure buttons require a boolean expanded; other buttons do not take it");
+}
+export function validateCheckbox(props: CheckboxProps) {
+  if (typeof props.value !== "boolean" || typeof props.onValueChange !== "function" || (props.children !== undefined && (typeof props.children !== "string" || !props.children.length))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid checkbox options");
+  if (props.children === undefined && !props.accessibilityLabel) throw new SparkError("E_INVALID_ARGUMENT", "A checkbox without a label requires accessibilityLabel");
+}
+export function validateSegmented(props: SegmentedControlProps) {
+  if ((props.size !== undefined && !["regular", "small"].includes(props.size)) || (props.distribution !== undefined && !["fit", "fill"].includes(props.distribution))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid segmented control options");
 }
 export function useTextValue(props: TextInputProps) {
   const controlled = props.value !== undefined;

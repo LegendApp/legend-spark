@@ -6,6 +6,8 @@ Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `
 
 - Use ordinary React Native views and text for layout. Spark's UI exports are a small set of native controls, not a component library.
 - `Button`, `TextInput`, `Select` and `SegmentedControl` (from `/ui`, or `/ui/uniwind` for className styling) render native AppKit/WinUI controls and work on iOS/Android/web through Expo UI or React Native.
+- `Checkbox` (`value`/`onValueChange`, string label children) and `Button variant="disclosure"` (requires `expanded`) are macOS and web only; check `getControlAvailability('checkbox')`. On macOS, buttons and checkboxes size themselves; give no fixed width unless you want one.
+- `SegmentedControl` takes `size` (`regular`/`small`) and `distribution` (`fit`/`fill`). `Sidebar` takes `listStyle="plain"` for lists inside content.
 - `TextInput` is single-line and either controlled (`value`) or uncontrolled (`defaultValue`), never both; switching needs a remount.
 - `Select`/`SegmentedControl` never auto-select the first option when `value` is missing. Values are unique strings.
 - Invalid props throw during render; runtime problems go to `onError` (default `console.error`). Spark never inserts error text into your UI.
@@ -44,4 +46,4 @@ Uniwind/Tailwind classes are optional (`/ui/uniwind`, `cn` from `/ui/classnames`
 
 ## Platforms
 
-`/ui` core controls: macOS, Windows (no `SegmentedControl`), iOS, Android, web. Specialized `/ui/*` views: macOS only. `/webview`: macOS, Windows. `/markdown`, `/html`: macOS (and upstream mobile), not Windows.
+`/ui` core controls: macOS, Windows (no `SegmentedControl`, `Checkbox` or disclosure button), iOS, Android (no `Checkbox` or disclosure button), web. Specialized `/ui/*` views: macOS only. `/webview`: macOS, Windows. `/markdown`, `/html`: macOS (and upstream mobile), not Windows.
