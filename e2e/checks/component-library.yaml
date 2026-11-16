@@ -101,3 +101,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  COMP-IMAGEVIEWING-01:
+    title: react-native-image-viewing opens its full-window viewer over React Native's Modal on macOS and closes with Escape
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

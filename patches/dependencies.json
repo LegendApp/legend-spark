@@ -311,5 +311,12 @@
     "integrity": "sha512-bzZH89/cwmpkPMKKveoC72C4JH0yF4St5Ceg/ZM9pA1SqX9MlRIrIrrOGZ/+yi++xAvFDiYfihtn9TvXWU9/rA==",
     "patch": "react-native-community-geolocation@3.4.0.patch",
     "optional": true
+  },
+  "react-native-image-viewing": {
+    "version": "0.2.2",
+    "url": "https://registry.npmjs.org/react-native-image-viewing/-/react-native-image-viewing-0.2.2.tgz",
+    "integrity": "sha512-osWieG+p/d2NPbAyonOMubttajtYEYiRGQaJA54slFxZ69j1V4/dCmcrVQry47ktVKy8/qpFwCpW1eT6MH5T2Q==",
+    "patch": "react-native-image-viewing@0.2.2.patch",
+    "optional": true
   }
 }

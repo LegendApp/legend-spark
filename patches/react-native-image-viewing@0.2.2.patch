@@ -1,0 +1,10 @@
+diff --git a/dist/components/ImageItem/ImageItem.macos.js b/dist/components/ImageItem/ImageItem.macos.js
+new file mode 100644
+index 0000000..36adc48
+--- /dev/null
++++ b/dist/components/ImageItem/ImageItem.macos.js
+@@ -0,0 +1,4 @@
++/**
++ * macOS uses the iOS item: a zoomable ScrollView with double-tap zoom and swipe to close.
++ */
++export { default } from "./ImageItem.ios";
