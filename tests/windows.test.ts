@@ -256,7 +256,7 @@ test("Windows excludes configured native projects from its graph and RNW configu
   } finally { f.close(); }
 });
 
-for (const newline of ["\n", "\r\n"]) test(`Windows generation prunes excluded solution projects and GUID references (${JSON.stringify(newline)})`, () => {
+for (const newline of ["\n", "\r\n"]) test(`Windows generation prunes excluded solution projects, GUID references and autolink targets (${JSON.stringify(newline)})`, () => {
   const f = fixture();
   try {
     const excluded = ["react-native-screens", "@react-native-community/datetimepicker", "other-native-module"];
@@ -276,9 +276,15 @@ for (const newline of ["\n", "\r\n"]) test(`Windows generation prunes excluded s
     const custom = block("react-native-screens", "Custom\\screens.vcxproj", "CUSTOM");
     const global = [`Global`, `GlobalSection(ProjectConfigurationPlatforms) = postSolution`, `{APP}.Debug.ActiveCfg = Debug|ARM64`, `{RETAINED}.Debug.ActiveCfg = Debug|ARM64`, ...excluded.map((_, i) => `{EXCLUDED-${i}}.Debug.Build.0 = Debug|ARM64`), `EndGlobalSection`, `GlobalSection(NestedProjects) = preSolution`, `{excluded-0} = {FOLDER}`, `EndGlobalSection`, `EndGlobal`, ""].join(newline);
     writeFileSync(solution, app + excluded.map((name, i) => block(name, `..\\node_modules\\${name.replaceAll("/", "\\")}\\windows\\Module.vcxproj`, `EXCLUDED-${i}`)).join("") + retained + custom + global);
+    const targets = path.join(f.root, "windows/MyApp/AutolinkedNativeModules.g.targets");
+    mkdirSync(path.dirname(targets));
+    const reference = (name: string, guid: string) => `${newline}    <!-- Projects from ${name} -->${newline}    <ProjectReference Include="$(ProjectDir)..\\..\\node_modules\\${name.replaceAll("/", "\\")}\\windows\\Module.vcxproj">${newline}      <Project>{${guid}}</Project>${newline}    </ProjectReference>`;
+    const targetsFile = (references: string) => `<Project>${newline}  <ItemGroup>${references}${newline}  </ItemGroup>${newline}</Project>${newline}`;
+    writeFileSync(targets, targetsFile(excluded.map((name, i) => reference(name, `EXCLUDED-${i}`)).join("") + reference("retained", "RETAINED")));
     for (const name of excluded) expect(config.dependencies[name].platforms.windows).toBeNull();
     expect(nativePackages(f.root).map(pkg => pkg.name)).toEqual(["retained"]);
     pruneWindowsSolutions(f.root);
+    expect(readFileSync(targets, "utf8")).toBe(targetsFile(reference("retained", "RETAINED")));
     const pruned = readFileSync(solution, "utf8");
     expect(pruned).toContain(app + retained + custom);
     expect(pruned).not.toMatch(/EXCLUDED-/i);

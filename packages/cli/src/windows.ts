@@ -73,15 +73,18 @@ export function configureWindowsCommands(root: string) {
   const next = source.replace("</Project>", newline + group + newline + "</Project>");
   if (next !== original) writeFileSync(file, next);
 }
-function pruneWindowsSolution(solution: string, excludedRoots: string[]) {
+function excludedProjectMatcher(excludedRoots: string[]) {
   const normalize = (file: string) => path.resolve(file.replaceAll("\\", path.sep)).toLowerCase();
   const locations = (file: string) => [normalize(file), ...(existsSync(file) ? [normalize(realpathSync(file))] : [])];
   const excluded = excludedRoots.flatMap(locations);
+  return (directory: string, relative: string) =>
+    locations(path.resolve(directory, relative.replaceAll("\\", path.sep))).some(file => excluded.some(root => file.startsWith(root + path.sep)));
+}
+function pruneWindowsSolution(solution: string, isExcluded: ReturnType<typeof excludedProjectMatcher>) {
   const guids = new Set<string>();
   const original = readFileSync(solution, "utf8");
   const projects = original.replace(/^Project\([^\r\n]+\) = "[^"\r\n]*", "([^"\r\n]+)", "(\{[^}]+\})"\r?\n[\s\S]*?^EndProject(?:\r?\n|$)/gm, (block, relative: string, guid: string) => {
-    const files = locations(path.resolve(path.dirname(solution), relative.replaceAll("\\", path.sep)));
-    if (!files.some(file => excluded.some(root => file.startsWith(root + path.sep)))) return block;
+    if (!isExcluded(path.dirname(solution), relative)) return block;
     guids.add(guid.toUpperCase());
     return "";
   });
@@ -95,9 +98,21 @@ export function pruneWindowsSolutions(root: string) {
   const excluded = Object.entries(config.dependencies)
     .filter(([, dependency]) => dependency.platforms?.windows === null)
     .flatMap(([name]) => (appRequire.resolve.paths(name) ?? []).map(base => path.join(base, name)));
-  for (const solutionFile of readdirSync(path.join(root, "windows")).filter(file => file.endsWith(".sln"))) {
-    pruneWindowsSolution(path.join(root, "windows", solutionFile), excluded);
+  const isExcluded = excludedProjectMatcher(excluded);
+  const windows = path.join(root, "windows");
+  for (const entry of readdirSync(windows, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith(".sln")) pruneWindowsSolution(path.join(windows, entry.name), isExcluded);
+    const targets = path.join(windows, entry.name, "AutolinkedNativeModules.g.targets");
+    if (entry.isDirectory() && existsSync(targets)) pruneAutolinkTargets(targets, isExcluded);
   }
+}
+// A previous autolink-windows run leaves excluded modules' ProjectReferences here, and restore reads them before
+// autolink regenerates the file.
+function pruneAutolinkTargets(targets: string, isExcluded: ReturnType<typeof excludedProjectMatcher>) {
+  const original = readFileSync(targets, "utf8");
+  const next = original.replace(/(?:\r?\n[ \t]*<!-- Projects from [^\r\n]*-->)?\r?\n[ \t]*<ProjectReference Include="\$\(ProjectDir\)([^"]+)">[\s\S]*?<\/ProjectReference>/g,
+    (block, relative: string) => isExcluded(path.dirname(targets), relative) ? "" : block);
+  if (next !== original) writeFileSync(targets, next);
 }
 export async function prepareWindows(root: string, mode: "go" | "dev") {
   await ensurePatchRegistry(root);
