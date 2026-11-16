@@ -1,4 +1,4 @@
-export type RegistryVersion = { version: string; minSpark: string; patch?: string; sdkPatch?: string; sdkSha256?: string; sha256?: string; integrity?: string; requires?: string[]; optional?: boolean };
+export type RegistryVersion = { version: string; minSpark: string; patch?: string; sdkPatch?: string; sdkSha256?: string; sha256?: string; integrity?: string; requires?: string[]; optional?: boolean; verified?: true };
 export type RegistryLibrary = { kind: "patch" | "sdk" | "redirect"; versions: RegistryVersion[] };
 export type PatchRegistry = { schema: 1; libraries: Record<string, RegistryLibrary> };
 export type RegistrySource = { registry: PatchRegistry; directory: string; sha: string; sparkVersion: string; sparkFile: string; bytes?: Map<string, string> };

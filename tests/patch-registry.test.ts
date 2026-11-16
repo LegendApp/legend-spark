@@ -59,7 +59,50 @@ test.each([
   { schema: 1, libraries: { lib: { kind: "patch", versions: [{ version: "1.0.0", minSpark: "0.0.4", patch: "../escape.patch", sha256: "a".repeat(64) }] } } },
   { schema: 1, libraries: { lib: { kind: "redirect", versions: [{ version: "1.0.0", minSpark: "latest" }] } } },
   { schema: 1, libraries: { lib: { kind: "redirect", versions: [{ version: "1.0.0", minSpark: "0.0.4", ignored: true }] } } },
+  { schema: 1, libraries: { lib: { kind: "patch", versions: [{ version: "1.0.0", minSpark: "0.0.4", verified: false }] } } },
+  { schema: 1, libraries: { lib: { kind: "redirect", versions: [{ version: "1.0.0", minSpark: "0.0.4", verified: true }] } } },
+  { schema: 1, libraries: { lib: { kind: "patch", versions: [{ version: "1.0.0", minSpark: "0.0.4", verified: true, patch: "lib@1.0.0.patch", sha256: "a".repeat(64) }] } } },
 ])("rejects malformed registry or unsupported metadata", registry => expect(() => validateRegistry(registry)).toThrow());
+
+function withVerified(f: ReturnType<typeof fixture>, entry: Record<string, unknown> = { version: "3.0.0", minSpark: "0.0.4", verified: true, optional: true }) {
+  f.registry.libraries["example-lib"]!.versions.push(entry as PatchRegistry["libraries"][string]["versions"][number]);
+  json(path.join(f.spark, "patches/registry.json"), validateRegistry(f.registry));
+  return f;
+}
+
+test("a verified version is supported and applies no patch", async () => {
+  const f = withVerified(fixture("3.0.0"));
+  expect(registryFindings(f.root)).toEqual([]);
+  await ensurePatchRegistry(f.root, { fetcher: offline, notice: vi.fn(), tty: false });
+  prepareNativePatches(f.root);
+  expect(readFileSync(path.join(f.library, "file.txt"), "utf8")).toBe("upstream\n");
+  expect(existsSync(path.join(f.library, ".spark-base.patch"))).toBe(false);
+  const receipt = JSON.parse(readFileSync(path.join(f.library, "package.json"), "utf8")).spark.dependencyPatch;
+  expect(receipt.version).toBe("3.0.0");
+  expect(receipt.patchHash).toBeUndefined();
+});
+
+test("prompts offer verified versions alongside patched ones", async () => {
+  const f = withVerified(fixture("8.0.0")), ask = vi.fn(async (_message: string) => "");
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const install = vi.fn(async () => { json(path.join(f.library, "package.json"), { name: "example-lib", version: "3.0.0" }); });
+  await ensurePatchRegistry(f.root, { fetcher: offline, notice: vi.fn(), tty: true, ask, install });
+  expect(log).toHaveBeenCalledWith(expect.stringContaining("Supported versions: 3.0.0, 2.0.0, 1.0.0"));
+  expect(ask.mock.calls[0]?.[0]).toContain("[3.0.0]");
+  prepareNativePatches(f.root);
+  expect(readFileSync(path.join(f.library, "file.txt"), "utf8")).toBe("upstream\n");
+});
+
+test("a verified recipe for a patched version removes the earlier Spark layer", async () => {
+  const f = fixture();
+  prepareNativePatches(f.root);
+  expect(readFileSync(path.join(f.library, "file.txt"), "utf8")).toBe("patched\n");
+  withVerified(f, { version: "1.0.0", minSpark: "0.0.5", verified: true, optional: true });
+  const sdk = JSON.parse(readFileSync(path.join(f.spark, "package.json"), "utf8")); sdk.version = "0.0.5"; json(path.join(f.spark, "package.json"), sdk);
+  prepareNativePatches(f.root);
+  expect(readFileSync(path.join(f.library, "file.txt"), "utf8")).toBe("upstream\n");
+  expect(existsSync(path.join(f.library, ".spark-base.patch"))).toBe(false);
+});
 
 test("selects the newest compatible revision of an exact installed version, with prerelease ordering", () => {
   const library = { kind: "redirect" as const, versions: [

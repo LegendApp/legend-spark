@@ -322,7 +322,7 @@ function prepareNativePatches(root, installed = []) {
       layerApp(packageRoot, name,
         { text: bytes.toString("utf8"), applied: appliedSpark, apply: enabled, error: relative => `Cannot apply Spark's ${name} patch to ${relative}. Reinstall dependencies before retrying.` },
         own, relative => `Cannot apply ${own.file} to ${relative}${enabled ? " on top of Spark's patch" : ""}. Redo it with spark patch ${name}.`);
-      if (enabled) fs.writeFileSync(keptSpark, bytes);
+      if (enabled && bytes.length) fs.writeFileSync(keptSpark, bytes);
       else fs.rmSync(keptSpark, { force: true });
       layered.add(name);
       stamp(file, installed, manifest => {
@@ -330,7 +330,7 @@ function prepareNativePatches(root, installed = []) {
           manifest.spark.sdk = true;
           manifest.spark.requires = pin.requires ?? [];
         }
-        manifest.spark.dependencyPatch = { schema: 1, version: pin.version, patchHash: enabled ? hash(bytes) : undefined,
+        manifest.spark.dependencyPatch = { schema: 1, version: pin.version, patchHash: enabled && bytes.length ? hash(bytes) : undefined,
           appPatchHash: own && hash(own.bytes), appRoot: ownRoot, upstreamIntegrity: pin.integrity };
       });
     }

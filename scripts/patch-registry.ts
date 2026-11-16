@@ -20,8 +20,8 @@ export function generateRegistry(root: string): PatchRegistry {
     else if (JSON.stringify(Object.entries(previous).sort()) !== JSON.stringify(Object.entries(entry).sort())) throw new Error(`Patch changed without a new minSpark: ${name}@${entry.version}. Preserve old patch files and add a new entry.`);
   }
   for (const [name, pin] of Object.entries(read("patches/dependencies.json")) as [string, any][]) {
-    const { version, patch, integrity, requires, optional } = pin;
-    add(name, "patch", { version, minSpark, patch, ...(integrity ? { integrity } : {}), ...(requires ? { requires } : {}), ...(optional !== undefined ? { optional } : {}) });
+    const { version, patch, integrity, requires, optional, verified } = pin;
+    add(name, "patch", { version, minSpark, ...(verified ? { verified } : { patch }), ...(integrity ? { integrity } : {}), ...(requires ? { requires } : {}), ...(optional !== undefined ? { optional } : {}) });
   }
   const camera = read("patches/camera/upstream.json");
   for (const name of ["react-native-nitro-modules", "react-native-nitro-image", "react-native-vision-camera"]) {

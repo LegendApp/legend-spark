@@ -41,12 +41,16 @@ function validateRegistry(value) {
     if (!["patch", "sdk", "redirect"].includes(library.kind) || !Array.isArray(library.versions) || !library.versions.length) throw new Error(`Malformed patch registry library: ${name}`);
     const seen = new Set();
     for (const entry of library.versions) {
-      object(entry, ["version", "minSpark", "patch", "sha256", "integrity", "requires", "optional", "sdkPatch", "sdkSha256"], name);
+      object(entry, ["version", "minSpark", "patch", "sha256", "integrity", "requires", "optional", "sdkPatch", "sdkSha256", "verified"], name);
       if (typeof entry.version !== "string" || typeof entry.minSpark !== "string" || !exact.test(entry.version) || !exact.test(entry.minSpark)) throw new Error(`Registry versions must be exact: ${name}`);
       const key = `${entry.version}@${entry.minSpark}`;
       if (seen.has(key)) throw new Error(`Duplicate registry patch: ${name}@${key}`);
       seen.add(key);
-      if (library.kind === "redirect") {
+      // A verified entry is a version Spark tested that needs no patch: it is supported and applies nothing.
+      if (entry.verified !== undefined) {
+        if (entry.verified !== true || library.kind !== "patch") throw new Error(`Invalid verified entry: ${name}@${entry.version}`);
+        if (entry.patch !== undefined || entry.sha256 !== undefined || entry.sdkPatch !== undefined || entry.sdkSha256 !== undefined) throw new Error(`Verified ${name}@${entry.version} cannot declare a patch`);
+      } else if (library.kind === "redirect") {
         if (entry.patch !== undefined || entry.sha256 !== undefined) throw new Error(`Redirect ${name} cannot declare a patch`);
       } else if (typeof entry.patch !== "string" || !/^[A-Za-z0-9@+_.-]+(?:\/[A-Za-z0-9@+_.-]+)*\.patch$/.test(entry.patch) || entry.patch.split("/").some(part => part === "..") || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256)) throw new Error(`Invalid registry patch path/hash: ${name}`);
       if (entry.sdkPatch !== undefined || entry.sdkSha256 !== undefined) {
@@ -99,6 +103,7 @@ function sourceFor(root) {
   return bundled;
 }
 function readPatch(source, entry) {
+  if (entry.verified) return Buffer.alloc(0);
   const bytes = source.bytes?.get(entry.patch) ?? fs.readFileSync(path.join(source.directory, entry.patch));
   if (hash(bytes) !== entry.sha256) throw new Error(`Patch registry hash mismatch: ${entry.patch}`);
   return Buffer.from(bytes);
@@ -244,7 +249,7 @@ function registryFindings(root, source = sourceFor(root)) {
       const fix = !selected && target ? installCommand(owner, pkg.name, target).command : "spark upgrade";
       findings.push({ ...pkg, owner, selected, latest, versions, fix, message: selected
         ? `${pkg.name}@${pkg.version} has a newer patch requiring Spark ${latest.minSpark} (installed ${source.sparkVersion}).`
-        : `${pkg.name}@${pkg.version} has no patch compatible with Spark ${source.sparkVersion}.` });
+        : `${pkg.name}@${pkg.version} isn't supported by Spark ${source.sparkVersion}: no compatible patch or verified version.` });
     }
   }
   return findings;
@@ -288,11 +293,11 @@ async function ensurePatchRegistry(root, options = {}) {
     if (issue.selected) continue;
     const fail = () => new Error(`${issue.message}\nFix: cd ${JSON.stringify(issue.owner)} && ${issue.fix}`);
     if (!tty || process.env.SPARK_PATCH_REINSTALL || !issue.versions.length) throw fail();
-    console.log(`${issue.message}\nPatched versions: ${issue.versions.join(", ")}`);
-    const answer = (await ask(`Install patched ${issue.name} [${issue.versions[0]}] (version or n to decline)? `)).trim();
+    console.log(`${issue.message}\nSupported versions: ${issue.versions.join(", ")}`);
+    const answer = (await ask(`Install supported ${issue.name} [${issue.versions[0]}] (version or n to decline)? `)).trim();
     if (/^(n|no)$/i.test(answer)) throw fail();
     const version = answer || issue.versions[0];
-    if (!issue.versions.includes(version)) throw new Error(`Choose a listed patched version for ${issue.name}: ${issue.versions.join(", ")}`);
+    if (!issue.versions.includes(version)) throw new Error(`Choose a listed supported version for ${issue.name}: ${issue.versions.join(", ")}`);
     const ownerFile = path.join(issue.owner, "package.json"), pkg = read(ownerFile);
     let direct = false;
     for (const field of ["dependencies", "devDependencies", "optionalDependencies"]) if (Object.hasOwn(pkg[field] ?? {}, issue.name)) { pkg[field][issue.name] = version; direct = true; }
