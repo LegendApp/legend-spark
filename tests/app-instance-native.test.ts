@@ -19,7 +19,7 @@ beforeAll(() => {
 });
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
 
-type Run = { child: ChildProcess; lines: string[]; done: Promise<number | null>; line(prefix: string): Promise<string> };
+type Run = { child: ChildProcess; lines: string[]; done: Promise<number | null>; line(prefix: string): Promise<string>; launched(count: number): Promise<void> };
 function run(...args: string[]): Run {
   const child = spawn(binary, args, { stdio: ["ignore", "pipe", "inherit"] });
   const lines: string[] = [], waiters: (() => void)[] = [];
@@ -36,7 +36,13 @@ function run(...args: string[]): Run {
     void done.then(() => { const found = lines.find(item => item.startsWith(prefix)); if (found) resolve(found); else reject(new Error(`No "${prefix}" in ${JSON.stringify(lines)}`)); });
     look();
   });
-  return { child, lines, done, line };
+  // Another process's exit can reach Node before this owner's output, so wait for the launches it printed.
+  const launched = (count: number) => new Promise<void>(resolve => {
+    const look = () => { if (lines.filter(item => item.startsWith("LAUNCH ")).length >= count) resolve(); else waiters.push(look); };
+    void done.then(() => resolve());
+    look();
+  });
+  return { child, lines, done, line, launched };
 }
 const launches = (owner: Run) => owner.lines.filter(item => item.startsWith("LAUNCH ")).map(item => JSON.parse(item.slice(7)));
 
@@ -52,7 +58,7 @@ test.skipIf(!darwin)("a second process forwards arguments, files and URLs to the
   const second = run("launch", directory, "pair", "second", "8");
   expect(await second.done).toBe(0);
   expect(second.lines).toEqual(["FORWARDED second"]);
-  // The acknowledgment follows the receiver, so the owner has already printed the launch.
+  await owner.launched(1);
   expect(launches(owner)).toEqual([{ arguments: ["app", "second"], workingDirectory: "/tmp", files: ["/tmp/second"], urls: ["spark-test://open/second"] }]);
   owner.child.kill("SIGKILL");
   await owner.done;
@@ -67,6 +73,7 @@ test.skipIf(!darwin)("simultaneous launches elect exactly one owner and every ot
   const owners = runs.filter((_, index) => forwarded[index] === undefined);
   expect(owners).toHaveLength(1);
   await Promise.all(runs.filter(item => item !== owners[0]).map(item => item.done));
+  await owners[0]!.launched(forwarded.filter(Boolean).length);
   expect(launches(owners[0]!).map(launch => launch.arguments[1]).sort()).toEqual(forwarded.filter(Boolean).sort());
   owners[0]!.child.kill("SIGKILL");
   await owners[0]!.done;
@@ -81,6 +88,7 @@ test.skipIf(!darwin)("a crashed owner releases the lock and its stale socket is 
   await next.line("PRIMARY next");
   const later = run("launch", directory, "crash", "later", "8");
   expect(await later.done).toBe(0);
+  await next.launched(1);
   expect(launches(next).map(launch => launch.arguments[1])).toEqual(["later"]);
   next.child.kill("SIGKILL");
   await next.done;
@@ -93,6 +101,7 @@ test.skipIf(!darwin)("a malformed payload is closed without acknowledgment and l
   expect(await bad.done).toBe(0);
   const good = run("launch", directory, "bad", "good", "8");
   expect(await good.done).toBe(0);
+  await owner.launched(1);
   expect(launches(owner).map(launch => launch.arguments[1])).toEqual(["good"]);
   owner.child.kill("SIGKILL");
   await owner.done;
@@ -111,6 +120,7 @@ test.skipIf(!darwin)("a vetoed relaunch kills the waiting child and the parent k
   const later = run("launch", directory, "veto", "later", "8");
   expect(await later.done).toBe(0);
   expect(relauncher.lines.some(item => item.startsWith("RELAUNCHED"))).toBe(false);
+  await relauncher.launched(1);
   expect(launches(relauncher).map(launch => launch.arguments[1])).toEqual(["later"]);
   await relauncher.done;
 }, 20000);
