@@ -48,6 +48,14 @@
           "integrity": "sha512-0cZGrK61UZ8VxpKKV/lun/L/b5wKus55IhvqqdewUayHwIc73lrLI0l5CIlHw8tA0/yQEzHEMEdtHQglAD+hKA==",
           "optional": true,
           "sha256": "141477f421e71889ddf36f7e6846d7342779f689ea9a19ad87a6d4906f526eb7"
+        },
+        {
+          "version": "9.3.0",
+          "minSpark": "0.0.4",
+          "patch": "react-native-community-datetimepicker@9.3.0.patch",
+          "integrity": "sha512-4M87hB1xbqxzwOAt0P5GZyXf7wXjspRplIwctYHH5w4nDX4E0rWIPdJkZ4S69z0J5slwSIdXpHo+tDWMCvhNSg==",
+          "optional": true,
+          "sha256": "141477f421e71889ddf36f7e6846d7342779f689ea9a19ad87a6d4906f526eb7"
         }
       ]
     },
