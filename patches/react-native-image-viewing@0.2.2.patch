@@ -1,3 +1,48 @@
+diff --git a/dist/ImageViewing.js b/dist/ImageViewing.js
+index 3d7641a..3d3cf6a 100644
+--- a/dist/ImageViewing.js
++++ b/dist/ImageViewing.js
+@@ -6,7 +6,7 @@
+  *
+  */
+ import React, { useCallback, useRef, useEffect } from "react";
+-import { Animated, Dimensions, StyleSheet, View, VirtualizedList, Modal, } from "react-native";
++import { Animated, Dimensions, StyleSheet, View, VirtualizedList, Modal, Platform, } from "react-native";
+ import ImageItem from "./components/ImageItem/ImageItem";
+ import ImageDefaultHeader from "./components/ImageDefaultHeader";
+ import StatusBarManager from "./components/StatusBarManager";
+@@ -16,7 +16,8 @@ import useRequestClose from "./hooks/useRequestClose";
+ const DEFAULT_ANIMATION_TYPE = "fade";
+ const DEFAULT_BG_COLOR = "#000";
+ const DEFAULT_DELAY_LONG_PRESS = 800;
+-const SCREEN = Dimensions.get("screen");
++// Spark: on macOS the viewer covers the window, and "screen" is the whole display.
++const SCREEN = Dimensions.get(Platform.OS === "macos" ? "window" : "screen");
+ const SCREEN_WIDTH = SCREEN.width;
+ function ImageViewing({ images, keyExtractor, imageIndex, visible, onRequestClose, onLongPress = () => { }, onImageIndexChange, animationType = DEFAULT_ANIMATION_TYPE, backgroundColor = DEFAULT_BG_COLOR, presentationStyle, swipeToCloseEnabled, doubleTapToZoomEnabled, delayLongPress = DEFAULT_DELAY_LONG_PRESS, HeaderComponent, FooterComponent, }) {
+     const imageList = useRef(null);
+diff --git a/dist/components/ImageItem/ImageItem.ios.js b/dist/components/ImageItem/ImageItem.ios.js
+index 0708505..58a333b 100644
+--- a/dist/components/ImageItem/ImageItem.ios.js
++++ b/dist/components/ImageItem/ImageItem.ios.js
+@@ -6,14 +6,15 @@
+  *
+  */
+ import React, { useCallback, useRef, useState } from "react";
+-import { Animated, Dimensions, ScrollView, StyleSheet, View, TouchableWithoutFeedback, } from "react-native";
++import { Animated, Dimensions, ScrollView, StyleSheet, View, TouchableWithoutFeedback, Platform, } from "react-native";
+ import useDoubleTapToZoom from "../../hooks/useDoubleTapToZoom";
+ import useImageDimensions from "../../hooks/useImageDimensions";
+ import { getImageStyles, getImageTransform } from "../../utils";
+ import { ImageLoading } from "./ImageLoading";
+ const SWIPE_CLOSE_OFFSET = 75;
+ const SWIPE_CLOSE_VELOCITY = 1.55;
+-const SCREEN = Dimensions.get("screen");
++// Spark: on macOS the viewer covers the window, and "screen" is the whole display.
++const SCREEN = Dimensions.get(Platform.OS === "macos" ? "window" : "screen");
+ const SCREEN_WIDTH = SCREEN.width;
+ const SCREEN_HEIGHT = SCREEN.height;
+ const ImageItem = ({ imageSrc, onZoom, onRequestClose, onLongPress, delayLongPress, swipeToCloseEnabled = true, doubleTapToZoomEnabled = true, }) => {
 diff --git a/dist/components/ImageItem/ImageItem.macos.js b/dist/components/ImageItem/ImageItem.macos.js
 new file mode 100644
 index 0000000..36adc48
@@ -18,3 +63,19 @@ index 0000000..b3f1e9a
 + * Windows uses the Android item: Animated and PanResponder only, so dragging closes and double-click zooms.
 + */
 +export { default } from "./ImageItem.android";
+diff --git a/dist/components/ImageItem/ImageLoading.js b/dist/components/ImageItem/ImageLoading.js
+index 9770f7d..98b6495 100644
+--- a/dist/components/ImageItem/ImageLoading.js
++++ b/dist/components/ImageItem/ImageLoading.js
+@@ -6,8 +6,9 @@
+  *
+  */
+ import React from "react";
+-import { ActivityIndicator, Dimensions, StyleSheet, View } from "react-native";
+-const SCREEN = Dimensions.get("screen");
++import { ActivityIndicator, Dimensions, StyleSheet, View, Platform, } from "react-native";
++// Spark: on macOS the viewer covers the window, and "screen" is the whole display.
++const SCREEN = Dimensions.get(Platform.OS === "macos" ? "window" : "screen");
+ const SCREEN_WIDTH = SCREEN.width;
+ const SCREEN_HEIGHT = SCREEN.height;
+ export const ImageLoading = () => (<View style={styles.loading}>

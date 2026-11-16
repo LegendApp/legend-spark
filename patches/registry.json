@@ -481,7 +481,7 @@
           "patch": "react-native-image-viewing@0.2.2.patch",
           "integrity": "sha512-osWieG+p/d2NPbAyonOMubttajtYEYiRGQaJA54slFxZ69j1V4/dCmcrVQry47ktVKy8/qpFwCpW1eT6MH5T2Q==",
           "optional": true,
-          "sha256": "2ca1632d6647935f6bde36b9c36e411f7cb4219363dfbd3547df5c8ceba14f00"
+          "sha256": "1dc2e33da3f3aee3dcdfe114d00e50c3ee8974f14cc45a91a41413e2f0d59655"
         }
       ]
     },
