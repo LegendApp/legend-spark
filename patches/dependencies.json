@@ -159,10 +159,10 @@
     "optional": true
   },
   "react-native-svg": {
-    "version": "15.15.3",
-    "url": "https://registry.npmjs.org/react-native-svg/-/react-native-svg-15.15.3.tgz",
-    "integrity": "sha512-/k4KYwPBLGcx2f5d4FjE+vCScK7QOX14cl2lIASJ28u4slHHtIhL0SZKU7u9qmRBHxTCKPoPBtN6haT1NENJNA==",
-    "patch": "react-native-svg@15.15.3.patch",
+    "version": "15.16.1",
+    "url": "https://registry.npmjs.org/react-native-svg/-/react-native-svg-15.16.1.tgz",
+    "integrity": "sha512-Y4hCfg0o9ovGJYnNIySph5xWGqzawhW7MB2AjMUTpqJkrtPAx5XCeSk+jRMux2hanUvi9KvdVf2aZu0OFWtjgw==",
+    "verified": true,
     "optional": true
   },
   "expo-font": {

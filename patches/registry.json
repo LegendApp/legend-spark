@@ -712,6 +712,13 @@
           "integrity": "sha512-/k4KYwPBLGcx2f5d4FjE+vCScK7QOX14cl2lIASJ28u4slHHtIhL0SZKU7u9qmRBHxTCKPoPBtN6haT1NENJNA==",
           "optional": true,
           "sha256": "2ec5c24d260791eff76fdc5d513a1c2f5ddbe968867810724ba6458a5f210582"
+        },
+        {
+          "version": "15.16.1",
+          "minSpark": "0.0.4",
+          "verified": true,
+          "integrity": "sha512-Y4hCfg0o9ovGJYnNIySph5xWGqzawhW7MB2AjMUTpqJkrtPAx5XCeSk+jRMux2hanUvi9KvdVf2aZu0OFWtjgw==",
+          "optional": true
         }
       ]
     },
