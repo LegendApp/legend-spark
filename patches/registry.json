@@ -60,7 +60,7 @@
           "patch": "react-native-community-netinfo@11.5.2.patch",
           "integrity": "sha512-/g0m65BtX9HU+bPiCH2517bOHpEIUsGrWFXDzi1a5nNKn5KujQgm04WhL7/OSXWKHyrT8VVtUoJA0XKRxueBpQ==",
           "optional": true,
-          "sha256": "6924505af0ffef0cba609a3a148534cb25ffb645f606fe0d1b4fea10140d234b"
+          "sha256": "ef7b78c388652e5c0a6ad854d28fad694cebdb293a01b42dbf5283e3090090f9"
         }
       ]
     },

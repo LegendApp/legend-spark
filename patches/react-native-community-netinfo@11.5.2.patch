@@ -10,9 +10,10 @@
      <CppWinRTOptimized>true</CppWinRTOptimized>
      <CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
      <MinimalCoreWin>true</MinimalCoreWin>
-@@ -9,18 +9,19 @@
+@@ -9,18 +9,20 @@
      <ProjectName>RNCNetInfoCPP</ProjectName>
      <RootNamespace>ReactNativeNetInfo</RootNamespace>
++    <TargetName Condition="'$(RnwNewArch)'=='true'">$(RootNamespace)</TargetName>
      <DefaultLanguage>en-US</DefaultLanguage>
      <MinimumVisualStudioVersion>16.0</MinimumVisualStudioVersion>
 -    <AppContainerApplication>true</AppContainerApplication>
