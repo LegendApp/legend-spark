@@ -34,7 +34,7 @@ checks:
     blocking: true
     spec: "docs/test-driver.md Focus and window state; #246"
   INFRA-JSLIBS-01:
-    title: react-native-url-polyfill and react-native-sse run on the macOS app runtime; URLs and blob URLs parse and an event stream is read in order
+    title: react-native-url-polyfill, react-native-sse and posthog-react-native run on the macOS app runtime; URLs and blob URLs parse, an event stream is read in order, and a captured event is flushed
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"

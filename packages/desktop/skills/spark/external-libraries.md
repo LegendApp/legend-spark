@@ -93,6 +93,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 | [Signature Canvas](https://github.com/YanYuanFE/react-native-signature-canvas) | `react-native-signature-canvas` | Works on macOS (5.1.1) without a patch on Spark's `react-native-webview`: the pad loads and `readSignature()` answers through the WebView bridge (`onEmpty` for an untouched pad). Drawing with the mouse was not automated. |
 | [URL Polyfill](https://github.com/charpeni/react-native-url-polyfill) | `react-native-url-polyfill` | Works on macOS (4.0.0) without a patch: `setupURLPolyfill()` installs WHATWG `URL` and `URLSearchParams`, and `URL.createObjectURL` uses React Native's Blob module. |
 | [SSE](https://github.com/binaryminds/react-native-sse) | `react-native-sse` | Works on macOS (1.2.1) without a patch: events stream in order through React Native's `XMLHttpRequest`, with ids and named events. |
+| [PostHog](https://posthog.com/docs/libraries/react-native) | `posthog-react-native` | Works on macOS (4.87.0) without a patch: `identify`, `capture` and `flush` send batches through its `fetch`. Session replay and feature flags were not tested. |
 
 ## Optional backend dependencies
 

@@ -2,7 +2,7 @@ appId: so.legend.spark.examples.kitchensink
 name: Non-visual JavaScript libraries on macOS
 intent: >
   The JS library checks screen polyfills URL and checks parsing and blob URLs, reads three server-sent events from
-  the e2e bundle server's /sse stream in order.
+  the e2e bundle server's /sse stream in order, and flushes a PostHog capture through a recording fetch.
 checks: [INFRA-JSLIBS-01]
 tags: [infra]
 platforms: [macos]
@@ -10,3 +10,4 @@ platforms: [macos]
 - launchApp: { clearState: true, openUrl: "spark-ks://infra/js-libraries" }
 - extendedWaitUntil: { visible: { id: infra-js-libraries-url-polyfill-passed }, timeout: 10s }
 - extendedWaitUntil: { visible: { id: infra-js-libraries-sse-passed }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: infra-js-libraries-posthog-passed }, timeout: 10s }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NativeModules, ScrollView, Text } from "react-native";
 import { setupURLPolyfill } from "react-native-url-polyfill";
 import EventSource from "react-native-sse";
+import PostHog from "posthog-react-native";
 
 // Test IDs: infra-js-libraries-<url-polyfill|sse|posthog>-passed, or -failed with the reason.
 const ID = "infra-js-libraries";
@@ -38,7 +39,26 @@ function sse() {
   });
 }
 
-const checks = { "url-polyfill": urlPolyfill, sse };
+async function posthog() {
+  const requests: { url: string; body: string }[] = [];
+  class RecordingPostHog extends PostHog {
+    fetch(url: string, options: { body?: unknown }) {
+      requests.push({ url, body: String(options.body ?? "") });
+      return Promise.resolve({ status: 200, text: async () => "{}", json: async () => ({}) });
+    }
+  }
+  const client = new RecordingPostHog("phc_kitchen_sink", { host: "https://posthog.invalid", persistence: "memory", flushAt: 1, captureAppLifecycleEvents: false, preloadFeatureFlags: false, disableRemoteConfig: true, enableSessionReplay: false } as never);
+  try {
+    client.identify("kitchen-sink-user");
+    client.capture("kitchen_sink_check", { answer: 42 });
+    await client.flush();
+    const batch = requests.find(request => request.body.includes("kitchen_sink_check"));
+    if (!batch) throw new Error(`no captured batch in ${requests.map(request => request.url).join(", ") || "no requests"}`);
+    if (!batch.body.includes('"answer":42') || !batch.body.includes("kitchen-sink-user")) throw new Error("batch lacks the event properties or distinct id");
+  } finally { await client.shutdown(); }
+}
+
+const checks = { "url-polyfill": urlPolyfill, sse, posthog };
 
 /** Non-visual JavaScript libraries exercised on the app's own runtime: Hermes, React Native's XHR and Blob module. */
 export function JSLibraryChecks() {
@@ -48,7 +68,7 @@ export function JSLibraryChecks() {
       run().then(() => setResults(previous => ({ ...previous, [name]: "passed" })), error => setResults(previous => ({ ...previous, [name]: `failed: ${String(error)}` })));
   }, []);
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-3 p-6">
-    <Text className="text-sm text-muted">react-native-url-polyfill parses URLs and blob URLs; react-native-sse reads a server-sent event stream from the e2e bundle server.</Text>
+    <Text className="text-sm text-muted">react-native-url-polyfill parses URLs and blob URLs; react-native-sse reads a server-sent event stream from the e2e bundle server; posthog-react-native captures and flushes an event through a recording fetch.</Text>
     {Object.keys(checks).map(name => <Text key={name} selectable className="font-mono text-xs text-foreground" testID={results[name] ? `${ID}-${name}-${results[name] === "passed" ? "passed" : "failed"}` : undefined}>{`${name}: ${results[name] ?? "running"}`}</Text>)}
   </ScrollView>;
 }

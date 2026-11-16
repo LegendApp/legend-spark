@@ -127,7 +127,8 @@
     "react-native-progress": "5.0.1",
     "react-native-signature-canvas": "5.1.1",
     "react-native-url-polyfill": "4.0.0",
-    "react-native-sse": "1.2.1"
+    "react-native-sse": "1.2.1",
+    "posthog-react-native": "4.87.0"
   },
   "expo": {
     "install": {
