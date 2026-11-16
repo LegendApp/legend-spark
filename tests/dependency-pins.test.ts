@@ -271,7 +271,9 @@ test.each(["no app", "malformed", "duplicate", "mismatched", "matching"])("docto
   const doctor = vi.spyOn(commands, "doctor").mockResolvedValue(undefined);
   // These fixtures isolate pin diagnostics; migration/CLI guards have their own
   // installed-app transition coverage in migrations.test.ts.
-  vi.spyOn(await import("../packages/cli/src/project-version.ts"), "ensureProjectVersion").mockImplementation(() => {});
+  const projectVersion = await import("../packages/cli/src/project-version.ts");
+  vi.spyOn(projectVersion, "ensureProjectVersion").mockImplementation(() => {});
+  vi.spyOn(projectVersion, "projectSparkVersion").mockReturnValue("");
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
@@ -283,7 +285,7 @@ test.each(["no app", "malformed", "duplicate", "mismatched", "matching"])("docto
     }
     process.argv = [argv[0], "spark", "doctor", "--project", root];
     await import("../packages/cli/src/index.ts");
-    expect(doctor).toHaveBeenCalledWith(root);
+    expect(doctor).toHaveBeenCalledWith(root, { readOnly: true });
     expect(log).toHaveBeenCalledWith("Native toolchain available.");
     if (["malformed", "duplicate", "mismatched"].includes(manifest)) {
       if (manifest !== "mismatched") expect(error).toHaveBeenCalledWith(expect.stringContaining("Dependency pin check failed:"));
