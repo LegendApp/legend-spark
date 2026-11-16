@@ -325,5 +325,12 @@
     "integrity": "sha512-osWieG+p/d2NPbAyonOMubttajtYEYiRGQaJA54slFxZ69j1V4/dCmcrVQry47ktVKy8/qpFwCpW1eT6MH5T2Q==",
     "patch": "react-native-image-viewing@0.2.2.patch",
     "optional": true
+  },
+  "@react-native-clipboard/clipboard": {
+    "version": "1.16.3",
+    "url": "https://registry.npmjs.org/@react-native-clipboard/clipboard/-/clipboard-1.16.3.tgz",
+    "integrity": "sha512-cMIcvoZKIrShzJHEaHbTAp458R9WOv0fB6UyC7Ek4Qk561Ow/DrzmmJmH/rAZg21Z6ixJ4YSdFDC14crqIBmCQ==",
+    "patch": "react-native-clipboard-clipboard@1.16.3.patch",
+    "optional": true
   }
 }

@@ -67,7 +67,6 @@
           "react-native-enriched-html",
           "react-native-enriched-markdown",
           "@react-native-community/blur",
-          "@react-native-clipboard/clipboard",
           "@react-native-masked-view/masked-view",
           "@dr.pogodin/react-native-fs",
           "react-native-linear-gradient",

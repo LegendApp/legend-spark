@@ -25,6 +25,19 @@
         }
       ]
     },
+    "@react-native-clipboard/clipboard": {
+      "kind": "patch",
+      "versions": [
+        {
+          "version": "1.16.3",
+          "minSpark": "0.0.4",
+          "patch": "react-native-clipboard-clipboard@1.16.3.patch",
+          "integrity": "sha512-cMIcvoZKIrShzJHEaHbTAp458R9WOv0fB6UyC7Ek4Qk561Ow/DrzmmJmH/rAZg21Z6ixJ4YSdFDC14crqIBmCQ==",
+          "optional": true,
+          "sha256": "0fdcd12e084c364b9d19122e3da4a2cd4c96b5a9cdddaeab317c48c61de88184"
+        }
+      ]
+    },
     "@react-native-community/blur": {
       "kind": "patch",
       "versions": [

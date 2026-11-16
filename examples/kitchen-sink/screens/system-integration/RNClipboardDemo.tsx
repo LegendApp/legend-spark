@@ -15,7 +15,7 @@ async function check() {
   } finally { Clipboard.setString(previous); }
 }
 
-/** @react-native-clipboard/clipboard: plain text written to and read from the macOS pasteboard. */
+/** @react-native-clipboard/clipboard: plain text written to and read from the system clipboard. */
 export function RNClipboardDemo() {
   const [result, setResult] = useState<string>();
   useEffect(() => { check().then(failures => setResult(failures.length ? `failed: ${failures.join(", ")}` : "passed"), error => setResult(`failed: ${String(error)}`)); }, []);

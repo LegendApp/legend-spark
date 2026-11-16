@@ -1,0 +1,13 @@
+diff --git a/windows/Clipboard/Clipboard.vcxproj b/windows/Clipboard/Clipboard.vcxproj
+index c7abbf2..a90a760 100644
+--- a/windows/Clipboard/Clipboard.vcxproj
++++ b/windows/Clipboard/Clipboard.vcxproj
+@@ -12,6 +12,8 @@
+         <Keyword>Win32Proj</Keyword>
+         <RootNamespace>Clipboard</RootNamespace>
+         <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
++        <!-- Spark: RNW 0.83 restores this project by PackageReference, which brings every Windows App SDK 1.8 package. The SDK's transitive check reads the leftover packages.config instead and reports them missing. -->
++        <WindowsAppSDKVerifyTransitiveDependencies>false</WindowsAppSDKVerifyTransitiveDependencies>
+         <DefaultLanguage>en-US</DefaultLanguage>
+         <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
+         <AppxPackage>false</AppxPackage>
