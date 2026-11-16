@@ -61,3 +61,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  COMP-RECYCLER-01:
+    title: recyclerlistview renders only the visible rows of a 500-row list on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

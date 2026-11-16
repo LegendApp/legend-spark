@@ -112,7 +112,8 @@
     "react-native-graph": "1.4.0",
     "expo-document-picker": "55.0.17",
     "@gorhom/portal": "1.0.14",
-    "@shopify/flash-list": "2.3.3"
+    "@shopify/flash-list": "2.3.3",
+    "recyclerlistview": "4.2.3"
   },
   "expo": {
     "install": {
