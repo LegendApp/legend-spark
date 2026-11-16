@@ -71,3 +71,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "vault tasks/spark/specs/library-audit-list.md"
+  COMP-TOAST-01:
+    title: react-native-toast-message shows a toast from Toast.show() and calls onShow on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "vault tasks/spark/specs/library-audit-list.md"

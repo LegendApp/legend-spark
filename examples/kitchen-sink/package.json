@@ -114,7 +114,8 @@
     "@gorhom/portal": "1.0.14",
     "@shopify/flash-list": "2.3.3",
     "recyclerlistview": "4.2.3",
-    "react-native-paper": "5.15.4"
+    "react-native-paper": "5.15.4",
+    "react-native-toast-message": "2.5.2"
   },
   "expo": {
     "install": {
