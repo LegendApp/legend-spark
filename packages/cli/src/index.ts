@@ -30,7 +30,7 @@ import { optionalBackendIssues, printDependencyPins, upgradeDependencyPins } fro
 import { migrate } from "./migrate.ts";
 import { upgrade } from "./upgrade.ts";
 import { patchLibrary, patchRoot } from "./patch.ts";
-import { projectSparkVersion, ensureProjectVersion } from "./project-version.ts";
+import { ensureProjectVersion } from "./project-version.ts";
 import { reportError } from "./errors.ts";
 
 async function main() {
@@ -191,7 +191,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       let pinIssues = false;
       try { root = project(); } catch { console.log("No Spark app found; skipping dependency pin check."); }
       if (root) {
-        projectSparkVersion(root);
+        ensureProjectVersion(root, { readOnly: true });
         try {
           const source = await fetchRegistry(root, { writeCache: false });
           const findings = registryFindings(root, source);

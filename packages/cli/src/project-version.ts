@@ -1,5 +1,5 @@
 import { initializeTemplate } from "./init-template.cjs";
-import { installedSparkVersion, migrateProject } from "./migrations.cjs";
+import { installedSparkVersion, migrateProject, planMigrations } from "./migrations.cjs";
 import { fileURLToPath } from "node:url";
 import { readJson } from "./json.ts";
 
@@ -11,7 +11,11 @@ export function projectSparkVersion(root: string) {
   return installed;
 }
 
-export function ensureProjectVersion(root: string) {
-  migrateProject(root, projectSparkVersion(root));
-  initializeTemplate(root, false);
+export function ensureProjectVersion(root: string, { readOnly = false } = {}) {
+  const version = projectSparkVersion(root);
+  if (readOnly) planMigrations(root, version);
+  else {
+    migrateProject(root, version);
+    initializeTemplate(root, false);
+  }
 }
