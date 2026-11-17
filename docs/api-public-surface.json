@@ -550,6 +550,8 @@
     "SidebarBaseProps",
     "SidebarContentLayoutEvent",
     "SidebarContextMenuEvent",
+    "SidebarDoubleClickEvent",
+    "SidebarExpandedChangeEvent",
     "SidebarItem",
     "SidebarItemData",
     "SidebarItemProps",
@@ -557,6 +559,7 @@
     "SidebarProps",
     "SidebarRowHeight",
     "SidebarSelectionEvent",
+    "SidebarSelectionProps",
     "getSidebarAvailability"
   ],
   "./ui/split-view": [

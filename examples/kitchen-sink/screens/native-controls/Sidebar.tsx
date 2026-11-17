@@ -1,6 +1,7 @@
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Button, Text, View } from "react-native";
 import { Panel, Status } from "../../Panel";
 
 const dataItems = [
@@ -79,5 +80,47 @@ export function SidebarPlainList() {
     <Status testID="native-controls-sidebar-plain-selected">Selected: {selectedId}</Status>
     <Status testID="native-controls-sidebar-plain-status">{status}</Status>
     <Sidebar testID="native-controls-sidebar-plain-list" listStyle="plain" style={frame} defaultRowHeight={24} items={dataItems} selectedId={selectedId} onSelectionChange={onSelectionChange} />
+  </Panel>;
+}
+
+// A source list with section headers (group rows), a nested remote, trailing counts and collapsible sections.
+const treeItems = [
+  { id: "repo", label: "legend-spark", group: true, children: [{ id: "changes", label: "Changes", count: 5 }, { id: "history", label: "History" }] },
+  { id: "branches", label: "Branches", group: true, children: [{ id: "main", label: "main" }, { id: "feature", label: "feature/sidebar", count: 3 }] },
+  { id: "remotes", label: "Remotes", group: true, children: [{ id: "origin", label: "origin", children: [{ id: "origin/main", label: "main" }, { id: "origin/feature", label: "feature/sidebar" }] }] },
+  { id: "stashes", label: "Stashes", group: true, children: [{ id: "stash0", label: "WIP on main", count: 2 }] },
+];
+
+export function SidebarTree() {
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>(["changes"]);
+  const [multiple, setMultiple] = useState(false);
+  const [collapsedIds, setCollapsedIds] = useState<readonly string[]>(["stashes"]);
+  const [status, setStatus] = useState("No sidebar event yet.");
+  const selection = multiple ? { selectedIds } : { selectedId: selectedIds[0] ?? null };
+  return <Panel title="Sidebar tree">
+    <Status testID="native-controls-sidebar-tree-selected">Selected: {selectedIds.join(", ") || "none"}</Status>
+    <Status testID="native-controls-sidebar-tree-status">{status}</Status>
+    <Button testID="native-controls-sidebar-tree-multiple" title={multiple ? "Single selection" : "Multiple selection"} onPress={() => { setMultiple(value => !value); setSelectedIds(ids => ids.slice(0, 1)); }} />
+    <Sidebar testID="native-controls-sidebar-tree-list" style={{ ...frame, height: 320 }} items={treeItems} {...selection} collapsedIds={collapsedIds}
+      onSelectionChange={({ id, ids }) => { setSelectedIds(ids); setStatus(`Selected ${id ?? "none"} (${ids.length})`); }}
+      onExpandedChange={({ id, expanded }) => { setCollapsedIds(ids => expanded ? ids.filter(value => value !== id) : [...ids, id]); setStatus(`${expanded ? "Expanded" : "Collapsed"} ${id}`); }}
+      onDoubleClick={({ id }) => setStatus(`Double-clicked ${id}`)} />
+  </Panel>;
+}
+
+// The same tree from React rows: parentId nests a row, group marks a section header, count adds the trailing count.
+export function SidebarTreeReactRows() {
+  const [selectedId, setSelectedId] = useState<string | null>("wt-main");
+  const [status, setStatus] = useState("No sidebar event yet.");
+  return <Panel title="Sidebar tree: React rows">
+    <Status testID="native-controls-sidebar-tree-react-status">{status}</Status>
+    <Sidebar testID="native-controls-sidebar-tree-react-list" style={frame} selectedId={selectedId} onSelectionChange={({ id }) => { setSelectedId(id); setStatus(`Selected ${id}`); }}
+      onDoubleClick={({ id }) => setStatus(`Double-clicked ${id}`)} onExpandedChange={({ id, expanded }) => setStatus(`${expanded ? "Expanded" : "Collapsed"} ${id}`)}>
+      <SidebarItem id="worktrees" group><Text className="px-1 text-xs font-semibold text-muted">Worktrees</Text></SidebarItem>
+      {[{ id: "wt-main", name: "legend-spark", count: 4 }, { id: "wt-docs", name: "legend-spark-docs" }].map(row =>
+        <SidebarItem key={row.id} id={row.id} parentId="worktrees" count={row.count}>
+          <View className="grow flex-row items-center gap-2 px-1"><SFSymbol name="folder" size={14} /><Text className="text-sm text-foreground" numberOfLines={1}>{row.name}</Text></View>
+        </SidebarItem>)}
+    </Sidebar>
   </Panel>;
 }

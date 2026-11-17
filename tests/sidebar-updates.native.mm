@@ -3,6 +3,7 @@
 // (RCTMountingManager Insert); the mount must configure rows, selection and heights.
 // Compiled and run by tests/sidebar-updates-native.test.ts.
 #import <AppKit/AppKit.h>
+#import <objc/runtime.h>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -13,28 +14,38 @@ struct Props { using Shared = std::shared_ptr<Props const>; virtual ~Props() = d
 enum class SidebarListStyle { Sidebar, Plain };
 struct SidebarProps : Props {
   SidebarListStyle listStyle = SidebarListStyle::Sidebar;
-  std::string itemsJson, selectedId;
+  std::string itemsJson, selectedIdsJson, collapsedIdsJson;
+  bool allowsMultipleSelection = false;
   int selectionRevision = 0;
   double contentInsetTop = 0, defaultRowHeight = 0;
 };
 struct SidebarItemProps : Props {
-  std::string itemId;
-  bool selectable = false, autoHeight = false;
+  std::string itemId, parentId;
+  bool selectable = false, autoHeight = false, group = false;
+  int count = -1;
   double rowHeight = 0;
 };
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarEventEmitter : EventEmitter {
   struct OnSidebarLayout { double height, width; };
   struct OnSidebarRowLayout { double width; };
-  struct OnSidebarSelectionChange { std::string id; };
+  struct OnSidebarSelectionChange { std::string id, idsJson; };
+  struct OnSidebarExpandedChange { bool expanded; std::string id; };
+  struct OnSidebarDoubleClick { std::string id; };
   mutable std::vector<double> rowWidths;
+  mutable std::vector<std::string> selections, expansions, doubleClicks;
   void onSidebarLayout(OnSidebarLayout event) const {}
   void onSidebarRowLayout(OnSidebarRowLayout event) const { rowWidths.push_back(event.width); }
-  void onSidebarSelectionChange(OnSidebarSelectionChange event) const {}
+  void onSidebarSelectionChange(OnSidebarSelectionChange event) const { selections.push_back(event.id + " " + event.idsJson); }
+  void onSidebarExpandedChange(OnSidebarExpandedChange event) const { expansions.push_back((event.expanded ? "+" : "-") + event.id); }
+  void onSidebarDoubleClick(OnSidebarDoubleClick event) const { doubleClicks.push_back(event.id); }
 };
 struct SidebarItemEventEmitter : EventEmitter {
   struct OnRightClick { bool altKey; double button; bool ctrlKey, metaKey; double pageX, pageY; bool shiftKey; double x, y; };
+  struct OnSidebarItemLayout { double width; };
+  mutable std::vector<double> widths;
   void onRightClick(OnRightClick event) const {}
+  void onSidebarItemLayout(OnSidebarItemLayout event) const { widths.push_back(event.width); }
 };
 enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
 struct LayoutMetrics { CGRect frame; LayoutDirection layoutDirection = LayoutDirection::Undefined; };
@@ -76,6 +87,7 @@ using namespace facebook::react;
 - (NSArray *)itemsFromJson:(std::string const &)json;
 - (void)reloadRows;
 - (void)updateSelection;
+- (NSString *)itemIdAtRow:(NSInteger)row;
 @end
 @interface CountingSidebar : RNSidebar
 @property int parses, reloads, selections, layouts;
@@ -89,10 +101,11 @@ using namespace facebook::react;
 
 static int failures = 0;
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #condition); failures++; } } while (0)
-static NSTableView *Table(RNSidebar *sidebar) { return [sidebar valueForKey:@"tableView"]; }
+static NSOutlineView *Table(RNSidebar *sidebar) { return [sidebar valueForKey:@"tableView"]; }
+static bool Selectable(RNSidebar *sidebar, NSInteger row) { return [sidebar outlineView:Table(sidebar) shouldSelectItem:[Table(sidebar) itemAtRow:row]]; }
 static CGFloat RowHeight(RNSidebar *sidebar, NSInteger row) { return [Table(sidebar) rectOfRow:row].size.height; }
 static NSString *Title(RNSidebar *sidebar, NSInteger row) {
-  NSTableCellView *cell = (NSTableCellView *)[sidebar tableView:Table(sidebar) viewForTableColumn:nil row:row];
+  NSTableCellView *cell = (NSTableCellView *)[sidebar outlineView:Table(sidebar) viewForTableColumn:nil item:[Table(sidebar) itemAtRow:row]];
   return cell.textField.stringValue;
 }
 static LayoutMetrics Height(CGFloat height) { return LayoutMetrics{CGRectMake(0, 0, 220, height)}; }
@@ -119,10 +132,10 @@ static bool RowsFit(RNSidebar *sidebar) {
   }
   return true;
 }
-static RNSidebarItem *Item(RNSidebar *sidebar, NSInteger index, const char *itemId, bool selectable, double rowHeight, bool autoHeight, CGFloat measured) {
+static RNSidebarItem *Item(RNSidebar *sidebar, NSInteger index, const char *itemId, bool selectable, double rowHeight, bool autoHeight, CGFloat measured, const char *parentId = "", bool group = false, int count = -1) {
   RNSidebarItem *item = [RNSidebarItem new];
   auto props = std::make_shared<SidebarItemProps>();
-  props->itemId = itemId; props->selectable = selectable; props->rowHeight = rowHeight; props->autoHeight = autoHeight;
+  props->itemId = itemId; props->parentId = parentId; props->group = group; props->count = count; props->selectable = selectable; props->rowHeight = rowHeight; props->autoHeight = autoHeight;
   // RCTMountingManager Insert order: props (null oldProps), layout metrics, then mount into the parent.
   [item updateProps:props oldProps:nullptr];
   [item updateLayoutMetrics:Height(measured) oldLayoutMetrics:LayoutMetrics{}];
@@ -137,13 +150,13 @@ int main() { @autoreleasepool {
   RNSidebar *data = [RNSidebar new];
   auto items = std::make_shared<SidebarProps>();
   items->itemsJson = R"([{"id":"inbox","title":"Inbox"},{"id":"drafts","title":"Drafts","selectable":false},{"id":"sent","title":"Sent"}])";
-  items->selectedId = "sent"; items->defaultRowHeight = 32; items->contentInsetTop = 12;
+  items->selectedIdsJson = R"(["sent"])"; items->defaultRowHeight = 32; items->contentInsetTop = 12;
   [data updateProps:items oldProps:nullptr];
   CHECK(Table(data).numberOfRows == 3);
   CHECK([Title(data, 0) isEqual:@"Inbox"] && [Title(data, 2) isEqual:@"Sent"]);
   CHECK(Table(data).selectedRow == 2);
   CHECK(RowHeight(data, 0) == 32 && RowHeight(data, 2) == 32);
-  CHECK(![data tableView:Table(data) shouldSelectRow:1] && [data tableView:Table(data) shouldSelectRow:0]);
+  CHECK(!Selectable(data, 1) && Selectable(data, 0));
   CHECK([[data valueForKey:@"scrollView"] contentInsets].top == 12);
 
   // A view moved in the tree is removed and re-inserted, again with null oldProps:
@@ -164,7 +177,7 @@ int main() { @autoreleasepool {
 
   // React rows: fixed, measured (autoHeight) and default heights; selection by item id.
   RNSidebar *rows = [RNSidebar new];
-  auto rowsProps = std::make_shared<SidebarProps>(); rowsProps->selectedId = "measured";
+  auto rowsProps = std::make_shared<SidebarProps>(); rowsProps->selectedIdsJson = R"(["measured"])";
   [rows updateProps:rowsProps oldProps:nullptr];
   Item(rows, 0, "fixed", true, 44, false, 44);
   Item(rows, 1, "measured", true, 0, true, 60);
@@ -172,15 +185,15 @@ int main() { @autoreleasepool {
   CHECK(Table(rows).numberOfRows == 3);
   CHECK(Table(rows).selectedRow == 1);
   CHECK(RowHeight(rows, 0) == 44 && RowHeight(rows, 1) == 60 && RowHeight(rows, 2) == 28);
-  CHECK(![rows tableView:Table(rows) shouldSelectRow:2]);
+  CHECK(!Selectable(rows, 2));
 
   // Later updates stay selective: only what changed is re-parsed, reloaded or reselected.
   CountingSidebar *view = [CountingSidebar new];
   view.parses = view.reloads = view.selections = view.layouts = 0;
-  auto first = std::make_shared<SidebarProps>(); first->itemsJson = R"([{"id":"one","title":"One"}])"; first->selectedId = "one";
+  auto first = std::make_shared<SidebarProps>(); first->itemsJson = R"([{"id":"one","title":"One"}])"; first->selectedIdsJson = R"(["one"])";
   [view updateProps:first oldProps:nullptr];
   CHECK(view.parses == 1 && view.reloads == 1 && view.selections == 1 && Table(view).selectedRow == 0);
-  auto selection = std::make_shared<SidebarProps>(*first); selection->selectedId = "";
+  auto selection = std::make_shared<SidebarProps>(*first); selection->selectedIdsJson = "[]";
   [view updateProps:selection oldProps:first];
   CHECK(view.parses == 1 && view.reloads == 1 && view.selections == 2 && Table(view).selectedRow == -1);
   auto acknowledgement = std::make_shared<SidebarProps>(*selection); acknowledgement->selectionRevision = 1;
@@ -203,7 +216,7 @@ int main() { @autoreleasepool {
   window.contentView.wantsLayer = YES;
   auto five = std::make_shared<SidebarProps>();
   five->itemsJson = R"([{"id":"library","title":"Library"},{"id":"playlists","title":"Playlists"},{"id":"artists","title":"Artists"},{"id":"downloads","title":"Downloads"},{"id":"disabled","title":"Disabled Row","selectable":false}])";
-  five->selectedId = "library"; five->defaultRowHeight = 30;
+  five->selectedIdsJson = R"(["library"])"; five->defaultRowHeight = 30;
   RNSidebar *ltr = [RNSidebar new];
   [ltr updateProps:five oldProps:nullptr];
   auto ltrEvents = Lay(ltr, window, LayoutDirection::LeftToRight);
@@ -237,7 +250,7 @@ int main() { @autoreleasepool {
   auto many = std::make_shared<SidebarProps>(*five);
   std::string json = "[";
   for (int index = 0; index < 20; index++) json += (index ? "," : "") + std::string(R"({"id":"row)") + std::to_string(index) + R"(","title":"Row"})";
-  many->itemsJson = json + "]"; many->selectedId = "row0";
+  many->itemsJson = json + "]"; many->selectedIdsJson = R"(["row0"])";
   [scrolling updateProps:many oldProps:nullptr];
   NSScrollView *scrollView = [scrolling valueForKey:@"scrollView"];
   scrollView.scrollerStyle = NSScrollerStyleLegacy;
@@ -267,6 +280,83 @@ int main() { @autoreleasepool {
     auto expected = direction == LayoutDirection::RightToLeft ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight;
     CHECK(scroll.userInterfaceLayoutDirection == expected && Table(view).userInterfaceLayoutDirection == expected);
   }
+
+  // Group rows (A2) and collapsible sections (A3): data children nest under their parent; group rows take the
+  // source list's header style and are never selectable.
+  RNSidebar *tree = [RNSidebar new];
+  auto treeProps = std::make_shared<SidebarProps>();
+  treeProps->itemsJson = R"([{"id":"repo","title":"Repo","group":true},{"id":"changes","title":"Changes","count":5,"parentId":"repo"},{"id":"history","title":"History","parentId":"repo"},)"
+    R"({"id":"remotes","title":"Remotes","group":true},{"id":"origin","title":"origin","parentId":"remotes"},{"id":"origin/main","title":"main","parentId":"origin"},)"
+    R"({"id":"tags","title":"Tags","group":true},{"id":"v1","title":"v1","parentId":"tags"}])";
+  treeProps->collapsedIdsJson = R"(["tags"])"; treeProps->selectedIdsJson = R"(["history"])";
+  [tree updateProps:treeProps oldProps:nullptr];
+  auto treeEvents = Lay(tree, window, LayoutDirection::LeftToRight);
+  NSOutlineView *outline = Table(tree);
+  CHECK(outline.numberOfRows == 7);
+  CHECK([[tree itemIdAtRow:5] isEqual:@"origin/main"] && [[tree itemIdAtRow:6] isEqual:@"tags"]);
+  CHECK([tree outlineView:outline isGroupItem:[outline itemAtRow:0]] && ![tree outlineView:outline isGroupItem:[outline itemAtRow:1]]);
+  CHECK(!Selectable(tree, 0) && Selectable(tree, 1) && outline.selectedRow == 2);
+  CHECK([outline levelForRow:5] == 2 && ![outline isItemExpanded:[outline itemAtRow:6]] && [outline isItemExpanded:[outline itemAtRow:4]]);
+  NSTableCellView *header = (NSTableCellView *)[tree outlineView:outline viewForTableColumn:nil item:[outline itemAtRow:0]];
+  CHECK(header.textField.font.pointSize == 11 && [header.textField.textColor isEqual:NSColor.secondaryLabelColor]);
+  // Trailing counts (A4) on data rows: secondary digits at the trailing edge, the title stopping before them.
+  [outline layoutSubtreeIfNeeded];
+  NSTableCellView *changes = [outline viewAtColumn:0 row:1 makeIfNecessary:YES];
+  NSTextField *countField = [changes valueForKey:@"countField"];
+  CHECK(!countField.hidden && [countField.stringValue isEqual:@"5"] && [countField.textColor isEqual:NSColor.secondaryLabelColor]);
+  CHECK(NSMaxX(countField.frame) <= NSWidth(changes.bounds) - 11 && NSMaxX(changes.textField.frame) <= NSMinX(countField.frame));
+  NSTableCellView *history = [outline viewAtColumn:0 row:2 makeIfNecessary:YES];
+  CHECK([[history valueForKey:@"countField"] isHidden]);
+  // The user's toggles report and persist across reloads; the prop applies only when its value changes.
+  [outline collapseItem:[outline itemAtRow:4]];
+  CHECK(treeEvents->expansions == std::vector<std::string>{"-origin"} && outline.numberOfRows == 6);
+  auto reselect = std::make_shared<SidebarProps>(*treeProps); reselect->selectedIdsJson = R"(["changes"])"; reselect->defaultRowHeight = 30;
+  [tree updateProps:reselect oldProps:treeProps];
+  CHECK(outline.numberOfRows == 6 && outline.selectedRow == 1);
+  auto expandAll = std::make_shared<SidebarProps>(*reselect); expandAll->collapsedIdsJson = "[]";
+  [tree updateProps:expandAll oldProps:reselect];
+  CHECK(outline.numberOfRows == 8 && treeEvents->expansions.size() == 1);
+  [outline collapseItem:[outline itemAtRow:3]];
+  CHECK(treeEvents->expansions.back() == "-remotes" && outline.numberOfRows == 6);
+  [outline expandItem:[outline itemAtRow:3]];
+  CHECK(treeEvents->expansions == (std::vector<std::string>{"-origin", "-remotes", "+remotes"}) && outline.numberOfRows == 8);
+
+  // Multiple selection (A5): selectedIds select every listed row; user changes report the primary row and all IDs.
+  auto multiple = std::make_shared<SidebarProps>(*expandAll); multiple->allowsMultipleSelection = true; multiple->selectedIdsJson = R"(["changes","history"])";
+  [tree updateProps:multiple oldProps:expandAll];
+  CHECK(outline.allowsMultipleSelection && outline.selectedRowIndexes.count == 2);
+  [outline selectRowIndexes:[NSIndexSet indexSetWithIndex:4] byExtendingSelection:YES];
+  CHECK(!treeEvents->selections.empty() && treeEvents->selections.back() == R"(origin ["changes","history","origin"])");
+  auto single = std::make_shared<SidebarProps>(*multiple); single->allowsMultipleSelection = false;
+  [tree updateProps:single oldProps:multiple];
+  CHECK(!outline.allowsMultipleSelection && outline.selectedRowIndexes.count == 1 && outline.selectedRow == 1);
+
+  // Double-click (A5) reports the clicked row. Synthetic clicks do not reach a window that is never shown,
+  // so the table's clicked row is stubbed; the Kitchen Sink run covers real clicks.
+  class_replaceMethod(outline.class, @selector(clickedRow), imp_implementationWithBlock(^NSInteger(id) { return 2; }), "q@:");
+  [outline sendAction:outline.doubleAction to:outline.target];
+  CHECK(treeEvents->doubleClicks == std::vector<std::string>{"history"});
+
+  // React rows (A2-A4): parentId nests, group rows refuse selection, and a counted row's content narrows to
+  // leave the count room; the narrower width is reported to the row.
+  RNSidebar *reactTree = [RNSidebar new];
+  [reactTree updateProps:std::make_shared<SidebarProps>() oldProps:nullptr];
+  Lay(reactTree, window, LayoutDirection::LeftToRight);
+  Item(reactTree, 0, "section", false, 0, false, 28, "", true);
+  RNSidebarItem *counted = Item(reactTree, 1, "stashes", true, 0, false, 28, "section", false, 12);
+  auto countedEvents = std::make_shared<SidebarItemEventEmitter>(); counted->_eventEmitter = countedEvents;
+  RNSidebarItem *plainRow = Item(reactTree, 2, "worktrees", true, 0, false, 28, "section");
+  [window layoutIfNeeded];
+  NSOutlineView *reactOutline = Table(reactTree);
+  CHECK(reactOutline.numberOfRows == 3 && [reactOutline levelForRow:1] == 1 && !Selectable(reactTree, 0) && Selectable(reactTree, 1));
+  NSTableCellView *countedCell = [reactOutline viewAtColumn:0 row:1 makeIfNecessary:YES];
+  [countedCell layoutSubtreeIfNeeded]; [countedCell resizeSubviewsWithOldSize:NSZeroSize];
+  NSTextField *reactCount = [countedCell valueForKey:@"countField"];
+  CHECK(counted.superview == countedCell && !reactCount.hidden && [reactCount.stringValue isEqual:@"12"]);
+  CHECK(NSMaxX(counted.frame) <= NSMinX(reactCount.frame) && NSWidth(counted.frame) < NSWidth(countedCell.bounds));
+  CHECK(!countedEvents->widths.empty() && countedEvents->widths.back() == NSWidth(counted.frame));
+  NSView *plainCell = plainRow.superview;
+  CHECK(NSWidth(plainRow.frame) == NSWidth(plainCell.bounds));
 
   if (failures) return 1;
   std::puts("Sidebar mount, selective updates and row geometry passed");
