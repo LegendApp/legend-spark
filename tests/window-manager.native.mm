@@ -96,16 +96,14 @@ static TestDefaults *testDefaults;
 @end
 @implementation MainWindowOwner @end
 // ACTUAL_IMPLEMENTATION
-@interface TestWindowManager : RNWindowManager @end
-@implementation TestWindowManager
-- (void)collapseToolbarSearchItem:(NSToolbarItem *)item animated:(BOOL)animated {
-  // Make collapse synchronous so the move guard is tested independently of AppKit animation timing.
-  [super collapseToolbarSearchItem:item animated:NO];
-}
-@end
 extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *, NSDictionary *) {}
 extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *, NSView *, void (^)(void)) { return NO; }
 extern "C" void LegendFinishSidebarSplitViewStartup(NSWindow *) {}
+// A collapsed search item takes focus once NSToolbar has laid out its expanded field.
+static void WaitForEditor(NSSearchField *searchField) {
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
+  while (!searchField.currentEditor && deadline.timeIntervalSinceNow > 0) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+}
 static void CallWindow(RNDesktopWindows *module, NSString *method, NSDictionary *args) {
   __block BOOL done = NO;
   [module call:method args:SparkJSON(args) resolve:^(id) { done = YES; } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
@@ -116,7 +114,7 @@ static void CallWindow(RNDesktopWindows *module, NSString *method, NSDictionary 
 int main() { @autoreleasepool {
   testDefaults = [TestDefaults new];
   events = [NSMutableArray new];
-  RNWindowManager *manager = [TestWindowManager new];
+  RNWindowManager *manager = [RNWindowManager new];
   NSSlider *slider = [NSSlider sliderWithValue:0.375 minValue:0 maxValue:1 target:nil action:nil];
   objc_setAssociatedObject(slider, &LegendToolbarControlMetadataKey, @{ @"windowIdentifier": @"editor", @"instanceId": @"instance", @"itemId": @"menu", @"value": @"volume" }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   [manager toolbarMenuSliderChanged:slider];
@@ -204,7 +202,8 @@ int main() { @autoreleasepool {
   }
   assert(earlyButton && earlySearch);
   [manager focusToolbarSearchItem:@"main" itemId:@"early-search" value:@"early query" resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
-  NSSearchField *earlyField = objc_getAssociatedObject(earlySearch, &LegendToolbarSearchFieldKey);
+  NSSearchField *earlyField = ((NSSearchToolbarItem *)earlySearch).searchField;
+  WaitForEditor(earlyField);
   BOOL earlyFocused = earlyField.currentEditor != nil && window.firstResponder == earlyField.currentEditor;
   assert([earlyField.stringValue isEqual:@"early query"]);
   assert(manager.windows[@"main"] == nil);
@@ -369,11 +368,14 @@ int main() { @autoreleasepool {
     [manager applyToolbarItemsFromOptions:@{ @"windowStyle": @{ @"toolbarItems": @[goItem, searchItem] } } toWindow:window identifier:@"brightness-probe"];
     [window layoutIfNeeded];
     search = toolbarItem(@"search");
-    searchField = collapses ? objc_getAssociatedObject(search, &LegendToolbarSearchFieldKey) : ((NSSearchToolbarItem *)search).searchField;
-    // Focus once below: refocusing an editing search field can end editing and start a collapse before the move.
-    if (collapses) [manager expandToolbarSearchItem:search value:nil focus:NO sendChange:NO animated:NO];
-    else searchField.stringValue = @"moved";
-    assert([window makeFirstResponder:searchField]);
+    searchField = ((NSSearchToolbarItem *)search).searchField;
+    if (collapses) {
+      [(NSSearchToolbarItem *)search beginSearchInteraction];
+      WaitForEditor(searchField);
+    } else {
+      searchField.stringValue = @"moved";
+      assert([window makeFirstResponder:searchField]);
+    }
     assert(searchField.currentEditor && window.firstResponder == searchField.currentEditor);
     NSRange selection = collapses ? NSMakeRange(0, 0) : NSMakeRange(2, 1);
     searchField.currentEditor.selectedRange = selection;
@@ -386,10 +388,27 @@ int main() { @autoreleasepool {
     assert(events.count == eventCount);
     if (collapses) {
       [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
-      assert(!searchField.hidden && ((NSLayoutConstraint *)objc_getAssociatedObject(search, &LegendToolbarSearchWidthConstraintKey)).constant > LegendToolbarSearchCollapsedSize);
+      assert(!searchField.isHiddenOrHasHiddenAncestor && NSWidth(searchField.frame) > LegendToolbarSearchCollapsedSize);
     }
     assert([[window.toolbar.items valueForKey:@"itemIdentifier"] isEqualToArray:(@[NSToolbarFlexibleSpaceItemIdentifier, @"legend.toolbar.search", @"legend.toolbar.go"])]);
   }
+  // A collapsing search item is AppKit's NSSearchToolbarItem, so NSToolbar moves its neighbour aside as it expands.
+  [manager applyToolbarItemsFromOptions:@{ @"windowStyle": @{ @"toolbarItems": @[@{ @"id": @"sync", @"type": @"progress", @"label": @"Sync", @"value": @0.5 }, @{ @"id": @"search", @"type": @"search", @"collapses": @YES, @"width": @240 }] } } toWindow:window identifier:@"brightness-probe"];
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
+  assert([toolbarItem(@"search") isKindOfClass:NSSearchToolbarItem.class]);
+  NSSearchToolbarItem *collapsing = (NSSearchToolbarItem *)toolbarItem(@"search");
+  NSView *neighbour = toolbarItem(@"sync").view;
+  NSRect (^frameInWindow)(NSView *) = ^NSRect(NSView *view) { return [view convertRect:view.bounds toView:nil]; };
+  assert(neighbour && collapsing.searchField.isHiddenOrHasHiddenAncestor);
+  [collapsing beginSearchInteraction];
+  for (int sample = 0; sample < 25; sample++) {
+    [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.03]];
+    assert(!NSIntersectsRect(frameInWindow(neighbour), frameInWindow(collapsing.searchField)));
+  }
+  assert(!collapsing.searchField.isHiddenOrHasHiddenAncestor && NSWidth(frameInWindow(collapsing.searchField)) >= 240);
+  [collapsing endSearchInteraction];
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+  assert(collapsing.searchField.isHiddenOrHasHiddenAncestor);
   // A disabled button item stays disabled through AppKit's toolbar validation and enables again when the option flips.
   for (NSNumber *enabled in @[@NO, @YES, @NO]) {
     [manager applyToolbarItemsFromOptions:@{ @"windowStyle": @{ @"toolbarItems": @[@{ @"id": @"fetch", @"type": @"button", @"label": @"Fetch", @"systemImageName": @"arrow.down", @"enabled": enabled }] } } toWindow:window identifier:@"brightness-probe"];
