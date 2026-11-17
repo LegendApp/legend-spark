@@ -16,6 +16,16 @@ namespace React = Microsoft::ReactNative;
 namespace Composition = Microsoft::ReactNative::Composition;
 namespace Xaml = Microsoft::UI::Xaml;
 namespace Json = Windows::Data::Json;
+// WinUI TextBox breaks lines with \r; Spark text uses \n.
+inline std::string NewlineText(std::string const &text) {
+  std::string lines; lines.reserve(text.size());
+  for (size_t i = 0; i < text.size(); ++i) {
+    if (text[i] != '\r') { lines += text[i]; continue; }
+    lines += '\n';
+    if (i + 1 < text.size() && text[i + 1] == '\n') ++i;
+  }
+  return lines;
+}
 struct Props : implements<Props, React::IComponentProps> {
   React::ViewProps view{nullptr};
   std::string title, defaultText, text, placeholder, itemsJson = "[]", value, variant = "default";
@@ -94,7 +104,7 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
       } else if (kind == "TextInput") {
         Xaml::Controls::TextBox input;
         input.TextChanged([weak](auto const &sender, auto const &) {
-          if (auto self = weak.get(); self && !self->updating && self->control.IsEnabled()) { ++self->eventCount; self->Emit(L"textChange", "text", to_string(sender.template as<Xaml::Controls::TextBox>().Text())); }
+          if (auto self = weak.get(); self && !self->updating && self->control.IsEnabled()) { ++self->eventCount; self->Emit(L"textChange", "text", NewlineText(to_string(sender.template as<Xaml::Controls::TextBox>().Text()))); }
         });
         control = input;
       } else {
@@ -141,7 +151,7 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
       } else if (kind == "TextInput") {
         auto input = control.as<Xaml::Controls::TextBox>();
         if (!initialized) input.Text(to_hstring(props.defaultText));
-        if (props.controlled && props.eventCount >= eventCount && input.Text() != to_hstring(props.text)) input.Text(to_hstring(props.text));
+        if (props.controlled && props.eventCount >= eventCount && NewlineText(to_string(input.Text())) != props.text) input.Text(to_hstring(props.text));
         input.PlaceholderText(to_hstring(props.placeholder));
         input.AcceptsReturn(props.multiline);
         input.TextWrapping(props.multiline ? Xaml::TextWrapping::Wrap : Xaml::TextWrapping::NoWrap);
