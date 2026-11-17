@@ -52,6 +52,7 @@ using namespace facebook::react;
 - (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index {
   _content = childComponentView;
   [_contentView addSubview:childComponentView];
+  [self dismissIfHidden];
 }
 - (void)unmountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index {
   if (childComponentView == _content) _content = nil;
@@ -60,6 +61,12 @@ using namespace facebook::react;
 - (void)cancel {
   auto emitter = std::static_pointer_cast<const SparkSheetEventEmitter>(_eventEmitter);
   if (_visible && emitter) emitter->onCancel({});
+}
+// Sent whenever the view is hidden but still holds content, not only on a visible → hidden change: Fabric can skip
+// the commit that showed it.
+- (void)dismissIfHidden {
+  auto emitter = std::static_pointer_cast<const SparkSheetEventEmitter>(_eventEmitter);
+  if (!_visible && _content && emitter) emitter->onDismiss({});
 }
 - (void)endSheet {
   if (_parentObserver) { [NSNotificationCenter.defaultCenter removeObserver:_parentObserver]; _parentObserver = nil; }
@@ -81,14 +88,12 @@ using namespace facebook::react;
 }
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps {
   const auto &next = *std::static_pointer_cast<const SparkSheetProps>(props);
-  const BOOL wasVisible = _visible;
   _visible = next.visible;
   _contentSize = NSMakeSize(MAX(0, next.contentWidth), MAX(0, next.contentHeight));
   _contentView.accessibilityLabel = next.accessibilityLabel.empty() ? nil : [NSString stringWithUTF8String:next.accessibilityLabel.c_str()];
   [super updateProps:props oldProps:oldProps];
   [self updatePresentation];
-  auto emitter = std::static_pointer_cast<const SparkSheetEventEmitter>(_eventEmitter);
-  if (wasVisible && !_visible && emitter) emitter->onDismiss({});
+  [self dismissIfHidden];
 }
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];

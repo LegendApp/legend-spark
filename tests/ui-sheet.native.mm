@@ -68,13 +68,13 @@ int main() { @autoreleasepool {
   RNSparkSheet *view = [RNSparkSheet new];
   view->_eventEmitter = std::make_shared<SparkSheetEventEmitter>();
   view->_props = std::make_shared<SparkSheetProps>();
+  // React mounts the content only once visible; before it is in a window or has a content size, nothing shows yet.
+  Next(view, ^(SparkSheetProps &p) { p.visible = true; });
   content = [Child new];
   [view mountChildComponentView:content index:0];
   NSWindow *sheet = [view valueForKey:@"sheet"];
   assert(content.superview == sheet.contentView && sheet.contentView.isFlipped);
   assert([[view valueForKey:@"touchHandler"] attached] == sheet.contentView);
-  // Visible before it is in a window or has a content size: nothing shows yet.
-  Next(view, ^(SparkSheetProps &p) { p.visible = true; });
   [window.contentView addSubview:view];
   [window orderFront:nil];
   assert(window.attachedSheet == nil);
@@ -111,8 +111,21 @@ int main() { @autoreleasepool {
   unsized->_eventEmitter = std::make_shared<SparkSheetEventEmitter>(); unsized->_props = std::make_shared<SparkSheetProps>();
   [window.contentView addSubview:unsized];
   Next(unsized, ^(SparkSheetProps &p) { p.visible = true; });
+  [unsized mountChildComponentView:[Child new] index:0];
   Next(unsized, ^(SparkSheetProps &p) { p.visible = false; });
   assert(dismisses == 3);
+  // Fabric may skip the visible commit: hidden with content from the start still reports onDismiss.
+  RNSparkSheet *skipped = [RNSparkSheet new];
+  skipped->_eventEmitter = std::make_shared<SparkSheetEventEmitter>(); skipped->_props = std::make_shared<SparkSheetProps>();
+  Next(skipped, ^(SparkSheetProps &p) { p.accessibilityLabel = "Hidden"; });
+  Child *hidden = [Child new];
+  [skipped mountChildComponentView:hidden index:0];
+  assert(dismisses == 4);
+  // Each hidden update reports again while content remains (React ignores repeats); without content there is nothing to dismiss.
+  Next(skipped, ^(SparkSheetProps &p) { p.accessibilityLabel = "Hidden again"; });
+  [skipped unmountChildComponentView:hidden index:0];
+  Next(skipped, ^(SparkSheetProps &p) { p.accessibilityLabel = "Empty"; });
+  assert(dismisses == 5);
   // Closing the parent window ends an open sheet, and neither the sheet nor the view keeps the closed window alive.
   __weak NSWindow *closed;
   RNSparkSheet *orphan = [RNSparkSheet new];

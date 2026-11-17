@@ -8,7 +8,7 @@ export interface NativeProps extends ViewProps {
   contentHeight?: CodegenTypes.Double;
   /** Escape or ⌘. in the sheet. */
   onCancel?: CodegenTypes.DirectEventHandler<Readonly<{}>>;
-  /** The sheet has finished closing after `visible` turned false (or never showed); the content may unmount. */
+  /** Sent while `visible` is false and content is still mounted (after the close animation if the sheet was open); the content may unmount. */
   onDismiss?: CodegenTypes.DirectEventHandler<Readonly<{}>>;
 }
 
