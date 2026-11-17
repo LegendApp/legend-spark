@@ -64,6 +64,7 @@
     "./ui/swipe": "./ui-swipe.ts",
     "./ui/symbol": "./ui-symbol.ts",
     "./ui/popover": "./ui-popover.ts",
+    "./ui/table": "./ui-table.ts",
     "./ui/progress": "./ui-progress.ts",
     "./ui/search": "./ui-search.ts",
     "./settings/window": "./settings-window.ts",
