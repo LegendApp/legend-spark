@@ -15,6 +15,7 @@ export async function openDatabase(name: string, options: DatabaseOptions = {}):
   if (options.readOnly !== undefined && typeof options.readOnly !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "readOnly must be a boolean");
   if (options.integers !== undefined && options.integers !== "number" && options.integers !== "text") throw new SparkError("E_INVALID_ARGUMENT", "integers must be number or text");
   const [{ open }, { getDirectory }] = await Promise.all([import("@op-engineering/op-sqlite"), import("@legendapp/spark-file-system")]);
-  const native = open({ name, location: await getDirectory("data"), readOnly: options.readOnly });
+  // op-sqlite reads a present readOnly key as a boolean, so an undefined one throws.
+  const native = open({ name, location: await getDirectory("data"), ...options.readOnly !== undefined && { readOnly: options.readOnly } });
   return createDatabase({ execute: (sql, params) => native.execute(sql, params as import("@op-engineering/op-sqlite").Scalar[]), close: () => native.close() }, options.integers ?? "number");
 }

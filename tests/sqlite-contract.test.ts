@@ -287,3 +287,18 @@ test("unsafe integers bound as parameters still reject in both modes", async () 
     await db.close();
   }
 });
+
+test("SQLite omits unset options, since op-sqlite reads any present readOnly key as a boolean", async () => {
+  vi.resetModules();
+  // Mirrors OPSqlite.cpp: options.hasProperty("readOnly") then .asBool().
+  const open = vi.fn((params: Record<string, unknown>) => {
+    if ("readOnly" in params && typeof params.readOnly !== "boolean") throw new Error("Exception in HostFunction: Value is undefined, expected a boolean");
+    return { execute: vi.fn(), close: vi.fn() };
+  });
+  vi.doMock("@op-engineering/op-sqlite", () => ({ open }));
+  vi.doMock("@legendapp/spark-file-system", () => ({ getDirectory: vi.fn(async () => "/data") }));
+  const { openDatabase } = await import("../packages/sqlite/src/index");
+  await openDatabase("unset.sqlite");
+  await openDatabase("readonly.sqlite", { readOnly: true });
+  expect(open.mock.calls.map(([params]) => params)).toEqual([{ name: "unset.sqlite", location: "/data" }, { name: "readonly.sqlite", location: "/data", readOnly: true }]);
+});
