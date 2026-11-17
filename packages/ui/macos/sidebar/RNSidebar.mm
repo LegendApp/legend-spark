@@ -631,12 +631,10 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
   }
 
   NSMutableIndexSet *rows = [NSMutableIndexSet new];
-  NSInteger lastRow = -1;
   for (NSString *selectedId in _selectedIds) {
     for (NSInteger row = 0; row < _tableView.numberOfRows; row++) {
       if ([[self itemIdAtRow:row] isEqualToString:selectedId]) {
         [rows addIndex:(NSUInteger)row];
-        lastRow = row;
         break;
       }
     }
@@ -646,13 +644,24 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
   _updatingSelection = YES;
   if (rows.count > 0) {
     [_tableView selectRowIndexes:rows byExtendingSelection:NO];
-    // Reloads reapply an unchanged selection; only a new one scrolls into view.
-    if (![_selectedIds isEqualToArray:_scrolledSelectedIds]) [_tableView scrollRowToVisible:lastRow];
   } else {
     [_tableView deselectAll:nil];
   }
   _updatingSelection = NO;
+  [self scrollToSelectionIfNeeded];
+}
+
+// Reloads reapply an unchanged selection; only a new one scrolls into view. Before the list has a height,
+// scrolling would push the first rows out of view, so it waits for the first layout.
+- (void)scrollToSelectionIfNeeded
+{
+  if ([_selectedIds isEqualToArray:_scrolledSelectedIds] || NSHeight(_scrollView.contentView.bounds) <= 0) {
+    return;
+  }
+
   _scrolledSelectedIds = _selectedIds;
+  NSInteger lastRow = _tableView.selectedRow;
+  if (lastRow >= 0) [_tableView scrollRowToVisible:lastRow];
 }
 
 - (void)reportLayoutIfNeeded
@@ -972,6 +981,7 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
   // source-list row insets past its trailing edge.
   _scrollView.frame = self.bounds;
   [_scrollView tile];
+  [self scrollToSelectionIfNeeded];
   [self reportLayoutIfNeeded];
   [self reportRowWidthIfNeeded];
 #else

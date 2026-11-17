@@ -400,6 +400,21 @@ int main() { @autoreleasepool {
     CHECK(NSMinY(clip.bounds) == 500);
   }
 
+  // A selection applied before the first layout scrolls only once the list has a height: a visible row leaves
+  // the list at its top, and a row below the fold is scrolled into view.
+  {
+    RNSidebar *visible = [RNSidebar new];
+    [visible updateProps:treeProps oldProps:nullptr];
+    Lay(visible, window, LayoutDirection::LeftToRight);
+    CHECK(NSMinY(Table(visible).enclosingScrollView.contentView.bounds) <= 0);
+    RNSidebar *below = [RNSidebar new];
+    auto far = std::make_shared<SidebarProps>(*many); far->selectedIdsJson = R"(["row19"])";
+    [below updateProps:far oldProps:nullptr];
+    Lay(below, window, LayoutDirection::LeftToRight);
+    NSRect visibleRect = Table(below).visibleRect;
+    CHECK(NSContainsRect(visibleRect, [Table(below) rectOfRow:Table(below).selectedRow]));
+  }
+
   if (failures) return 1;
   std::puts("Sidebar mount, selective updates and row geometry passed");
 } }
