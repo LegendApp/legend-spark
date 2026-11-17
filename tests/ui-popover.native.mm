@@ -50,7 +50,13 @@ using namespace facebook::react;
 @implementation Child @end
 @interface RNSparkPopover : RCTViewComponentView @end
 // ACTUAL_IMPLEMENTATION
-static void Settle() { for (int i = 0; i < 60; i++) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]]; }
+// Runs the loop until the condition holds (5 s at most, then fails with the step), then a little longer so late callbacks arrive.
+static void Wait(const char *step, BOOL (^condition)(void)) {
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+  while (!condition() && deadline.timeIntervalSinceNow > 0) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  if (!condition()) { fprintf(stderr, "timed out: %s\n", step); exit(1); }
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+}
 static std::shared_ptr<SparkPopoverProps> Next(RNSparkPopover *view, void (^change)(SparkPopoverProps &)) {
   auto props = std::make_shared<SparkPopoverProps>(*std::static_pointer_cast<const SparkPopoverProps>(view->_props));
   change(*props); [view updateProps:props oldProps:view->_props]; return props;
@@ -76,7 +82,7 @@ int main() { @autoreleasepool {
   [window orderFront:nil];
   assert(!popover.shown);
   Next(view, ^(SparkPopoverProps &p) { p.contentWidth = 240; p.contentHeight = 90; p.behavior = SparkPopoverBehavior::ApplicationDefined; });
-  Settle();
+  Wait("shown", ^BOOL { return popover.shown && ![[view valueForKey:@"closingFromProps"] boolValue]; });
   assert(popover.shown && NSEqualSizes(popover.contentSize, NSMakeSize(240, 90)) && popover.behavior == NSPopoverBehaviorApplicationDefined);
   // Bottom edge: the popover sits below the anchor on screen.
   NSRect anchorOnScreen = [window convertRectToScreen:[view convertRect:view.bounds toView:nil]];
@@ -86,27 +92,27 @@ int main() { @autoreleasepool {
   assert(NSEqualSizes(popover.contentSize, NSMakeSize(240, 120)) && NSEqualRects(popover.positioningRect, NSMakeRect(10, 4, 20, 10)));
   // Closing through props reports nothing; AppKit closing it (a click outside, Escape) reports onClose once.
   Next(view, ^(SparkPopoverProps &p) { p.visible = false; });
-  Settle();
+  Wait("closed by props", ^BOOL { return !popover.shown; });
   assert(!popover.shown && closes == 0);
   Next(view, ^(SparkPopoverProps &p) { p.visible = true; p.edge = SparkPopoverEdge::Top; p.anchorWidth = 0; p.anchorHeight = 0; });
-  Settle();
+  Wait("shown at top", ^BOOL { return popover.shown && ![[view valueForKey:@"closingFromProps"] boolValue]; });
   assert(popover.shown && NSMinY(contentView.window.frame) >= NSMaxY(anchorOnScreen) - 1);
   [popover performClose:nil];
-  Settle();
+  Wait("closed by AppKit", ^BOOL { return !popover.shown; });
   assert(!popover.shown && closes == 1);
   // Hidden and shown again within the close animation: it reopens and reports nothing.
   Next(view, ^(SparkPopoverProps &p) { p.visible = false; });
   Next(view, ^(SparkPopoverProps &p) { p.visible = true; });
-  Settle();
+  Wait("reopened during close", ^BOOL { return popover.shown && ![[view valueForKey:@"closingFromProps"] boolValue]; });
   assert(popover.shown && closes == 1);
   Next(view, ^(SparkPopoverProps &p) { p.visible = false; });
-  Settle();
+  Wait("closed again", ^BOOL { return !popover.shown; });
   assert(!popover.shown && closes == 1);
   // Content unmounts from the popover; removing the view from its window closes the popover.
   Next(view, ^(SparkPopoverProps &p) { p.visible = false; });
   Next(view, ^(SparkPopoverProps &p) { p.visible = true; });
-  Settle(); assert(popover.shown);
-  [view removeFromSuperview]; Settle();
+  Wait("shown before removal", ^BOOL { return popover.shown && ![[view valueForKey:@"closingFromProps"] boolValue]; }); assert(popover.shown);
+  [view removeFromSuperview]; Wait("closed on removal", ^BOOL { return !popover.shown; });
   assert(!popover.shown && closes == 1);
   [view unmountChildComponentView:content index:1];
   assert(content.superview == nil && anchor.superview == view);

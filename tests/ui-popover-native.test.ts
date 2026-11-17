@@ -13,6 +13,6 @@ test.skipIf(process.platform !== "darwin")("AppKit popover shows hosted content,
     const input = path.join(directory, "Popover.mm"), executable = path.join(directory, "test");
     writeFileSync(input, readFileSync(path.join(root, "tests/ui-popover.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));
     execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", input, "-o", executable]);
-    expect(execFileSync(executable, [], { encoding: "utf8", timeout: 15000 })).toContain("PASS popover");
+    expect(execFileSync(executable, [], { encoding: "utf8", timeout: 45000 })).toContain("PASS popover");
   } finally { rmSync(directory, { recursive: true, force: true }); }
-}, 30000);
+}, 60000);
