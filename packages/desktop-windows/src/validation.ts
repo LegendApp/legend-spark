@@ -98,11 +98,16 @@ function entries(value: unknown, name: string): ObjectValue[] {
   return value;
 }
 export function validateMacOS(value: MacOSWindowOptions) {
-  object(value, "macos"); keys(value, ["panelStyle", "representedUri", "subtitle", "level", "titleBar", "toolbar", "startupSplitView", "restoreOnLaunch"]);
+  object(value, "macos"); keys(value, ["panelStyle", "representedUri", "subtitle", "tabbing", "level", "titleBar", "toolbar", "startupSplitView", "restoreOnLaunch"]);
   enumValue(value.panelStyle, ["utility", "documentModal", "nonactivating"], "panelStyle");
   enumValue(value.level, ["normal", "floating", "modalPanel", "mainMenu", "status", "screenSaver"], "level");
   flags(value, ["restoreOnLaunch"]);
   if (value.subtitle !== undefined) text(value.subtitle, "subtitle");
+  if (value.tabbing !== undefined) {
+    object(value.tabbing, "tabbing"); keys(value.tabbing, ["mode", "identifier"]);
+    enumValue(value.tabbing.mode, ["automatic", "preferred", "disallowed"], "tabbing.mode");
+    if (value.tabbing.identifier !== undefined) text(value.tabbing.identifier, "tabbing identifier", false);
+  }
   if (value.representedUri !== undefined && value.representedUri !== null) {
     text(value.representedUri, "represented URI", false);
     try { new URL(value.representedUri); } catch { throw new SparkError("E_INVALID_ARGUMENT", "representedUri must be an absolute URI"); }

@@ -20,14 +20,14 @@ import { View, Text } from "react-native";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { controlKinds, macosButton, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
-import { UnavailableCheckbox } from "./checkbox-unavailable";
+import { UnavailableCheckbox, UnavailableRadioGroup } from "./checkbox-unavailable";
 import { selectionIndex } from "./select";
-import type { ButtonProps, CheckboxProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
-export type { ButtonProps, CheckboxProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+import type { ButtonProps, CheckboxProps, RadioGroupProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
+export type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { TextInput } from "./mobile-input";
 export function getControlAvailability(control: ControlKind): Availability {
   if (!controlKinds.includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
-  if (control === "checkbox") return unsupportedPlatform;
+  if (control === "checkbox" || control === "radio-group") return unsupportedPlatform;
   return control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
 }
 const fill = [frame({ maxWidth: Infinity, maxHeight: Infinity })];
@@ -64,5 +64,6 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
 }
 export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
 export function Checkbox(props: CheckboxProps) { return <UnavailableCheckbox {...props} availability={getControlAvailability("checkbox")} />; }
+export function RadioGroup(props: RadioGroupProps) { return <UnavailableRadioGroup {...props} availability={getControlAvailability("radio-group")} />; }
 /** Native mobile segmented pickers have one size and fill their frame; `size` and `distribution` keep those defaults here. */
 export function SegmentedControl(props: SegmentedControlProps) { validateSegmented(props); return <Selection {...props} segmented />; }

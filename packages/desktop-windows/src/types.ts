@@ -132,11 +132,19 @@ export interface MacOSStartupSplitViewOptions {
   sidebarBackgroundColor: string;
   contentTitlebarHeight?: number;
 }
+export interface MacOSWindowTabbingOptions {
+  /** `automatic` (default) follows the user's "Prefer tabs" setting; `preferred` always tabs; `disallowed` never does. */
+  mode?: "automatic" | "preferred" | "disallowed";
+  /** Windows with the same identifier can share a tab group. Defaults to AppKit's identifier for the window's class. */
+  identifier?: string;
+}
 export interface MacOSWindowOptions {
   panelStyle?: "utility" | "documentModal" | "nonactivating";
   representedUri?: string | null;
   /** NSWindow subtitle, shown under the title (beside it in a compact toolbar). An empty string removes it. */
   subtitle?: string;
+  /** Native window tabs (NSWindow tabbing). Windows sharing an `identifier` can merge into one tab group; `preferred` opens them as tabs. */
+  tabbing?: MacOSWindowTabbingOptions;
   level?: "normal" | "floating" | "modalPanel" | "mainMenu" | "status" | "screenSaver";
   titleBar?: MacOSTitleBarOptions;
   toolbar?: MacOSToolbarOptions;

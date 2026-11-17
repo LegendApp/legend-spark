@@ -8,6 +8,7 @@ import { Panel, Status, errorText } from "../../Panel";
 
 // The child is a secondary root of this bundle; App renders windowProps.message for it.
 const CHILD = "windows-window-manager-child";
+const TABBED = "windows-window-manager-tab";
 const frameText = (frame: WindowBounds) => `${frame.displayId}: ${Math.round(frame.x)}, ${Math.round(frame.y)} ${Math.round(frame.width)}x${Math.round(frame.height)}`;
 
 export function WindowManager() {
@@ -26,6 +27,8 @@ export function WindowManager() {
     <Button testID="windows-window-manager-clear-blur" onPress={() => run("Cleared blur", () => setWindowBlur(CHILD, { radius: 0, durationMs: 250 }))}>Clear blur</Button>
     <Button testID="windows-window-manager-tint" onPress={() => run("Tinted child titlebar", () => setWindowOptions(CHILD, { macos: { titleBar: { tintColor: { light: "#ff660066", dark: "#3366ff66" } } } }))}>Tint child titlebar</Button>
     <Button testID="windows-window-manager-untint" onPress={() => run("Untinted child titlebar", () => setWindowOptions(CHILD, { macos: { titleBar: { material: "titlebar" } } }))}>Untint child titlebar</Button>
+    <Button testID="windows-window-manager-tabs" onPress={() => run("Opened two tabbed windows", async () => { for (const index of [1, 2]) await openWindow({ id: `${TABBED}-${index}`, component: "main", title: `Tab ${index}`, props: { windowId: `${TABBED}-${index}`, windowProps: { message: `Native window tab ${index}. Window › Merge All Windows, Show Tab Bar.` } }, size: { width: 460, height: 300 }, macos: { tabbing: { mode: "preferred", identifier: TABBED } } }); })}>Open tabbed windows</Button>
+    <Button testID="windows-window-manager-close-tabs" onPress={() => run("Closed tabbed windows", async () => { for (const index of [1, 2]) await closeWindow(`${TABBED}-${index}`).catch(() => {}); })}>Close tabbed windows</Button>
     <Button testID="windows-window-manager-close" onPress={() => { closeWindow(CHILD).then(result => setStatus(result.closed ? "Closed child" : "Close vetoed"), report); }}>Close child</Button>
     <Button testID="windows-window-manager-show-main" onPress={() => run("Showing main", () => showWindow("main"))}>Show main window</Button>
     <Button testID="windows-window-manager-read-frame" onPress={() => run("Read frame", async () => setBounds((await getWindow("main")).bounds))}>Read frame</Button>

@@ -44,6 +44,8 @@
         "SidebarItem": "RNSidebarItem",
         "SFSymbol": "RNSFSymbol",
         "SparkProgressIndicator": "RNSparkProgressIndicator",
+        "SparkRadioGroup": "RNSparkRadioGroup",
+        "SparkPopover": "RNSparkPopover",
         "SwipeActions": "RNSwipeActions",
         "NativeSelect": "RNNativeSelect",
         "NativeSegmentedControl": "RNNativeSegmentedControl",

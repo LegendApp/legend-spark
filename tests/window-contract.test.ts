@@ -75,3 +75,9 @@ test("subtitles and toolbar progress items validate before native effects", () =
   for (const item of [{ value: -0.1 }, { value: 1.5 }, { value: NaN }, { value: "0.5" }, { variant: "circle" }, { width: 0 }]) expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "progress", id: "sync", ...item }] } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
   expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "progress", id: "sync", disabled: true }] } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
 });
+test("window tabbing options validate before native effects", () => {
+  for (const tabbing of [{}, { mode: "preferred" }, { mode: "disallowed" }, { mode: "automatic", identifier: "review" }]) expect(() => validateOptions({ macos: { tabbing } } as never, "macos", false)).not.toThrow();
+  for (const tabbing of [null, { mode: "always" }, { identifier: "" }, { identifier: 1 }]) expect(() => validateOptions({ macos: { tabbing } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => validateOptions({ macos: { tabbing: { group: "x" } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+  expect(() => validateOptions({ macos: { tabbing: { mode: "preferred" } } }, "windows", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+});

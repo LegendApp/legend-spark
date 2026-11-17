@@ -19,6 +19,8 @@ export function macosOptions({ macos: options, appearance, backgroundColor }: Pi
   if (!options) return { windowStyle: style };
   if (options.representedUri !== undefined) result.representedURL = options.representedUri;
   if (options.subtitle !== undefined) result.subtitle = options.subtitle;
+  if (options.tabbing?.mode !== undefined) result.tabbingMode = options.tabbing.mode;
+  if (options.tabbing?.identifier !== undefined) result.tabbingIdentifier = options.tabbing.identifier;
   if (options.restoreOnLaunch !== undefined) result.restoreOnLaunch = options.restoreOnLaunch;
   if (options.startupSplitView !== undefined) style.startupSplitView = options.startupSplitView;
   if (options.level !== undefined) {

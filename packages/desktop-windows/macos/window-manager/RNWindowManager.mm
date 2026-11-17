@@ -695,6 +695,12 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
     LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, nil);
   }
   if ([options[@"subtitle"] isKindOfClass:NSString.class]) window.subtitle = options[@"subtitle"];
+  NSString *tabbingMode = [options[@"tabbingMode"] isKindOfClass:NSString.class] ? options[@"tabbingMode"] : nil;
+  if (tabbingMode) {
+    window.tabbingMode = [tabbingMode isEqualToString:@"preferred"] ? NSWindowTabbingModePreferred
+      : [tabbingMode isEqualToString:@"disallowed"] ? NSWindowTabbingModeDisallowed : NSWindowTabbingModeAutomatic;
+  }
+  if ([options[@"tabbingIdentifier"] isKindOfClass:NSString.class]) window.tabbingIdentifier = options[@"tabbingIdentifier"];
 
   NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
   if (windowStyle[@"startupSplitView"] == NSNull.null && LegendFinishSidebarSplitViewStartup) {

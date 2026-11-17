@@ -5,12 +5,14 @@ import NativeButton from "./SparkButtonNativeComponent";
 import NativeSelect from "./native-select/NativeSelectNativeComponent";
 import WindowsSelect from "./SparkSelectNativeComponent";
 import NativeSegmentedControl from "./native-select/NativeSegmentedControlNativeComponent";
+import NativeRadioGroup from "./radio-group/RadioGroupNativeComponent";
+import { RadioGroupFallback } from "./checkbox-unavailable";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
-import { macosButton, unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateSegmented } from "./control";
+import { macosButton, unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateRadioGroup, validateSegmented } from "./control";
 import { getControlAvailability } from "./availability";
 import { selectionIndex } from "./select";
-import type { ButtonProps, CheckboxProps, TextInputProps, SelectProps, SegmentedControlProps } from "./types";
-export type { ButtonProps, CheckboxProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+import type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, SelectProps, SegmentedControlProps } from "./types";
+export type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { getControlAvailability } from "./availability";
 
 // AppKit buttons report their intrinsic size, which sizes the view unless a style sets width or height.
@@ -84,3 +86,20 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
 }
 export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
 export function SegmentedControl(props: SegmentedControlProps) { validateSegmented(props); return <Selection {...props} segmented />; }
+/** AppKit radio buttons (NSButton) in a stack. Without a width or height style it takes its intrinsic size. */
+export function RadioGroup(props: RadioGroupProps) {
+  validateRadioGroup(props);
+  const control = useControl(props, getControlAvailability("radio-group"));
+  const intrinsic = useIntrinsicSize(control);
+  const [selectionRevision, revise] = useState(0);
+  const { options, value, onValueChange, orientation = "vertical", size = "regular", accessibilityLabel, style, testID } = props;
+  function changed(event: NativeSyntheticEvent<{ value: string }>) {
+    if (!control.active()) return;
+    const next = event?.nativeEvent?.value;
+    if (!options.some(option => option.value === next)) { control.error(new SparkError("E_INVALID_DATA", "Native selection is not an option")); return; }
+    revise(revision => revision + 1); onValueChange(next);
+  }
+  if (control.failed) return <RadioGroupFallback {...props} controlRef={control.ref} />;
+  return <NativeRadioGroup ref={control.ref} itemsJson={JSON.stringify(options.map(({ label, value }) => ({ label, value })))} value={value} selectionRevision={selectionRevision} enabled={!control.disabled} orientation={orientation} controlSize={size}
+    accessibilityLabel={accessibilityLabel} testID={testID} onValueChange={changed} onIntrinsicSize={intrinsic.measured} style={[intrinsic.frame, style]} />;
+}

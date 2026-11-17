@@ -74,6 +74,7 @@
     "./ai/codex",
     "./ui/swipe",
     "./ui/progress",
+    "./ui/popover",
     "./markdown",
     "./html"
   ]

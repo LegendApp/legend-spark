@@ -168,6 +168,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Style masks | Translate ordinary bits to common booleans/title-bar options; keep native panel styles under creation-only `macos.panelStyle`. |
 | Represented URL | `macos.representedUri`, nullable for clearing. |
 | Subtitle | `macos.subtitle` (`NSWindow.subtitle`); an empty string removes it. |
+| Window tabs | `macos.tabbing` (`NSWindow` tabbing): `mode` `automatic` (default; follows the user's "Prefer tabs" setting), `preferred` (always open as a tab) or `disallowed`, and `identifier`, the tab group a window may join. Each tab is an ordinary Spark window with its own `id`, `component` and `props`; AppKit adds Show Tab Bar, Show All Tabs and Merge All Windows to the Window menu. |
 | Window level | `macos.level`; reject conflicting `alwaysOnTop` requests. |
 | Content layout guide, title visibility, material/blending/state/tint, traffic lights | `macos.titleBar` group. |
 | Toolbar style, items, titlebar controls | Typed `macos.toolbar` and `macos.titleBar.controls`. |

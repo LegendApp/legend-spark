@@ -9,12 +9,13 @@ vi.mock("../packages/ui/src/SparkTextInputNativeComponent", () => ({ default: "S
 vi.mock("../packages/ui/src/SparkSelectNativeComponent", () => ({ default: "SparkSelect" }));
 vi.mock("../packages/ui/src/native-select/NativeSelectNativeComponent", () => ({ default: "NativeSelect" }));
 vi.mock("../packages/ui/src/native-select/NativeSegmentedControlNativeComponent", () => ({ default: "NativeSegmentedControl" }));
+vi.mock("../packages/ui/src/radio-group/RadioGroupNativeComponent", () => ({ default: "SparkRadioGroup" }));
 vi.mock("expo-modules-core", () => ({ requireOptionalNativeModule: () => ({}) }));
-import { Button, Checkbox, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index.macos";
+import { Button, Checkbox, RadioGroup, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index.macos";
 import { TextInput as MobileTextInput } from "../packages/ui/src/mobile-input";
-import { Button as WebButton, Checkbox as WebCheckbox, TextInput as WebTextInput, Select as WebSelect, SegmentedControl as WebSegmentedControl } from "../packages/ui/src/index.web";
+import { Button as WebButton, Checkbox as WebCheckbox, TextInput as WebTextInput, Select as WebSelect, SegmentedControl as WebSegmentedControl, RadioGroup as WebRadioGroup } from "../packages/ui/src/index.web";
 import { selectionIndex } from "../packages/ui/src/select";
-import { Select as AndroidSelect, Checkbox as AndroidCheckbox, Button as AndroidButton } from "../packages/ui/src/index.android";
+import { Select as AndroidSelect, Checkbox as AndroidCheckbox, Button as AndroidButton, RadioGroup as AndroidRadioGroup } from "../packages/ui/src/index.android";
 let rendered: any;
 const event = (text: string, eventCount: number) => ({ nativeEvent: { text, eventCount } });
 const options = [{ label: "One", value: "one" }, { label: "Two", value: "two" }];
@@ -192,4 +193,34 @@ test("button symbols and sizes reach AppKit, report missing symbols, and are una
   await mount(React.createElement(WebButton, { children: "Generate", symbol: "sparkles", onError: webError }));
   expect(webError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
   expect(rendered.root.findByType("button").props.disabled).toBe(true);
+});
+test("radio groups are controlled native radios that snap back until the app accepts a choice", async () => {
+  const onValueChange = vi.fn();
+  await mount(React.createElement(RadioGroup, { options, value: "one", onValueChange, orientation: "horizontal", size: "small", accessibilityLabel: "Review" }));
+  let native = rendered.root.findByType("SparkRadioGroup").props;
+  expect(native).toMatchObject({ itemsJson: JSON.stringify(options), value: "one", selectionRevision: 0, enabled: true, orientation: "horizontal", controlSize: "small", accessibilityLabel: "Review" });
+  await act(async () => native.onValueChange({ nativeEvent: { value: "two" } }));
+  native = rendered.root.findByType("SparkRadioGroup").props; expect(onValueChange).toHaveBeenCalledWith("two"); expect(native.value).toBe("one"); expect(native.selectionRevision).toBe(1);
+  const onError = vi.fn();
+  await act(async () => rendered.update(React.createElement(RadioGroup, { options, value: "one", onValueChange, onError })));
+  await act(async () => rendered.root.findByType("SparkRadioGroup").props.onValueChange({ nativeEvent: { value: "three" } }));
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onValueChange).toHaveBeenCalledTimes(1);
+  await act(async () => rendered.update(React.createElement(RadioGroup, { options, value: "one", onValueChange, disabled: true })));
+  native = rendered.root.findByType("SparkRadioGroup").props; expect(native.enabled).toBe(false);
+  native.onValueChange({ nativeEvent: { value: "two" } }); expect(onValueChange).toHaveBeenCalledTimes(1);
+  for (const props of [{ value: "three" }, { orientation: "diagonal" }, { size: "large" }, { onValueChange: undefined }]) await expect(mount(React.createElement(RadioGroup, { options, value: "one", onValueChange, ...props } as never))).rejects.toThrow();
+  for (const [os, Component] of [["windows", RadioGroup], ["android", AndroidRadioGroup]] as const) {
+    platform.OS = os; const onError = vi.fn();
+    await mount(React.createElement(Component, { options, value: "two", onValueChange, onError }));
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" })); expect(rendered.root.findAllByType("SparkRadioGroup")).toHaveLength(0);
+    expect(rendered.root.findAll((node: any) => node.props.accessibilityRole === "radio" && node.props.accessibilityState?.checked).map((node: any) => node.props.children)).toEqual(["Two"]);
+  }
+});
+test("web radio groups use native radio inputs", async () => {
+  platform.OS = "web"; const onValueChange = vi.fn();
+  await mount(React.createElement(WebRadioGroup, { options, value: "one", onValueChange, accessibilityLabel: "Review" }));
+  const inputs = rendered.root.findAllByType("input");
+  expect(inputs.map((input: any) => [input.props.type, input.props.checked])).toEqual([["radio", true], ["radio", false]]);
+  expect(rendered.root.findByType("div").props).toMatchObject({ role: "radiogroup", "aria-label": "Review" });
+  await act(async () => inputs[1].props.onChange()); expect(onValueChange).toHaveBeenCalledWith("two");
 });

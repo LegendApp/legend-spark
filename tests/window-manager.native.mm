@@ -437,6 +437,13 @@ int main() { @autoreleasepool {
     [manager setWindowOptions:@"brightness-probe" optionsJson:SparkJSON(@{ @"subtitle": subtitle }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
     assert([window.subtitle isEqual:subtitle]);
   }
+  // Tabbing mode and identifier reach NSWindow; omitting them keeps the current values.
+  [manager setWindowOptions:@"brightness-probe" optionsJson:SparkJSON(@{ @"tabbingMode": @"preferred", @"tabbingIdentifier": @"review" }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert(window.tabbingMode == NSWindowTabbingModePreferred && [window.tabbingIdentifier isEqual:@"review"]);
+  [manager setWindowOptions:@"brightness-probe" optionsJson:SparkJSON(@{ @"tabbingMode": @"disallowed" }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert(window.tabbingMode == NSWindowTabbingModeDisallowed && [window.tabbingIdentifier isEqual:@"review"]);
+  [manager setWindowOptions:@"brightness-probe" optionsJson:SparkJSON(@{ @"tabbingMode": @"automatic" }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert(window.tabbingMode == NSWindowTabbingModeAutomatic);
   // Re-sending window options (identical or changed title bar options) keeps the frame and size limits.
   LegendWindowRegistry.sharedRegistry.windows[@"brightness-probe"] = window;
   window.minSize = NSMakeSize(600, 400);

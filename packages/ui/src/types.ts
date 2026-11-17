@@ -56,4 +56,11 @@ export interface SegmentedControlProps extends SelectProps {
   /** `fit` sizes segments to their labels; `fill` shares the control's width equally. Defaults to `fit`. */
   distribution?: "fit" | "fill";
 }
-export type ControlKind = "button" | "text-input" | "select" | "segmented-control" | "checkbox";
+/** A controlled group of native radio buttons: one per option, with `value` selected. */
+export interface RadioGroupProps extends SelectProps {
+  /** `vertical` (default) stacks the buttons; `horizontal` puts them on one line. */
+  orientation?: "vertical" | "horizontal";
+  /** AppKit control size: `regular` (default), `small` or `mini`. */
+  size?: "regular" | "small" | "mini";
+}
+export type ControlKind = "button" | "text-input" | "select" | "segmented-control" | "checkbox" | "radio-group";

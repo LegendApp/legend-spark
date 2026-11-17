@@ -64,6 +64,16 @@ struct SparkProgressIndicatorEventEmitter : EventEmitter {
   struct OnIntrinsicSize { double height, width; };
   void onIntrinsicSize(OnIntrinsicSize event) const { progressSizes.push_back({event.width, event.height}); }
 };
+enum class SparkRadioGroupOrientation { Vertical, Horizontal };
+enum class SparkRadioGroupControlSize { Regular, Small, Mini };
+struct SparkRadioGroupProps : Props { std::string itemsJson, value, accessibilityLabel, testId; int selectionRevision = 0; bool enabled = true; SparkRadioGroupOrientation orientation = SparkRadioGroupOrientation::Vertical; SparkRadioGroupControlSize controlSize = SparkRadioGroupControlSize::Regular; };
+static std::vector<std::string> radioChanges; static std::vector<std::pair<double, double>> radioSizes;
+struct SparkRadioGroupEventEmitter : EventEmitter {
+  struct OnValueChange { std::string value; }; struct OnIntrinsicSize { double height, width; };
+  void onValueChange(OnValueChange event) const { radioChanges.push_back(event.value); }
+  void onIntrinsicSize(OnIntrinsicSize event) const { radioSizes.push_back({event.width, event.height}); }
+};
+struct SparkRadioGroupComponentDescriptor {};
 struct SparkProgressIndicatorComponentDescriptor {};
 struct SparkButtonComponentDescriptor {};
 struct TextInputSearchComponentDescriptor {};
@@ -107,6 +117,7 @@ static NSColor *RCTUIColorFromSharedColor(const SharedColor &value) { return val
 @interface RNSFSymbol : RCTViewComponentView @end
 @interface RNSparkButton : RCTViewComponentView @end
 @interface RNSparkProgressIndicator : RCTViewComponentView @end
+@interface RNSparkRadioGroup : RCTViewComponentView @end
 static void RCTTextInputSearchHandleCommand(id view, const NSString *name, const NSArray *args) {}
 // ACTUAL_IMPLEMENTATION
 static void Update(RNSparkTextInput *view, std::shared_ptr<SparkTextInputProps> props) { [view updateProps:props oldProps:view->_props]; }
@@ -306,6 +317,34 @@ int main() { @autoreleasepool {
     [symbol updateLayoutMetrics:metrics oldLayoutMetrics:LayoutMetrics{}]; assert(symbolView.userInterfaceLayoutDirection == direction);
     [view updateLayoutMetrics:metrics oldLayoutMetrics:LayoutMetrics{}];
     assert(field.userInterfaceLayoutDirection == direction && field.alignment == (direction == R ? NSTextAlignmentRight : NSTextAlignmentLeft));
+  }
+  // Radio group: one NSButton radio per option; a click reports the choice and snaps back until the app accepts it.
+  {
+    RNSparkRadioGroup *group = [RNSparkRadioGroup new]; group->_eventEmitter = std::make_shared<SparkRadioGroupEventEmitter>();
+    auto radioProps = std::make_shared<SparkRadioGroupProps>();
+    radioProps->itemsJson = "[{\"label\":\"Comment\",\"value\":\"comment\"},{\"label\":\"Approve\",\"value\":\"approve\"},{\"label\":\"Request changes\",\"value\":\"request\"}]";
+    radioProps->value = "comment"; radioProps->accessibilityLabel = "Review"; radioProps->testId = "review-kind";
+    [group updateProps:radioProps oldProps:nullptr];
+    NSStackView *stack = [group valueForKey:@"stack"];
+    NSArray<NSButton *> *radios = (NSArray<NSButton *> *)stack.arrangedSubviews;
+    assert(radios.count == 3 && [radios[2].title isEqual:@"Request changes"] && stack.orientation == NSUserInterfaceLayoutOrientationVertical);
+    for (NSButton *radio in radios) assert(radio.enabled && radio.controlSize == NSControlSizeRegular);
+    assert(radios[0].state == NSControlStateValueOn && radios[1].state == NSControlStateValueOff && radios[2].state == NSControlStateValueOff);
+    assert([stack.accessibilityRole isEqual:NSAccessibilityRadioGroupRole] && [stack.accessibilityLabel isEqual:@"Review"]);
+    assert(radioSizes.size() == 1 && radioSizes[0].first > 0 && radioSizes[0].second > 0);
+    double verticalHeight = radioSizes[0].second;
+    [radios[1] performClick:nil];
+    assert(radioChanges.size() == 1 && radioChanges[0] == "approve" && radios[1].state == NSControlStateValueOn && radios[0].state == NSControlStateValueOff);
+    radioProps = std::make_shared<SparkRadioGroupProps>(*radioProps); radioProps->selectionRevision = 1;
+    [group updateProps:radioProps oldProps:group->_props];
+    assert(radios[0].state == NSControlStateValueOn && radios[1].state == NSControlStateValueOff);
+    [radios[0] performClick:nil]; assert(radioChanges.size() == 1 && radios[0].state == NSControlStateValueOn);
+    radioProps = std::make_shared<SparkRadioGroupProps>(*radioProps); radioProps->value = "request"; radioProps->orientation = SparkRadioGroupOrientation::Horizontal; radioProps->controlSize = SparkRadioGroupControlSize::Small; radioProps->enabled = false;
+    [group updateProps:radioProps oldProps:group->_props];
+    assert(radios[2].state == NSControlStateValueOn && radios[0].state == NSControlStateValueOff && stack.orientation == NSUserInterfaceLayoutOrientationHorizontal);
+    for (NSButton *radio in radios) assert(!radio.enabled && radio.controlSize == NSControlSizeSmall);
+    assert(radioSizes.back().second < verticalHeight && radioSizes.back().first > radioSizes[0].first);
+    [group prepareForRecycle]; assert(stack.arrangedSubviews.count == 0);
   }
   puts("Native text control tests passed");
 } }

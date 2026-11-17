@@ -1,19 +1,20 @@
 # UI components
 
-Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `/ui/sidebar`, `/ui/split-view`, `/ui/swipe`, `/ui/glass`, `/ui/symbol`, `/ui/progress`, `/webview`, `/markdown`, `/html`.
+Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `/ui/sidebar`, `/ui/split-view`, `/ui/swipe`, `/ui/glass`, `/ui/symbol`, `/ui/progress`, `/ui/popover`, `/webview`, `/markdown`, `/html`.
 
 ## Rules
 
 - Use ordinary React Native views and text for layout. Spark's UI exports are a small set of native controls, not a component library.
 - `Button`, `TextInput`, `Select` and `SegmentedControl` (from `/ui`, or `/ui/uniwind` for className styling) render native AppKit/WinUI controls and work on iOS/Android/web through Expo UI or React Native.
-- `Checkbox` (`value`/`onValueChange`, string label children) and `Button variant="disclosure"` (requires `expanded`) are macOS and web only; check `getControlAvailability('checkbox')`. On macOS, buttons and checkboxes size themselves; give no fixed width unless you want one.
+- `Checkbox` (`value`/`onValueChange`, string label children) and `Button variant="disclosure"` (requires `expanded`) are macOS and web only; check `getControlAvailability('checkbox')`. `RadioGroup` (`options`/`value`/`onValueChange` like Select, `orientation` `vertical`/`horizontal`, `size` `regular`/`small`/`mini`) is macOS (`NSButton` radios) and web only; check `getControlAvailability('radio-group')`. On macOS, buttons and checkboxes size themselves; give no fixed width unless you want one.
 - `Button` takes `symbol` (an SF Symbol before the title; macOS only) and `size` (`regular`/`small`/`mini`; macOS, and web as smaller text). Elsewhere they report `E_UNSUPPORTED_PLATFORM` and render the disabled fallback; a symbol missing on the running macOS reports `E_NOT_FOUND`.
 - `SegmentedControl` takes `size` (`regular`/`small`) and `distribution` (`fit`/`fill`). `Sidebar` takes `listStyle="plain"` for lists inside content.
 - `TextInput` is single-line and either controlled (`value`) or uncontrolled (`defaultValue`), never both; switching needs a remount.
 - `Select`/`SegmentedControl` never auto-select the first option when `value` is missing. Values are unique strings.
 - Invalid props throw during render; runtime problems go to `onError` (default `console.error`). Spark never inserts error text into your UI.
-- Specialized macOS views (`TextInputSearch`, `Sidebar`, `SidebarSplitView`, swipe actions, `GlassView`, `SFSymbol`, `ProgressIndicator`) render plain view content on other platforms and report through `onError`. Check their `get*Availability()` before advertising the feature.
+- Specialized macOS views (`TextInputSearch`, `Sidebar`, `SidebarSplitView`, swipe actions, `GlassView`, `SFSymbol`, `ProgressIndicator`, `Popover`) render plain view content on other platforms and report through `onError`. Check their `get*Availability()` before advertising the feature.
 - `ProgressIndicator` (`/ui/progress`, macOS) is `NSProgressIndicator`: `variant` `bar`/`spinner`, `size` `regular`/`small` (spinners also `mini`), `value` 0 to 1 (omit or `null` for indeterminate). Give a bar a width. For toolbar progress use a `progress` toolbar item instead.
+- `Popover` (`/ui/popover`, macOS) is `NSPopover` with React `content`, anchored to its children or to `anchorRect` (e.g. a text selection). `visible` is controlled; set it false in `onClose` (AppKit closed it). `edge` `bottom`/`top`/`leading`/`trailing`, `behavior` `transient`/`semitransient`/`applicationDefined`. Give the content a width.
 - `Sidebar`'s `selectedId` is controlled and `onSelectionChange` is required.
 - `Sidebar` trees: data `children` or `SidebarItem` `parentId` nest rows; `group` makes a source-list section header (never selectable, Show/Hide on hover); `count` is a trailing count in secondary digits (not a capsule). `collapsedIds` applies when its value changes and `onExpandedChange({ id, expanded })` reports the user's toggles. `onDoubleClick({ id })` reports double-clicks. Pass `selectedIds` instead of `selectedId` for ⌘/⇧ multiple selection; `onSelectionChange` then reports `{ id, ids }`.
 - Layout follows `direction: 'rtl'` on macOS controls.
@@ -49,4 +50,4 @@ Uniwind/Tailwind classes are optional (`/ui/uniwind`, `cn` from `/ui/classnames`
 
 ## Platforms
 
-`/ui` core controls: macOS, Windows (no `SegmentedControl`, `Checkbox` or disclosure button), iOS, Android (no `Checkbox` or disclosure button), web. Specialized `/ui/*` views: macOS only. `/webview`: macOS, Windows. `/markdown`, `/html`: macOS (and upstream mobile), not Windows.
+`/ui` core controls: macOS, Windows (no `SegmentedControl`, `Checkbox`, `RadioGroup` or disclosure button), iOS, Android (no `Checkbox`, `RadioGroup` or disclosure button), web. Specialized `/ui/*` views: macOS only. `/webview`: macOS, Windows. `/markdown`, `/html`: macOS (and upstream mobile), not Windows.
