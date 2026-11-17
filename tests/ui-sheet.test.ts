@@ -5,7 +5,8 @@ const { create } = createRequire(import.meta.url)("react-test-renderer");
 const { platform, registered } = vi.hoisted(() => ({ platform: { OS: "macos", Version: "26.0" }, registered: vi.fn(() => true) }));
 vi.mock("react-native", () => ({ Platform: platform, UIManager: { hasViewManagerConfig: registered }, View: "View", Text: "Text" }));
 vi.mock("../packages/ui/src/sheet/SheetNativeComponent", () => ({ default: "SparkSheet" }));
-import { Sheet, getSheetAvailability } from "../packages/ui/src/sheet";
+import { Sheet as SheetComponent, getSheetAvailability } from "../packages/ui/src/sheet";
+const Sheet = SheetComponent as React.FC<any>;
 let rendered: any;
 async function mount(element: React.ReactElement) { await act(async () => { rendered = create(element); }); }
 beforeEach(() => {

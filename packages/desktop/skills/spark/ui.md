@@ -1,6 +1,6 @@
 # UI components
 
-Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `/ui/sidebar`, `/ui/split-view`, `/ui/swipe`, `/ui/glass`, `/ui/symbol`, `/ui/progress`, `/ui/popover`, `/webview`, `/markdown`, `/html`.
+Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `/ui/sidebar`, `/ui/split-view`, `/ui/swipe`, `/ui/glass`, `/ui/symbol`, `/ui/progress`, `/ui/popover`, `/ui/table`, `/ui/sheet`, `/webview`, `/markdown`, `/html`.
 
 ## Rules
 
@@ -9,12 +9,15 @@ Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `
 - `Checkbox` (`value`/`onValueChange`, string label children) and `Button variant="disclosure"` (requires `expanded`) are macOS and web only; check `getControlAvailability('checkbox')`. `RadioGroup` (`options`/`value`/`onValueChange` like Select, `orientation` `vertical`/`horizontal`, `size` `regular`/`small`/`mini`) is macOS (`NSButton` radios) and web only; check `getControlAvailability('radio-group')`. On macOS, buttons and checkboxes size themselves; give no fixed width unless you want one.
 - `Button` takes `symbol` (an SF Symbol before the title; macOS only) and `size` (`regular`/`small`/`mini`; macOS, and web as smaller text). Elsewhere they report `E_UNSUPPORTED_PLATFORM` and render the disabled fallback; a symbol missing on the running macOS reports `E_NOT_FOUND`.
 - `SegmentedControl` takes `size` (`regular`/`small`) and `distribution` (`fit`/`fill`). `Sidebar` takes `listStyle="plain"` for lists inside content.
-- `TextInput` is single-line and either controlled (`value`) or uncontrolled (`defaultValue`), never both; switching needs a remount.
+- `TextInput` is single-line unless `multiline` (an `NSTextView` on macOS; Return inserts a newline) and takes `placeholder`. It is either controlled (`value`) or uncontrolled (`defaultValue`), never both; switching needs a remount.
 - `Select`/`SegmentedControl` never auto-select the first option when `value` is missing. Values are unique strings.
 - Invalid props throw during render; runtime problems go to `onError` (default `console.error`). Spark never inserts error text into your UI.
-- Specialized macOS views (`TextInputSearch`, `Sidebar`, `SidebarSplitView`, swipe actions, `GlassView`, `SFSymbol`, `ProgressIndicator`, `Popover`) render plain view content on other platforms and report through `onError`. Check their `get*Availability()` before advertising the feature.
+- Specialized macOS views (`TextInputSearch`, `Sidebar`, `SidebarSplitView`, swipe actions, `GlassView`, `SFSymbol`, `ProgressIndicator`, `Popover`, `Table`, `Sheet`) render plain view content on other platforms and report through `onError`. Check their `get*Availability()` before advertising the feature.
 - `ProgressIndicator` (`/ui/progress`, macOS) is `NSProgressIndicator`: `variant` `bar`/`spinner`, `size` `regular`/`small` (spinners also `mini`), `value` 0 to 1 (omit or `null` for indeterminate). Give a bar a width. For toolbar progress use a `progress` toolbar item instead.
 - `Popover` (`/ui/popover`, macOS) is `NSPopover` with React `content`, anchored to its children or to `anchorRect` (e.g. a text selection). `visible` is controlled; set it false in `onClose` (AppKit closed it). `edge` `bottom`/`top`/`leading`/`trailing`, `behavior` `transient`/`semitransient`/`applicationDefined`. Give the content a width.
+- `Table` (`/ui/table`, macOS) is `NSTableView` with a header: `columns` (`id`, `title`, optional `width`/`minWidth`/`maxWidth`, `alignment`, `monospacedDigits`, `secondary`) and `rows` of `{ id, values }` (text cells by column ID). Only visible rows get cells. Selection like `Sidebar` (`selectedId` or `selectedIds`, required `onSelectionChange({ id, ids })`), plus `onDoubleClick({ id })`, `headerVisible`, `alternatingRows`, `rowHeight`. No sorting or custom cells.
+- `Sheet` (`/ui/sheet`, macOS) is a sheet on the current window hosting React children (forms). `visible` is controlled; Escape calls `onCancel` and never closes it by itself. Give the content a size. For one text field use `showPrompt` instead.
+- `SidebarSplitView` takes optional `list` (Mail's middle column) and `inspector` (a trailing, collapsible inspector item) panes; control the inspector with `inspectorCollapsed` + `onInspectorCollapsedChange`, which, like the sidebar's, reports only native toggles.
 - `Sidebar`'s `selectedId` is controlled and `onSelectionChange` is required.
 - `Sidebar` trees: data `children` or `SidebarItem` `parentId` nest rows; `group` makes a source-list section header (never selectable, Show/Hide on hover); `count` is a trailing count in secondary digits (not a capsule). `collapsedIds` applies when its value changes and `onExpandedChange({ id, expanded })` reports the user's toggles. `onDoubleClick({ id })` reports double-clicks. Pass `selectedIds` instead of `selectedId` for ⌘/⇧ multiple selection; `onSelectionChange` then reports `{ id, ids }`.
 - Layout follows `direction: 'rtl'` on macOS controls.

@@ -5,7 +5,8 @@ const { create } = createRequire(import.meta.url)("react-test-renderer");
 const { platform, registered } = vi.hoisted(() => ({ platform: { OS: "macos", Version: "26.0" }, registered: vi.fn(() => true) }));
 vi.mock("react-native", () => ({ Platform: platform, UIManager: { hasViewManagerConfig: registered }, View: "View", Text: "Text" }));
 vi.mock("../packages/ui/src/table/TableNativeComponent", () => ({ default: "SparkTable" }));
-import { Table, getTableAvailability } from "../packages/ui/src/table";
+import { Table as TableComponent, getTableAvailability } from "../packages/ui/src/table";
+const Table = TableComponent as React.FC<any>;
 let rendered: any;
 async function mount(element: React.ReactElement) { await act(async () => { rendered = create(element); }); }
 beforeEach(() => {
