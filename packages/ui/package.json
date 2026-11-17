@@ -43,6 +43,7 @@
         "Sidebar": "RNSidebar",
         "SidebarItem": "RNSidebarItem",
         "SFSymbol": "RNSFSymbol",
+        "SparkProgressIndicator": "RNSparkProgressIndicator",
         "SwipeActions": "RNSwipeActions",
         "NativeSelect": "RNNativeSelect",
         "NativeSegmentedControl": "RNNativeSegmentedControl",
