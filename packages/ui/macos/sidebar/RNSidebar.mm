@@ -298,14 +298,19 @@ static void RNSidebarLayoutCount(NSView *cell, NSTextField *field)
   const auto &newProps = *std::static_pointer_cast<SidebarItemProps const>(props);
 
 #if TARGET_OS_OSX
-  _itemId = [NSString stringWithUTF8String:newProps.itemId.c_str()];
-  _parentId = [NSString stringWithUTF8String:newProps.parentId.c_str()];
+  NSString *itemId = [NSString stringWithUTF8String:newProps.itemId.c_str()];
+  NSString *parentId = [NSString stringWithUTF8String:newProps.parentId.c_str()];
+  // Style changes (such as the reported width) leave the outline alone; only row properties reload it.
+  const BOOL rowChanged = ![itemId isEqualToString:_itemId] || ![parentId isEqualToString:_parentId] || newProps.selectable != _selectable ||
+    newProps.group != _group || newProps.count != _count || newProps.rowHeight != _rowHeight || newProps.autoHeight != _autoHeight;
+  _itemId = itemId;
+  _parentId = parentId;
   _selectable = newProps.selectable;
   _group = newProps.group;
   _count = newProps.count;
   _rowHeight = newProps.rowHeight;
   _autoHeight = newProps.autoHeight;
-  [_sidebar sidebarItemDidChange:self];
+  if (rowChanged) [_sidebar sidebarItemDidChange:self];
 #endif
 
   [super updateProps:props oldProps:oldProps];
@@ -366,6 +371,9 @@ static void RNSidebarLayoutCount(NSView *cell, NSTextField *field)
   NSArray<RNSidebarNode *> *_roots;
   NSArray<NSString *> *_selectedIds;
   NSMutableSet<NSString *> *_collapsedIds;
+  NSString *_appliedCollapsedIdsJson;
+  NSArray<NSString *> *_scrolledSelectedIds;
+  NSDictionary<NSString *, RNSidebarNode *> *_nodesById;
   CGFloat _contentInsetTop;
   CGFloat _defaultRowHeight;
   NSSize _lastReportedSize;
@@ -465,7 +473,7 @@ static NSArray<NSString *> *RNSidebarStringsFromJson(std::string const &json)
 
 static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
 {
-  NSData *data = [NSJSONSerialization dataWithJSONObject:strings options:0 error:nil];
+  NSData *data = [NSJSONSerialization dataWithJSONObject:strings options:NSJSONWritingWithoutEscapingSlashes error:nil];
   return data ? std::string((const char *)data.bytes, data.length) : "[]";
 }
 
@@ -541,6 +549,7 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
     else [roots addObject:node];
     byId[node.itemId] = node;
   }
+  _nodesById = byId;
   return roots;
 }
 
@@ -637,11 +646,13 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
   _updatingSelection = YES;
   if (rows.count > 0) {
     [_tableView selectRowIndexes:rows byExtendingSelection:NO];
-    [_tableView scrollRowToVisible:lastRow];
+    // Reloads reapply an unchanged selection; only a new one scrolls into view.
+    if (![_selectedIds isEqualToArray:_scrolledSelectedIds]) [_tableView scrollRowToVisible:lastRow];
   } else {
     [_tableView deselectAll:nil];
   }
   _updatingSelection = NO;
+  _scrolledSelectedIds = _selectedIds;
 }
 
 - (void)reportLayoutIfNeeded
@@ -816,10 +827,23 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
     return;
   }
 
-  NSMutableArray<NSString *> *ids = [NSMutableArray new];
+  NSMutableArray<NSString *> *visible = [NSMutableArray new];
   [_tableView.selectedRowIndexes enumerateIndexesUsingBlock:^(NSUInteger row, BOOL *stop) {
-    [ids addObject:[self itemIdAtRow:(NSInteger)row]];
+    [visible addObject:[self itemIdAtRow:(NSInteger)row]];
   }];
+  NSMutableArray<NSString *> *hidden = [NSMutableArray new], *shown = [NSMutableArray new];
+  for (NSString *selectedId in _selectedIds) {
+    RNSidebarNode *node = _nodesById[selectedId];
+    [(node && [_tableView rowForItem:node] < 0 ? hidden : shown) addObject:selectedId];
+  }
+  // A collapsing section deselects the rows it hides; the selection itself is unchanged and returns on expand.
+  if ([[NSSet setWithArray:visible] isEqualToSet:[NSSet setWithArray:shown]]) {
+    return;
+  }
+
+  // In multiple selection, rows inside collapsed sections stay selected while the user changes the visible ones.
+  NSMutableArray<NSString *> *ids = _tableView.allowsMultipleSelection ? hidden : [NSMutableArray new];
+  [ids addObjectsFromArray:visible];
   _selectedIds = ids;
   const auto eventEmitter = std::static_pointer_cast<const SidebarEventEmitter>(_eventEmitter);
   if (eventEmitter) {
@@ -861,6 +885,7 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
 - (void)outlineViewItemDidExpand:(NSNotification *)notification
 {
   [self expansionDidChange:notification expanded:YES];
+  [self updateSelection];
 }
 
 - (void)outlineViewItemDidCollapse:(NSNotification *)notification
@@ -894,7 +919,10 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
   _defaultRowHeight = newProps.defaultRowHeight > 0 ? newProps.defaultRowHeight : 28;
   const BOOL itemsChanged = !previous || newProps.itemsJson != previous->itemsJson;
   // Only a change of the collapsed IDs is applied, so an unchanged prop never undoes a user's toggle.
-  const BOOL expansionChanged = !previous || newProps.collapsedIdsJson != previous->collapsedIdsJson;
+  // Compared with the last applied value rather than oldProps, which is null when a moved view is re-inserted.
+  NSString *collapsedIdsJson = [NSString stringWithUTF8String:newProps.collapsedIdsJson.c_str()];
+  const BOOL expansionChanged = ![collapsedIdsJson isEqualToString:_appliedCollapsedIdsJson];
+  _appliedCollapsedIdsJson = collapsedIdsJson;
   const BOOL rowsChanged = itemsChanged || expansionChanged || newProps.defaultRowHeight != previous->defaultRowHeight;
   if (itemsChanged) _dataItems = [self itemsFromJson:newProps.itemsJson];
   if (expansionChanged) _collapsedIds = [NSMutableSet setWithArray:RNSidebarStringsFromJson(newProps.collapsedIdsJson)];
@@ -964,6 +992,8 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
   _dataItems = @[];
   _selectedIds = @[];
   [_collapsedIds removeAllObjects];
+  _appliedCollapsedIdsJson = nil;
+  _scrolledSelectedIds = nil;
   _contentInsetTop = 0;
   _defaultRowHeight = 28;
   _lastReportedSize = NSZeroSize;

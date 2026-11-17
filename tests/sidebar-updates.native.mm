@@ -358,6 +358,48 @@ int main() { @autoreleasepool {
   NSView *plainCell = plainRow.superview;
   CHECK(NSWidth(plainRow.frame) == NSWidth(plainCell.bounds));
 
+  // Review fixes. A user collapse hides the selected row without deselecting it: no event, and it is selected
+  // again on expand. In multiple selection, hidden selected rows stay in the reported IDs.
+  {
+    RNSidebar *view = [RNSidebar new];
+    auto props = std::make_shared<SidebarProps>(*treeProps); props->collapsedIdsJson = "[]"; props->selectedIdsJson = R"(["origin/main"])";
+    [view updateProps:props oldProps:nullptr];
+    auto events = Lay(view, window, LayoutDirection::LeftToRight);
+    NSOutlineView *table = Table(view);
+    id origin = [table itemAtRow:4];
+    CHECK([[view itemIdAtRow:table.selectedRow] isEqual:@"origin/main"]);
+    [table collapseItem:origin];
+    CHECK(events->selections.empty() && table.selectedRow == -1);
+    [table expandItem:origin];
+    CHECK(events->selections.empty() && [[view itemIdAtRow:table.selectedRow] isEqual:@"origin/main"]);
+    // A remount (null oldProps) with the same collapsedIds keeps the user's toggle.
+    [table collapseItem:origin];
+    [view updateProps:props oldProps:nullptr];
+    CHECK(![table isItemExpanded:[table itemAtRow:4]]);
+    auto many = std::make_shared<SidebarProps>(*props); many->allowsMultipleSelection = true; many->selectedIdsJson = R"(["changes","origin/main"])";
+    [view updateProps:many oldProps:props];
+    [table selectRowIndexes:[NSIndexSet indexSetWithIndex:2] byExtendingSelection:YES];
+    CHECK(!events->selections.empty() && events->selections.back() == R"(history ["origin/main","changes","history"])");
+  }
+  // A React row's style-only update (its reported width) neither reloads the outline nor scrolls to the selection.
+  {
+    CountingSidebar *view = [CountingSidebar new];
+    auto props = std::make_shared<SidebarProps>(); props->selectedIdsJson = R"(["r0"])";
+    [view updateProps:props oldProps:nullptr];
+    Lay(view, window, LayoutDirection::LeftToRight);
+    std::vector<RNSidebarItem *> rows;
+    for (int index = 0; index < 30; index++) rows.push_back(Item(view, index, ("r" + std::to_string(index)).c_str(), true, 28, false, 28));
+    [window layoutIfNeeded];
+    NSClipView *clip = Table(view).enclosingScrollView.contentView;
+    [clip scrollToPoint:NSMakePoint(0, 500)];
+    int reloads = view.reloads;
+    auto same = std::make_shared<SidebarItemProps>(); same->itemId = "r29"; same->selectable = true; same->rowHeight = 28;
+    [rows.back() updateProps:same oldProps:nullptr];
+    CHECK(view.reloads == reloads);
+    [view reloadRows];
+    CHECK(NSMinY(clip.bounds) == 500);
+  }
+
   if (failures) return 1;
   std::puts("Sidebar mount, selective updates and row geometry passed");
 } }
