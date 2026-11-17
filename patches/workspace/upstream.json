@@ -10,9 +10,9 @@
     "integrity": "sha512-atVOtXyFzO0e454eVS27AMwRs515URCKrkvLLG+mGKcyiF5UPfC53oukpNp2UmVzlLebyTEXNkTYs6n0dVGd0g=="
   },
   "react-native-webview": {
-    "version": "16.0.0",
-    "url": "https://registry.npmjs.org/react-native-webview/-/react-native-webview-16.0.0.tgz",
-    "integrity": "sha512-KIg5Yhy04lQfHdXC1JQPM+0kftMfPnH6AqDH7v6YskQ9kzfUacooofOFRmbaZHASq/0WY87Fx0peiFETFjOcCg=="
+    "version": "17.1.0",
+    "url": "https://registry.npmjs.org/react-native-webview/-/react-native-webview-17.1.0.tgz",
+    "integrity": "sha512-prh47/2paYI2re/FDk8OVAD0gmut7N2/rkHDBc7trUTlJ46asxUkSL5vELBrFWN/mjw7uWRDSUULcIaJ8r3UJg=="
   },
   "@react-native-runtimes/core": {
     "version": "0.1.0-alpha.2",

@@ -121,9 +121,11 @@ export async function packWindowsLibraries(output: string) {
         if (next === false) throw new Error(`Could not apply WebView Windows patch to ${target}`);
         writeFileSync(target, next);
       }
-      // Match the pinned Expo Desktop/RNW toolchain; delegate the view to upstream.
+      // Upstream misspells the inherited linker inputs, dropping the SDK's default libraries.
       const project = path.join(stage, "windows/ReactNativeWebView/ReactNativeWebView.vcxproj");
-      writeFileSync(project, readFileSync(project, "utf8").replace("<PlatformToolset>v143</PlatformToolset>", "<PlatformToolset>v145</PlatformToolset>").replace("%(AdditionalDependenices)", "%(AdditionalDependencies)"));
+      const source = readFileSync(project, "utf8");
+      if (!source.includes("%(AdditionalDependenices)")) throw new Error("The pinned WebView vcxproj linker inputs changed");
+      writeFileSync(project, source.replace("%(AdditionalDependenices)", "%(AdditionalDependencies)"));
     }
     // Registry archives already contain built JS/types. Producer lifecycle hooks
     // must not invoke Bun or Yarn when a consumer installs our patched archive.

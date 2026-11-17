@@ -791,6 +791,12 @@
           "minSpark": "0.0.4",
           "patch": "workspace/react-native-webview@16.0.0.patch",
           "sha256": "83aaa4500b41799d5905aebae82573b371e74f2eda8aab3c4d568b837f0089db"
+        },
+        {
+          "version": "17.1.0",
+          "minSpark": "0.0.4",
+          "patch": "workspace/react-native-webview@17.1.0.patch",
+          "sha256": "d383de678931dfc49ae8b18287bfaa63b6e02c90aec972701140c7800cbcfb98"
         }
       ]
     },

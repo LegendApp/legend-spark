@@ -12,7 +12,7 @@
   },
   "private": true,
   "peerDependencies": {
-    "react-native-webview": "16.0.0"
+    "react-native-webview": "17.1.0"
   },
   "peerDependenciesMeta": {
     "react-native-webview": {

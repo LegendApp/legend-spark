@@ -129,7 +129,7 @@ owner. The platform runner's prepare-only mode is available on macOS, including
   from a replaced toast cannot retire or report against its replacement. Verify
   dismissal, timeout, and same-ID replacement on Windows before release.
 - The SDK packages integrity-checked Nitro 0.37.0, OP-SQLite 18.2.1 and WebView
-  16.0.0 with their Windows glue. Consumers do not manually patch node_modules.
+  17.1.0 with their Windows glue. Consumers do not manually patch node_modules.
   SQLite uses its bundled engine; optional SQLCipher/libSQL/Turso/vector builds are
   not enabled. WebView delegates to upstream's Windows prop coverage; WKWebView-only
   options are not implied. WebView2 must be installed on the testing machine.

@@ -239,7 +239,7 @@ Dock menus allow nested actions, checkboxes and separators. Taskbar menus are fl
 
 ## WebView and SQLite
 
-WebView uses exactly react-native-webview 16.0.0 (the upstream `next` release with
+WebView uses exactly react-native-webview 17.1.0 (includes the upstream
 macOS Fabric recycling fixes). The component takes React Native's view props plus
 Spark's own source, message, script-injection and navigation callbacks; upstream's
 platform-specific props stay private and an unsupported one rejects.

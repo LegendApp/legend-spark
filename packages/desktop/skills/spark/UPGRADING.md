@@ -426,7 +426,7 @@ to its own `dependencies`, retaining the SDK's tested overrides:
 | --- | --- |
 | `@legendapp/spark/markdown` | `react-native-enriched-markdown@1.1.1` |
 | `@legendapp/spark/html` | `react-native-enriched-html@1.1.1` |
-| `@legendapp/spark/webview` | `react-native-webview@16.0.0` |
+| `@legendapp/spark/webview` | `react-native-webview@17.1.0` |
 | `@legendapp/spark/sqlite` | `@op-engineering/op-sqlite@18.2.1` |
 
 For WebView and SQLite, keep the matching patched SDK archive override supplied

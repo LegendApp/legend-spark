@@ -1,0 +1,207 @@
+diff --git a/package.json b/package.json
+index 2454114b..3fb67761 100644
+--- a/package.json
++++ b/package.json
+@@ -34,7 +34,6 @@
+   "scripts": {
+     "build": "babel --extensions \".ts,.tsx\" --out-dir lib src",
+     "prepare:types": "tsc --noEmit false --emitDeclarationOnly --declaration --rootDir src --outDir lib",
+-    "prepare": "bun run prepare:types && bun run build",
+     "test": "jest --runInBand",
+     "version": "bun install --cwd ../.. --lockfile-only --ignore-scripts"
+   },
+@@ -66,5 +65,9 @@
+   "rn-docs": {
+     "title": "Webview",
+     "type": "Component"
++  },
++  "spark": {
++    "sdk": true,
++    "upstreamIntegrity": "sha512-prh47/2paYI2re/FDk8OVAD0gmut7N2/rkHDBc7trUTlJ46asxUkSL5vELBrFWN/mjw7uWRDSUULcIaJ8r3UJg=="
+   }
+ }
+diff --git a/windows/ReactNativeWebView/RCTWebView2ComponentView.cpp b/windows/ReactNativeWebView/RCTWebView2ComponentView.cpp
+index 39102587..6cdbe7f0 100644
+--- a/windows/ReactNativeWebView/RCTWebView2ComponentView.cpp
++++ b/windows/ReactNativeWebView/RCTWebView2ComponentView.cpp
+@@ -38,8 +38,9 @@ void RegisterRCTWebView2ComponentView(
+             builder.SetContentIslandComponentViewInitializer(
+                 [](const winrt::Microsoft::ReactNative::Composition::ContentIslandComponentView &islandView) noexcept {
+                     auto userData = winrt::make_self<RCTWebView2ComponentView>();
+-                    userData->InitializeContentIsland(islandView);
+                     islandView.UserData(*userData);
++                    try { userData->InitializeContentIsland(islandView); }
++                    catch (...) { userData->ReportError(winrt::to_string(winrt::to_message())); }
+                 });
+             
+             // Set up initial state with zero size
+@@ -147,6 +148,18 @@ void RCTWebView2ComponentView::Cleanup() noexcept {
+     }
+ }
+ 
++void RCTWebView2ComponentView::ReportError(std::string const &message) noexcept {
++    m_initializationError = message;
++    if (auto emitter = EventEmitter()) {
++        RNCWebViewCodegen::RCTWebView2EventEmitter::OnLoadingError error;
++        error.description = message; error.code = -1; error.loading = false;
++        emitter->onLoadingError(error);
++    }
++}
++void RCTWebView2ComponentView::UpdateEventEmitter(const std::shared_ptr<RNCWebViewCodegen::RCTWebView2EventEmitter> &emitter) noexcept {
++    BaseRCTWebView2::UpdateEventEmitter(emitter);
++    if (!m_initializationError.empty()) ReportError(m_initializationError);
++}
+ void RCTWebView2ComponentView::UpdateProps(
+     const winrt::Microsoft::ReactNative::ComponentView &view,
+     const winrt::com_ptr<RNCWebViewCodegen::RCTWebView2Props> &newProps,
+@@ -185,27 +198,20 @@ void RCTWebView2ComponentView::UpdateProps(
+         }
+     }
+     
+-    // Handle source navigation
+-    if (newProps->newSource.uri.has_value() && !newProps->newSource.uri.value().empty()) {
+-        try {
+-            auto uri = winrt::Windows::Foundation::Uri(winrt::to_hstring(newProps->newSource.uri.value()));
+-            m_webView.Source(uri);
+-        } catch (...) {
+-            // Invalid URI
+-        }
+-    } else if (newProps->newSource.html.has_value() && !newProps->newSource.html.value().empty()) {
++    // ContentIsland initialization is asynchronous. Replay either source once
++    // the Core exists, and do not reload on unrelated React prop updates.
++    if (!oldProps || newProps->newSource.uri != oldProps->newSource.uri || newProps->newSource.html != oldProps->newSource.html) {
++        m_pendingUri = newProps->newSource.uri.value_or("");
++        m_pendingHtml = newProps->newSource.html.value_or("");
+         if (m_webView.CoreWebView2()) {
+             try {
+-                m_webView.NavigateToString(winrt::to_hstring(newProps->newSource.html.value()));
+-            } catch (...) {
+-                // Navigation failed
+-            }
+-        } else {
+-            // CoreWebView2 not ready yet - save HTML for later navigation in OnCoreWebView2Initialized
+-            m_pendingHtml = newProps->newSource.html.value();
++                if (!m_pendingUri.empty()) m_webView.CoreWebView2().Navigate(winrt::to_hstring(m_pendingUri));
++                else m_webView.NavigateToString(winrt::to_hstring(m_pendingHtml));
++                m_pendingUri.clear(); m_pendingHtml.clear();
++            } catch (...) { ReportError(winrt::to_string(winrt::to_message())); }
+         }
+     }
+-    
++
+     // Apply debugging enabled
+     if (newProps->webviewDebuggingEnabled.has_value() && m_webView.CoreWebView2()) {
+         m_webView.CoreWebView2().Settings().AreDevToolsEnabled(newProps->webviewDebuggingEnabled.value());
+@@ -377,29 +383,14 @@ void RCTWebView2ComponentView::OnNavigationCompleted(
+         // Event dispatch failure is non-fatal
+     }
+ 
+-    if (m_messagingEnabled && m_webView) {
+-        try {
+-            winrt::hstring message = LR"(
+-                window.alert = function (msg) {window.chrome.webview.postMessage(`{"type":"__alert","message":"${msg}"}`)};
+-                window.ReactNativeWebView = {postMessage: function (data) {window.chrome.webview.postMessage(String(data))}};
+-                const originalPostMessage = globalThis.postMessage;
+-                globalThis.postMessage = function (data) { originalPostMessage(data); globalThis.ReactNativeWebView.postMessage(typeof data == 'string' ? data : JSON.stringify(data));};
+-                window.chrome.webview.addEventListener('message', function(e) {
+-                    window.dispatchEvent(new MessageEvent('message', {data: e.data}));
+-                    document.dispatchEvent(new MessageEvent('message', {data: e.data}));
+-                });
+-            )";
+-            m_webView.ExecuteScriptAsync(message);
+-        } catch (...) {
+-            // JS injection failure
+-        }
+-    }
++
+ }
+ 
+ void RCTWebView2ComponentView::OnCoreWebView2Initialized(
+-    winrt::Microsoft::UI::Xaml::Controls::CoreWebView2InitializedEventArgs const& /*args*/) {
++    winrt::Microsoft::UI::Xaml::Controls::CoreWebView2InitializedEventArgs const& args) {
+     
+-    if (!m_webView || !m_webView.CoreWebView2()) return;
++    if (!m_webView) return;
++    if (!m_webView.CoreWebView2()) { ReportError("WebView2 could not initialize. Install or repair the Microsoft Edge WebView2 Runtime."); return; }
+     
+     RegisterCoreWebView2Events();
+     
+@@ -408,15 +399,11 @@ void RCTWebView2ComponentView::OnCoreWebView2Initialized(
+         m_webView.CoreWebView2().Settings().UserAgent(m_userAgent);
+     }
+     
+-    // Navigate to deferred HTML source if pending
+-    if (!m_pendingHtml.empty()) {
+-        try {
+-            m_webView.NavigateToString(winrt::to_hstring(m_pendingHtml));
+-        } catch (...) {
+-            // Deferred navigation failed
+-        }
+-        m_pendingHtml.clear();
+-    }
++    try {
++        if (!m_pendingUri.empty()) m_webView.CoreWebView2().Navigate(winrt::to_hstring(m_pendingUri));
++        else if (!m_pendingHtml.empty()) m_webView.NavigateToString(winrt::to_hstring(m_pendingHtml));
++        m_pendingUri.clear(); m_pendingHtml.clear();
++    } catch (...) { ReportError(winrt::to_string(winrt::to_message())); }
+ }
+ 
+ void RCTWebView2ComponentView::OnCoreWebView2ResourceRequested(
+@@ -429,9 +416,19 @@ void RCTWebView2ComponentView::OnCoreWebView2DOMContentLoaded(
+     winrt::Microsoft::Web::WebView2::Core::CoreWebView2 const& sender,
+     winrt::Microsoft::Web::WebView2::Core::CoreWebView2DOMContentLoadedEventArgs const& /*args*/) {
+     
+-    if (!m_injectedJavascript.empty()) {
+-        sender.ExecuteScriptAsync(m_injectedJavascript);
+-    }
++    winrt::hstring script;
++    if (m_messagingEnabled) script = LR"(
++                window.alert = function (msg) {window.chrome.webview.postMessage(`{"type":"__alert","message":"${msg}"}`)};
++                window.ReactNativeWebView = {postMessage: function (data) {window.chrome.webview.postMessage(String(data))}};
++                const originalPostMessage = globalThis.postMessage;
++                globalThis.postMessage = function (data) { originalPostMessage(data); globalThis.ReactNativeWebView.postMessage(typeof data == 'string' ? data : JSON.stringify(data));};
++                window.chrome.webview.addEventListener('message', function(e) {
++                    window.dispatchEvent(new MessageEvent('message', {data: e.data}));
++                    document.dispatchEvent(new MessageEvent('message', {data: e.data}));
++                });
++            )";
++    script = script + m_injectedJavascript;
++    if (!script.empty()) sender.ExecuteScriptAsync(script);
+ }
+ 
+ void RCTWebView2ComponentView::OnCoreWebView2SourceChanged(
+diff --git a/windows/ReactNativeWebView/RCTWebView2ComponentView.h b/windows/ReactNativeWebView/RCTWebView2ComponentView.h
+index 11379a2e..c6586339 100644
+--- a/windows/ReactNativeWebView/RCTWebView2ComponentView.h
++++ b/windows/ReactNativeWebView/RCTWebView2ComponentView.h
+@@ -29,6 +29,8 @@ struct RCTWebView2ComponentView : winrt::implements<RCTWebView2ComponentView, wi
+     void InitializeContentIsland(
+         const winrt::Microsoft::ReactNative::Composition::ContentIslandComponentView &islandView);
+ 
++    void ReportError(std::string const &message) noexcept;
++    void UpdateEventEmitter(const std::shared_ptr<RNCWebViewCodegen::RCTWebView2EventEmitter> &emitter) noexcept override;
+     void UpdateProps(
+         const winrt::Microsoft::ReactNative::ComponentView &view,
+         const winrt::com_ptr<RNCWebViewCodegen::RCTWebView2Props> &newProps,
+@@ -103,7 +105,7 @@ private:
+     winrt::hstring m_injectedJavascript{L""};
+     winrt::hstring m_userAgent{L""};
+     bool m_updating{false};
+-    std::string m_pendingHtml{};
++    std::string m_pendingHtml{}, m_pendingUri{}, m_initializationError{};
+ };
+ 
+ void RegisterRCTWebView2ComponentView(
+diff --git a/windows/ReactNativeWebView/ReactNativeWebView.vcxproj b/windows/ReactNativeWebView/ReactNativeWebView.vcxproj
+index 9a1a0d88..2a8a90fa 100644
+--- a/windows/ReactNativeWebView/ReactNativeWebView.vcxproj
++++ b/windows/ReactNativeWebView/ReactNativeWebView.vcxproj
+@@ -87,7 +87,7 @@
+       </AdditionalIncludeDirectories>
+     </ClCompile>
+     <Link>
+-      <AdditionalDependencies>shell32.lib;user32.lib;windowsapp.lib;%(AdditionalDependenices)</AdditionalDependencies>
++      <AdditionalDependencies>shell32.lib;user32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+       <SubSystem>Console</SubSystem>
+       <GenerateWindowsMetadata>true</GenerateWindowsMetadata>
+       <ModuleDefinitionFile>ReactNativeWebview.def</ModuleDefinitionFile>

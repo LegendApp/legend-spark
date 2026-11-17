@@ -308,7 +308,7 @@ test.each(["no app", "malformed", "duplicate", "mismatched", "matching"])("docto
 
 test.each([
   ["markdown", "react-native-enriched-markdown", "1.1.1"], ["html", "react-native-enriched-html", "1.1.1"],
-  ["webview", "react-native-webview", "16.0.0"], ["sqlite", "@op-engineering/op-sqlite", "18.2.1"],
+  ["webview", "react-native-webview", "17.1.0"], ["sqlite", "@op-engineering/op-sqlite", "18.2.1"],
 ])("doctor reports app-owned /%s backends for imports, re-exports, require and dynamic import", (entry, name, version) => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-optional-backend-"));
   try {

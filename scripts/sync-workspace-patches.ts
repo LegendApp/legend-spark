@@ -34,6 +34,9 @@ for (const [name, pin] of Object.entries(pins) as [string, { version: string; ur
   cpSync(before, after, { recursive: true });
   await run(after, ["tar", "-xzf", path.join(cache, archives[name]!), "--strip-components=1"], { capture: true });
   for (const dir of [before, after]) rmSync(path.join(dir, ".spark"), { recursive: true, force: true });
+  // The archive's patchHash covers this patch file, so it cannot appear in it.
+  const manifest = readJson(path.join(after, "package.json"));
+  if (manifest.spark?.patchHash) { delete manifest.spark.patchHash; writeFileSync(path.join(after, "package.json"), JSON.stringify(manifest, null, 2) + "\n"); }
   const diff = spawnProcess(["git", "diff", "--no-index", "--binary", "--", "a", "b"], { cwd: work, stdout: "pipe", stderr: "pipe" });
   const [output, error, code] = await Promise.all([new Response(diff.stdout).text(), new Response(diff.stderr).text(), diff.exited]);
   if (code !== 0 && code !== 1) throw new Error(error);

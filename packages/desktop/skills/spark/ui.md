@@ -34,7 +34,7 @@ export function Preferences() {
 
 ## WebView, Markdown and HTML
 
-- `/webview` is a Spark-owned subset over `react-native-webview@16.0.0` (WebKit on macOS, not Chromium). Upstream platform-specific props reject; import `react-native-webview` directly if you need its full surface. Nothing native is exposed to pages: define a navigation policy and expose only intended message handlers.
+- `/webview` is a Spark-owned subset over `react-native-webview@17.1.0` (WebKit on macOS, not Chromium). Upstream platform-specific props reject; import `react-native-webview` directly if you need its full surface. Nothing native is exposed to pages: define a navigation policy and expose only intended message handlers.
 - `/markdown` (`Markdown`, `MarkdownInput`, `EditableMarkdown`) and `/html` need their optional peers `react-native-enriched-markdown@1.1.1` / `react-native-enriched-html@1.1.1`. They have no Windows implementation: universal apps targeting Windows exclude them in `expoByPlatform.windows.autolinking.exclude`.
 - `spark doctor` reports a missing optional peer for these imports.
 

@@ -152,7 +152,7 @@ patch-package `patches/<lib>+<version>.patch` files and Bun/pnpm `patchedDepende
 
 Apps using `/markdown`, `/html`, `/webview`, or `/sqlite` must install the matching
 optional peer: `react-native-enriched-markdown@1.1.1`,
-`react-native-enriched-html@1.1.1`, `react-native-webview@16.0.0`, or
+`react-native-enriched-html@1.1.1`, `react-native-webview@17.1.0`, or
 `@op-engineering/op-sqlite@18.2.1`. Starter overrides pin compatibility without
 installing these libraries. `spark doctor` reports missing app declarations or
 installations for these imports. Keep the SDK archive overrides for WebView and
