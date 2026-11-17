@@ -3,7 +3,7 @@ import { CommonControls } from "./CommonControls";
 import { Glass } from "./Glass";
 import { Search } from "./Search";
 import { SFSymbols } from "./SFSymbols";
-import { SidebarDataItems, SidebarDynamicHeights, SidebarPlainList, SidebarReactRows } from "./Sidebar";
+import { SidebarDataItems, SidebarDynamicHeights, SidebarPlainList, SidebarReactRows, SidebarTree, SidebarTreeReactRows } from "./Sidebar";
 import { SplitView } from "./SplitView";
 
 // Ported from legend-apps' apps/test-kitchen-sink.
@@ -12,6 +12,8 @@ export default defineScreens("native-controls", [
   { id: "sidebar-dynamic-heights", title: "Sidebar: dynamic heights", titles: { ar: "الشريط الجانبي: ارتفاعات متغيّرة" }, summary: "React sidebar rows whose heights follow React layout.", summaries: { ar: "صفوف شريط جانبي من React تتبع ارتفاعاتها تخطيط React." }, component: SidebarDynamicHeights },
   { id: "sidebar-react-rows", title: "Sidebar: React rows", titles: { ar: "الشريط الجانبي: صفوف React" }, summary: "Fixed-height React rows with context-menu events.", summaries: { ar: "صفوف React بارتفاع ثابت مع أحداث القائمة السياقية." }, component: SidebarReactRows },
   { id: "sidebar-plain-list", title: "Sidebar: plain list", titles: { ar: "الشريط الجانبي: قائمة عادية" }, summary: "The plain list style for lists inside content, with native selection.", summaries: { ar: "نمط القائمة العادية للقوائم داخل المحتوى، مع تحديد أصلي." }, component: SidebarPlainList },
+  { id: "sidebar-tree", title: "Sidebar: tree", titles: { ar: "الشريط الجانبي: شجرة" }, summary: "Source-list section headers, nested rows, trailing counts, collapsible sections, double-click and multiple selection.", summaries: { ar: "عناوين أقسام قائمة المصادر، وصفوف متداخلة، وأعداد في نهاية الصف، وأقسام قابلة للطي، والنقر المزدوج، والتحديد المتعدد." }, component: SidebarTree },
+  { id: "sidebar-tree-react-rows", title: "Sidebar: tree of React rows", titles: { ar: "الشريط الجانبي: شجرة من صفوف React" }, summary: "React rows nested with parentId under a group row, with a trailing count.", summaries: { ar: "صفوف React متداخلة عبر parentId تحت صف مجموعة، مع عدد في نهاية الصف." }, component: SidebarTreeReactRows },
   { id: "common-controls", title: "Buttons, checkboxes and segments", titles: { ar: "الأزرار ومربعات الاختيار والمقاطع" }, summary: "Intrinsically sized buttons, checkboxes, a disclosure button, and small and fill segmented controls.", summaries: { ar: "أزرار بحجمها الطبيعي، ومربعات اختيار، وزر إفصاح، وعناصر تحكم مقسّمة صغيرة وممتدة." }, component: CommonControls },
   { id: "split-view", title: "Split view", titles: { ar: "العرض المقسّم" }, summary: "A native sidebar split view with React sidebar and content panes.", summaries: { ar: "عرض مقسّم أصلي بشريط جانبي، فيه جزءا الشريط الجانبي والمحتوى من React." }, component: SplitView },
   { id: "glass", title: "Glass", titles: { ar: "الزجاج" }, summary: "A native glass effect view.", summaries: { ar: "عرض أصلي بتأثير الزجاج." }, component: Glass },

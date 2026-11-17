@@ -132,9 +132,9 @@ test("sidebar data selection can be cleared and unknown/disabled choices reject"
   const onSelectionChange = vi.fn(), onError = vi.fn();
   await mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A" }, { id: "b", label: "B", selectable: false }], selectedId: "a", onSelectionChange, onError }));
   let native = rendered.root.findByType("Sidebar").props;
-  await act(async () => native.onSidebarSelectionChange({ nativeEvent: { id: "" } }));
-  expect(onSelectionChange).toHaveBeenCalledWith({ id: null }); native = rendered.root.findByType("Sidebar").props; expect(native.selectedId).toBe("a"); expect(native.selectionRevision).toBe(1);
-  native.onSidebarSelectionChange({ nativeEvent: { id: "b" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onSelectionChange).toHaveBeenCalledTimes(1);
+  await act(async () => native.onSidebarSelectionChange({ nativeEvent: { id: "", idsJson: "[]" } }));
+  expect(onSelectionChange).toHaveBeenCalledWith({ id: null, ids: [] }); native = rendered.root.findByType("Sidebar").props; expect(native.selectedIdsJson).toBe('["a"]'); expect(native.allowsMultipleSelection).toBe(false); expect(native.selectionRevision).toBe(1);
+  native.onSidebarSelectionChange({ nativeEvent: { id: "b", idsJson: '["b"]' } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onSelectionChange).toHaveBeenCalledTimes(1);
 });
 test("sidebar list style defaults to the source list, passes plain through and rejects unknown styles", async () => {
   const items = [{ id: "a", label: "A" }], onSelectionChange = vi.fn();
@@ -154,7 +154,7 @@ test("sidebar selection acknowledgments reuse the serialized rows and refreshed 
   await mount(React.createElement(Sidebar, { items, selectedId: "a", onSelectionChange }));
   const serialized = stringify.mock.calls.length;
   const before = rendered.root.findByType("Sidebar").props;
-  await act(async () => before.onSidebarSelectionChange({ nativeEvent: { id: "" } }));
+  await act(async () => before.onSidebarSelectionChange({ nativeEvent: { id: "", idsJson: "[]" } }));
   expect(stringify.mock.calls.length).toBe(serialized);
   const after = rendered.root.findByType("Sidebar").props;
   expect(after.itemsJson).toBe(before.itemsJson); expect(after.selectionRevision).toBe(1);
@@ -178,6 +178,65 @@ test("custom sidebar rows expose owned context-menu coordinates", async () => {
   const native = rendered.root.findByType("SidebarItem").props; expect(native.autoHeight).toBe(true); expect(native.itemId).toBe("row");
   native.onRightClick({ nativeEvent: { x: 1, y: 2, pageX: 10, pageY: 20, altKey: false, ctrlKey: true, metaKey: false, shiftKey: false, button: 2 } });
   expect(onContextMenu).toHaveBeenCalledWith({ id: "row", position: { x: 1, y: 2 }, windowPosition: { x: 10, y: 20 }, modifiers: { alt: false, control: true, meta: false, shift: false } });
+});
+test("sidebar data items nest children under groups and counts, and serialize them flat for the outline", async () => {
+  const onSelectionChange = vi.fn();
+  const items = [{ id: "repo", label: "Repo", group: true, children: [{ id: "changes", label: "Changes", count: 5 }, { id: "history", label: "History" }] },
+    { id: "remotes", label: "Remotes", group: true, children: [{ id: "origin", label: "origin", children: [{ id: "origin/main", label: "main" }] }] }];
+  await mount(React.createElement(Sidebar, { items, selectedId: "changes", collapsedIds: ["remotes"], onSelectionChange }));
+  const native = rendered.root.findByType("Sidebar").props;
+  expect(JSON.parse(native.itemsJson)).toEqual([
+    { id: "repo", title: "Repo", selectable: false, group: true }, { id: "changes", title: "Changes", selectable: true, count: 5, parentId: "repo" },
+    { id: "history", title: "History", selectable: true, parentId: "repo" }, { id: "remotes", title: "Remotes", selectable: false, group: true },
+    { id: "origin", title: "origin", selectable: true, parentId: "remotes" }, { id: "origin/main", title: "main", selectable: true, parentId: "origin" }]);
+  expect(native.collapsedIdsJson).toBe('["remotes"]');
+  await expect(mount(React.createElement(Sidebar, { items, selectedId: "repo", onSelectionChange }))).rejects.toThrow("Selected sidebar ID must identify a selectable row");
+  await expect(mount(React.createElement(Sidebar, { items: [{ id: "g", label: "G", group: true, selectable: true }], selectedId: null, onSelectionChange }))).rejects.toThrow("Sidebar group rows are not selectable");
+  for (const count of [-1, 1.5, "3"]) await expect(mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A", count } as never], selectedId: null, onSelectionChange }))).rejects.toThrow("Sidebar count must be a non-negative integer");
+  await expect(mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A", children: "x" } as never], selectedId: null, onSelectionChange }))).rejects.toThrow("Expected sidebar items array");
+  await expect(mount(React.createElement(Sidebar, { items, selectedId: null, collapsedIds: "remotes", onSelectionChange } as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+});
+test("sidebar reports the user's expansion toggles and double-clicks", async () => {
+  const onExpandedChange = vi.fn(), onDoubleClick = vi.fn(), onError = vi.fn();
+  await mount(React.createElement(Sidebar, { items: [{ id: "g", label: "G", group: true, children: [{ id: "a", label: "A" }] }], selectedId: null, onSelectionChange: vi.fn(), onExpandedChange, onDoubleClick, onError }));
+  const native = rendered.root.findByType("Sidebar").props;
+  expect(native.collapsedIdsJson).toBe("");
+  native.onSidebarExpandedChange({ nativeEvent: { id: "g", expanded: false } }); expect(onExpandedChange).toHaveBeenCalledWith({ id: "g", expanded: false });
+  native.onSidebarDoubleClick({ nativeEvent: { id: "a" } }); expect(onDoubleClick).toHaveBeenCalledWith({ id: "a" });
+  native.onSidebarExpandedChange({ nativeEvent: { id: "g", expanded: "no" } }); native.onSidebarDoubleClick({ nativeEvent: { id: "" } });
+  expect(onError).toHaveBeenCalledTimes(2); expect(onExpandedChange).toHaveBeenCalledTimes(1); expect(onDoubleClick).toHaveBeenCalledTimes(1);
+  await expect(mount(React.createElement(Sidebar, { items: [], selectedId: null, onSelectionChange: vi.fn(), onDoubleClick: "x" } as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+});
+test("sidebar multiple selection takes selectedIds and reports every selected ID", async () => {
+  const onSelectionChange = vi.fn(), onError = vi.fn();
+  const items = [{ id: "a", label: "A" }, { id: "b", label: "B" }, { id: "c", label: "C", selectable: false }];
+  await mount(React.createElement(Sidebar, { items, selectedIds: ["a", "b"], onSelectionChange, onError }));
+  const native = rendered.root.findByType("Sidebar").props;
+  expect(native.allowsMultipleSelection).toBe(true); expect(native.selectedIdsJson).toBe('["a","b"]');
+  await act(async () => native.onSidebarSelectionChange({ nativeEvent: { id: "b", idsJson: '["a","b"]' } }));
+  expect(onSelectionChange).toHaveBeenCalledWith({ id: "b", ids: ["a", "b"] });
+  native.onSidebarSelectionChange({ nativeEvent: { id: "a", idsJson: '["a","c"]' } }); native.onSidebarSelectionChange({ nativeEvent: { id: "a", idsJson: "not json" } });
+  expect(onError).toHaveBeenCalledTimes(2); expect(onSelectionChange).toHaveBeenCalledTimes(1);
+  await expect(mount(React.createElement(Sidebar, { items, selectedIds: ["a"], selectedId: "a", onSelectionChange } as never))).rejects.toThrow("Use either selectedId or selectedIds");
+  await expect(mount(React.createElement(Sidebar, { items, onSelectionChange } as never))).rejects.toThrow("Use either selectedId or selectedIds");
+  await expect(mount(React.createElement(Sidebar, { items, selectedIds: ["c"], onSelectionChange }))).rejects.toThrow("Selected sidebar ID must identify a selectable row");
+  await expect(mount(React.createElement(Sidebar, { items, selectedIds: ["a", "a"], onSelectionChange }))).rejects.toThrow("Selected sidebar IDs must be unique");
+});
+test("custom sidebar rows nest by parentId, mark groups, show counts and take their own reported width", async () => {
+  const onError = vi.fn();
+  await mount(React.createElement(Sidebar, { selectedId: null, onSelectionChange: vi.fn(), onError, children: [
+    React.createElement(SidebarItem, { key: "s", id: "section", group: true }, "Stashes"),
+    React.createElement(SidebarItem, { key: "r", id: "row", parentId: "section", count: 2 }, "stash@{0}")] }));
+  const [section, row] = rendered.root.findAllByType("SidebarItem").map((item: { props: Record<string, unknown> }) => item.props);
+  expect(section).toMatchObject({ group: true, selectable: false, parentId: "", count: -1 });
+  expect(row).toMatchObject({ group: false, selectable: true, parentId: "section", count: 2 });
+  await act(async () => rendered.root.findByType("Sidebar").props.onSidebarRowLayout({ nativeEvent: { width: 288 } }));
+  await act(async () => (row.onSidebarItemLayout as (event: unknown) => void)({ nativeEvent: { width: 250 } }));
+  expect(rendered.root.findAllByType("SidebarItem")[1].props.style).toEqual([undefined, { width: 250 }]);
+  expect(rendered.root.findAllByType("SidebarItem")[0].props.style).toEqual([undefined, { width: 288 }]);
+  await expect(mount(React.createElement(Sidebar, { selectedId: null, onSelectionChange: vi.fn(), children: React.createElement(SidebarItem, { id: "row", parentId: "missing" }) }))).rejects.toThrow("Sidebar parentId must identify an earlier row");
+  await expect(mount(React.createElement(Sidebar, { selectedId: null, onSelectionChange: vi.fn(), children: React.createElement(SidebarItem, { id: "row", group: true, selectable: true }) }))).rejects.toThrow("Sidebar group rows are not selectable");
+  await expect(mount(React.createElement(Sidebar, { selectedId: null, onSelectionChange: vi.fn(), children: React.createElement(SidebarItem, { id: "row", count: -2 }) }))).rejects.toThrow("Sidebar count must be a non-negative integer");
 });
 test("glass checks OS capability and preserves children without injecting error text", async () => {
   platform.Version = "15.0"; expect(getGlassAvailability()).toEqual({ available: false, reason: "host-restriction" });

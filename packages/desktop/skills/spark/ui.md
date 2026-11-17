@@ -15,6 +15,7 @@ Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `
 - Specialized macOS views (`TextInputSearch`, `Sidebar`, `SidebarSplitView`, swipe actions, `GlassView`, `SFSymbol`, `ProgressIndicator`) render plain view content on other platforms and report through `onError`. Check their `get*Availability()` before advertising the feature.
 - `ProgressIndicator` (`/ui/progress`, macOS) is `NSProgressIndicator`: `variant` `bar`/`spinner`, `size` `regular`/`small` (spinners also `mini`), `value` 0 to 1 (omit or `null` for indeterminate). Give a bar a width. For toolbar progress use a `progress` toolbar item instead.
 - `Sidebar`'s `selectedId` is controlled and `onSelectionChange` is required.
+- `Sidebar` trees: data `children` or `SidebarItem` `parentId` nest rows; `group` makes a source-list section header (never selectable, Show/Hide on hover); `count` is a trailing count in secondary digits (not a capsule). `collapsedIds` applies when its value changes and `onExpandedChange({ id, expanded })` reports the user's toggles. `onDoubleClick({ id })` reports double-clicks. Pass `selectedIds` instead of `selectedId` for ⌘/⇧ multiple selection; `onSelectionChange` then reports `{ id, ids }`.
 - Layout follows `direction: 'rtl'` on macOS controls.
 - Mobile apps using `Button`/`Select` install optional peer `@expo/ui`. `@expo/ui@55.0.17`, matching Expo SDK 55.
 
