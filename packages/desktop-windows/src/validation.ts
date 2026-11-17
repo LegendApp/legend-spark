@@ -98,10 +98,11 @@ function entries(value: unknown, name: string): ObjectValue[] {
   return value;
 }
 export function validateMacOS(value: MacOSWindowOptions) {
-  object(value, "macos"); keys(value, ["panelStyle", "representedUri", "level", "titleBar", "toolbar", "startupSplitView", "restoreOnLaunch"]);
+  object(value, "macos"); keys(value, ["panelStyle", "representedUri", "subtitle", "level", "titleBar", "toolbar", "startupSplitView", "restoreOnLaunch"]);
   enumValue(value.panelStyle, ["utility", "documentModal", "nonactivating"], "panelStyle");
   enumValue(value.level, ["normal", "floating", "modalPanel", "mainMenu", "status", "screenSaver"], "level");
   flags(value, ["restoreOnLaunch"]);
+  if (value.subtitle !== undefined) text(value.subtitle, "subtitle");
   if (value.representedUri !== undefined && value.representedUri !== null) {
     text(value.representedUri, "represented URI", false);
     try { new URL(value.representedUri); } catch { throw new SparkError("E_INVALID_ARGUMENT", "representedUri must be an absolute URI"); }
@@ -132,7 +133,7 @@ export function validateMacOS(value: MacOSWindowOptions) {
     enumValue(value.toolbar.style, ["automatic", "expanded", "preference", "unified", "unifiedCompact"], "toolbar style");
     if (value.toolbar.visible === false && value.toolbar.items !== undefined) throw new SparkError("E_INVALID_ARGUMENT", "toolbar.items creates a toolbar; omit items when setting visible to false");
     if (value.toolbar.items !== undefined) for (const item of entries(value.toolbar.items, "toolbar item")) {
-      const fields: Record<string, string[]> = { button: ["disabled", "bordered", "symbol", "tooltip"], menu: ["disabled", "bordered", "symbol", "tooltip", "width", "items"], label: ["text", "width"], search: ["disabled", "collapses", "placeholder", "value", "width"], segmented: ["segments", "value"] };
+      const fields: Record<string, string[]> = { button: ["disabled", "bordered", "symbol", "tooltip"], menu: ["disabled", "bordered", "symbol", "tooltip", "width", "items"], label: ["text", "width"], search: ["disabled", "collapses", "placeholder", "value", "width"], segmented: ["segments", "value"], progress: ["value", "variant", "width"] };
       if (typeof item.type !== "string" || !Object.hasOwn(fields, item.type)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown toolbar item type");
       keys(item, ["id", "label", "placement", "type", ...fields[item.type]]);
       flags(item, ["disabled", "bordered", "collapses"]);
@@ -141,6 +142,10 @@ export function validateMacOS(value: MacOSWindowOptions) {
       if (item.width !== undefined) number(item.width, "toolbar width", 1, 20000);
       if (item.type === "label") text(item.text, "toolbar text");
       if (item.type === "search" && item.value !== undefined) text(item.value, "search value");
+      if (item.type === "progress") {
+        if (item.value !== undefined && item.value !== null) number(item.value, "progress value", 0, 1);
+        enumValue(item.variant, ["bar", "spinner"], "progress variant");
+      }
       if (item.type === "menu") menuItems(item.items as never, { types: ["action", "checkbox", "separator", "slider"], icons: ["symbol"] }, "macos");
       if (item.type === "segmented") {
         if (!Array.isArray(item.segments) || !item.segments.length) throw new SparkError("E_INVALID_ARGUMENT", "Toolbar segments must be nonempty");

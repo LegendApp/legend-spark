@@ -396,6 +396,28 @@ int main() { @autoreleasepool {
     [window.toolbar validateVisibleItems];
     assert(toolbarItem(@"fetch").enabled == enabled.boolValue);
   }
+  // A progress item updates its value in place: the same item and indicator, switching between determinate and not.
+  NSDictionary *(^progressOptions)(id) = ^NSDictionary *(id value) {
+    return @{ @"windowStyle": @{ @"toolbarItems": @[@{ @"id": @"sync", @"type": @"progress", @"label": @"Sync", @"value": value }, @{ @"id": @"bar", @"type": @"progress", @"variant": @"spinner" }] } };
+  };
+  [manager applyToolbarItemsFromOptions:progressOptions(@0.25) toWindow:window identifier:@"brightness-probe"];
+  NSToolbarItem *sync = toolbarItem(@"sync");
+  NSProgressIndicator *syncIndicator = (NSProgressIndicator *)sync.view;
+  assert([syncIndicator isKindOfClass:NSProgressIndicator.class] && syncIndicator.style == NSProgressIndicatorStyleBar);
+  assert(!syncIndicator.indeterminate && syncIndicator.doubleValue == 0.25 && [syncIndicator.accessibilityLabel isEqual:@"Sync"]);
+  NSProgressIndicator *spinner = (NSProgressIndicator *)toolbarItem(@"bar").view;
+  assert(spinner.style == NSProgressIndicatorStyleSpinning && spinner.indeterminate);
+  for (id value in @[@0.5, NSNull.null, @1]) {
+    [manager applyToolbarItemsFromOptions:progressOptions(value) toWindow:window identifier:@"brightness-probe"];
+    assert(toolbarItem(@"sync") == sync && sync.view == syncIndicator);
+    assert(syncIndicator.indeterminate == (value == NSNull.null));
+    if (value != NSNull.null) assert(syncIndicator.doubleValue == [value doubleValue]);
+  }
+  // A subtitle sits under the title; an empty one removes it.
+  for (NSString *subtitle in @[@"main ↑1", @""]) {
+    [manager setWindowOptions:@"brightness-probe" optionsJson:SparkJSON(@{ @"subtitle": subtitle }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+    assert([window.subtitle isEqual:subtitle]);
+  }
   // Re-sending window options (identical or changed title bar options) keeps the frame and size limits.
   LegendWindowRegistry.sharedRegistry.windows[@"brightness-probe"] = window;
   window.minSize = NSMakeSize(600, 400);

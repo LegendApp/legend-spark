@@ -299,3 +299,12 @@ test("main-window restoration options reject before either native adapter runs",
   await windows.setWindowOptions("editor", { macos: { restoreOnLaunch: true } });
   expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1])).toMatchObject({ restoreOnLaunch: true });
 });
+
+test("macOS subtitles and toolbar progress items reach the native window manager", async () => {
+  platform.OS = "macos";
+  await windows.setWindowOptions("main", { macos: { subtitle: "main ↑1", toolbar: { items: [{ type: "progress", id: "sync", label: "Sync", value: 0.5 }, { type: "progress", id: "busy", variant: "spinner", value: null }] } } });
+  const options = JSON.parse(managed.setMainWindowOptions.mock.calls.at(-1)![0]);
+  expect(options.subtitle).toBe("main ↑1");
+  expect(options.windowStyle.toolbarItems).toEqual([{ type: "progress", id: "sync", label: "Sync", value: 0.5 }, { type: "progress", id: "busy", variant: "spinner", value: null }]);
+  expect(call).not.toHaveBeenCalled();
+});

@@ -114,7 +114,9 @@ export type MacOSToolbarItem =
   | (ToolbarEntry & { type: "menu"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; width?: number; items: readonly ToolbarMenuItem[] })
   | (ToolbarEntry & { type: "label"; text: string; width?: number })
   | (ToolbarEntry & { type: "search"; disabled?: boolean; collapses?: boolean; placeholder?: string; value?: string; width?: number })
-  | (ToolbarEntry & { type: "segmented"; segments: readonly MacOSToolbarSegment[]; value: string | null });
+  | (ToolbarEntry & { type: "segmented"; segments: readonly MacOSToolbarSegment[]; value: string | null })
+  /** An NSProgressIndicator: `value` from 0 to 1 is determinate; omitted or null is indeterminate (animating). `bar` (default) or `spinner`. Value changes update the item in place. */
+  | (ToolbarEntry & { type: "progress"; value?: number | null; variant?: "bar" | "spinner"; width?: number });
 export interface MacOSToolbarOptions {
   visible?: boolean;
   style?: "automatic" | "expanded" | "preference" | "unified" | "unifiedCompact";
@@ -133,6 +135,8 @@ export interface MacOSStartupSplitViewOptions {
 export interface MacOSWindowOptions {
   panelStyle?: "utility" | "documentModal" | "nonactivating";
   representedUri?: string | null;
+  /** NSWindow subtitle, shown under the title (beside it in a compact toolbar). An empty string removes it. */
+  subtitle?: string;
   level?: "normal" | "floating" | "modalPanel" | "mainMenu" | "status" | "screenSaver";
   titleBar?: MacOSTitleBarOptions;
   toolbar?: MacOSToolbarOptions;
