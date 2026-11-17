@@ -62,9 +62,10 @@ export function TextInput(props: TextInputProps) {
     if (typeof data?.text !== "string" || !Number.isSafeInteger(data.eventCount) || data.eventCount < 1 || data.eventCount > 2147483647) { control.error(new SparkError("E_INVALID_DATA", "Invalid native text change")); return; }
     if (value.acknowledge(data.eventCount)) props.onChangeText?.(data.text);
   }
-  const { accessibilityLabel, style, testID } = props;
-  if (control.failed) return <View ref={control.ref} style={[{ width: 240, height: 36 }, style]} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}><Text>{value.controlled ? value.text : value.defaultText}</Text></View>;
-  return <NativeTextInput ref={control.ref} text={value.text} defaultText={value.defaultText} controlled={value.controlled} eventCount={value.eventCount} disabled={control.disabled} onTextChange={changed} onUnavailable={control.unavailable} accessibilityLabel={accessibilityLabel} testID={testID} style={[{ width: 240, height: 36 }, style]} />;
+  const { accessibilityLabel, style, testID, placeholder, multiline = false } = props;
+  const size = { width: 240, height: multiline ? 80 : 36 };
+  if (control.failed) return <View ref={control.ref} style={[size, style]} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}><Text>{value.controlled ? value.text : value.defaultText}</Text></View>;
+  return <NativeTextInput ref={control.ref} text={value.text} defaultText={value.defaultText} controlled={value.controlled} eventCount={value.eventCount} disabled={control.disabled} placeholder={placeholder} multiline={multiline} onTextChange={changed} onUnavailable={control.unavailable} accessibilityLabel={accessibilityLabel} testID={testID} style={[size, style]} />;
 }
 function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }) {
   selectionIndex(props.options, props.value);

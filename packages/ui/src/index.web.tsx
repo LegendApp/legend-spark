@@ -30,9 +30,10 @@ export function Checkbox(props: CheckboxProps) {
 }
 export function TextInput(props: TextInputProps) {
   const control = useControl(props), state = useTextValue(props);
-  return <View ref={control.ref} style={[{ width: 240, height: 36 }, props.style]} testID={props.testID}>
-    <input type="text" value={state.controlled ? state.text : undefined} defaultValue={state.controlled ? undefined : state.defaultText} disabled={control.disabled}
-      onChange={event => { if (control.active()) props.onChangeText?.(event.currentTarget.value); }} aria-label={props.accessibilityLabel} style={nativeStyle} />
+  const field = { value: state.controlled ? state.text : undefined, defaultValue: state.controlled ? undefined : state.defaultText, disabled: control.disabled, placeholder: props.placeholder,
+    onChange: (event: { currentTarget: { value: string } }) => { if (control.active()) props.onChangeText?.(event.currentTarget.value); }, "aria-label": props.accessibilityLabel };
+  return <View ref={control.ref} style={[{ width: 240, height: props.multiline ? 80 : 36 }, props.style]} testID={props.testID}>
+    {props.multiline ? <textarea {...field} style={{ ...nativeStyle, resize: "none" }} /> : <input type="text" {...field} style={nativeStyle} />}
   </View>;
 }
 function useSelection(props: SelectProps) {

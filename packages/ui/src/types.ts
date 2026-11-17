@@ -32,12 +32,18 @@ export interface CheckboxProps extends ControlProps {
   onValueChange: (value: boolean) => void;
   children?: string;
 }
-export interface ControlledTextInputProps extends ControlProps {
+interface TextInputCommonProps extends ControlProps {
+  /** Shown while the input is empty. */
+  placeholder?: string;
+  /** Several lines that wrap and scroll (an NSTextView on macOS, a `textarea` on web); Return inserts a newline. Defaults to one line. */
+  multiline?: boolean;
+}
+export interface ControlledTextInputProps extends TextInputCommonProps {
   value: string;
   defaultValue?: never;
   onChangeText?: (text: string) => void;
 }
-export interface UncontrolledTextInputProps extends ControlProps {
+export interface UncontrolledTextInputProps extends TextInputCommonProps {
   value?: never;
   /** Read only on mount. Remount to reset an uncontrolled input. */
   defaultValue?: string;

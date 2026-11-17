@@ -79,6 +79,17 @@ test("missing native control reports once without framework error copy", async (
   expect(onError).toHaveBeenCalledTimes(1); expect(onError.mock.calls[0][0].code).toBe("E_MODULE_UNAVAILABLE");
   expect(rendered.root.findByType("Text").children).toEqual(["Save"]);
 });
+test("placeholder and multiline reach the native text input on every platform", async () => {
+  await mount(React.createElement(TextInput, { defaultValue: "", placeholder: "Summary", multiline: true }));
+  const native = rendered.root.findByType("SparkTextInput").props;
+  expect(native).toMatchObject({ placeholder: "Summary", multiline: true }); expect(native.style[0]).toEqual({ width: 240, height: 80 });
+  await act(async () => rendered.update(React.createElement(TextInput, { defaultValue: "", placeholder: "Title" })));
+  expect(rendered.root.findByType("SparkTextInput").props).toMatchObject({ placeholder: "Title", multiline: false });
+  await mount(React.createElement(MobileTextInput, { value: "", placeholder: "Summary", multiline: true }));
+  expect(rendered.root.findByType("RNTextInput").props).toMatchObject({ placeholder: "Summary", multiline: true });
+  await mount(React.createElement(WebTextInput, { value: "a", placeholder: "Summary", multiline: true }));
+  expect(rendered.root.findByType("textarea").props).toMatchObject({ placeholder: "Summary", value: "a" });
+});
 test("mobile text uses RN controlled editing and disabled semantics", async () => {
   const onChangeText = vi.fn(); await mount(React.createElement(MobileTextInput, { value: "abc", disabled: true, onChangeText }));
   const input = rendered.root.findByType("RNTextInput").props; expect(input.value).toBe("abc"); expect(input.editable).toBe(false); input.onChangeText("x"); expect(onChangeText).not.toHaveBeenCalled();
