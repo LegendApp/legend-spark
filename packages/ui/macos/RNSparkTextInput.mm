@@ -27,6 +27,7 @@ using namespace facebook::react;
   NSTextField *_field;
   NSScrollView *_scrollView;
   RNSparkPlaceholderTextView *_textView;
+  NSUndoManager *_undoManager;
   BOOL _initialized;
   BOOL _multiline;
   int _eventCount;
@@ -50,6 +51,9 @@ using namespace facebook::react;
     _textView.allowsUndo = YES;
     _textView.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
     _textView.textContainerInset = NSMakeSize(2, 4);
+    _textView.minSize = NSZeroSize;
+    _textView.maxSize = NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX);
+    _textView.textContainer.containerSize = NSMakeSize(0, CGFLOAT_MAX);
     _textView.verticallyResizable = YES;
     _textView.horizontallyResizable = NO;
     _textView.autoresizingMask = NSViewWidthSizable;
@@ -57,6 +61,7 @@ using namespace facebook::react;
     _textView.automaticQuoteSubstitutionEnabled = NO;
     _textView.automaticDashSubstitutionEnabled = NO;
     _scrollView.documentView = _textView;
+    _undoManager = [NSUndoManager new];
     [self addSubview:_field];
   }
   return self;
@@ -64,7 +69,8 @@ using namespace facebook::react;
 - (BOOL)isFlipped { return YES; }
 - (NSString *)currentText { return _multiline ? _textView.string : _field.stringValue; }
 - (void)setCurrentText:(NSString *)text {
-  if (_multiline) { _textView.string = text; _textView.needsDisplay = YES; }
+  // The view keeps its own undo stack, cleared here: typing records hold ranges in the replaced text.
+  if (_multiline) { _textView.string = text; [_undoManager removeAllActions]; _textView.needsDisplay = YES; }
   else _field.stringValue = text;
 }
 - (void)textChanged {
@@ -75,6 +81,7 @@ using namespace facebook::react;
 }
 - (void)controlTextDidChange:(NSNotification *)notification { [self textChanged]; }
 - (void)textDidChange:(NSNotification *)notification { [self textChanged]; }
+- (NSUndoManager *)undoManagerForTextView:(NSTextView *)view { return _undoManager; }
 // Switching between one line and several keeps the text and swaps the AppKit view.
 - (void)setMultiline:(BOOL)multiline {
   if (multiline == _multiline) return;
@@ -128,7 +135,7 @@ using namespace facebook::react;
   [self setMultiline:NO];
   [super prepareForRecycle];
   _initialized = NO; _eventCount = 0; _field.enabled = YES; _field.stringValue = @""; _field.placeholderString = nil; _field.accessibilityIdentifier = nil; _field.accessibilityLabel = nil;
-  _textView.string = @""; _textView.placeholder = nil; _textView.editable = YES; _textView.accessibilityIdentifier = nil; _textView.accessibilityLabel = nil;
+  _textView.string = @""; [_undoManager removeAllActions]; _textView.placeholder = nil; _textView.editable = YES; _textView.accessibilityIdentifier = nil; _textView.accessibilityLabel = nil;
 }
 + (ComponentDescriptorProvider)componentDescriptorProvider { return concreteComponentDescriptorProvider<SparkTextInputComponentDescriptor>(); }
 @end

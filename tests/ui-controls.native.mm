@@ -154,9 +154,18 @@ int main() { @autoreleasepool {
   assert(changes.back().text == "typed\nline two" && changes.back().eventCount == 2);
   props = std::make_shared<SparkTextInputProps>(*props); props->controlled = true; props->text = "a\nb"; props->eventCount = 2; Update(view, props);
   assert([textView.string isEqual:@"a\nb"]);
+  // Typed lines past the 80 pt frame grow the text view inside its scroll view, so the caret's line can scroll into view.
+  view.frame = NSMakeRect(0, 0, 240, 80); [view layoutSubviews];
+  NSUndoManager *windowUndo = [NSUndoManager new];
+  for (int line = 0; line < 12; line++) [textView insertText:@"\nmore" replacementRange:NSMakeRange(textView.string.length, 0)];
+  assert(NSHeight(textView.frame) > 150 && NSWidth(textView.frame) > 200);
+  // A controlled replacement clears the view's typing undo, so ⌘Z cannot replay ranges from the old text.
+  assert(textView.undoManager != nil && textView.undoManager != windowUndo);
+  props = std::make_shared<SparkTextInputProps>(*props); props->text = "x"; props->eventCount = changes.back().eventCount; Update(view, props);
+  assert([textView.string isEqual:@"x"] && !textView.undoManager.canUndo);
   props = std::make_shared<SparkTextInputProps>(*props); props->disabled = true; Update(view, props); assert(!textView.editable);
   props = std::make_shared<SparkTextInputProps>(*props); props->disabled = false; props->multiline = false; Update(view, props);
-  assert(textView.enclosingScrollView.superview == nil && field.superview == view && [field.stringValue isEqual:@"a\nb"]);
+  assert(textView.enclosingScrollView.superview == nil && field.superview == view && [field.stringValue isEqual:@"x"]);
   RNNativeSelect *select = [RNNativeSelect new];
   auto choices = std::make_shared<NativeSelectProps>();
   choices->itemsJson = R"([{"label":"Same","value":""},{"label":"Same","value":"second"}])";
