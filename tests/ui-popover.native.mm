@@ -50,7 +50,7 @@ using namespace facebook::react;
 @implementation Child @end
 @interface RNSparkPopover : RCTViewComponentView @end
 // ACTUAL_IMPLEMENTATION
-static void Settle() { for (int i = 0; i < 30; i++) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]]; }
+static void Settle() { for (int i = 0; i < 60; i++) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]]; }
 static std::shared_ptr<SparkPopoverProps> Next(RNSparkPopover *view, void (^change)(SparkPopoverProps &)) {
   auto props = std::make_shared<SparkPopoverProps>(*std::static_pointer_cast<const SparkPopoverProps>(view->_props));
   change(*props); [view updateProps:props oldProps:view->_props]; return props;
@@ -66,7 +66,6 @@ int main() { @autoreleasepool {
   [view mountChildComponentView:anchor index:0];
   [view mountChildComponentView:content index:1];
   NSPopover *popover = [view valueForKey:@"popover"];
-  popover.animates = NO;
   NSView *contentView = popover.contentViewController.view;
   assert(anchor.superview == view && content.superview == contentView && contentView.isFlipped);
   assert([[view valueForKey:@"touchHandler"] attached] == contentView);
@@ -93,6 +92,14 @@ int main() { @autoreleasepool {
   Settle();
   assert(popover.shown && NSMinY(contentView.window.frame) >= NSMaxY(anchorOnScreen) - 1);
   [popover performClose:nil];
+  Settle();
+  assert(!popover.shown && closes == 1);
+  // Hidden and shown again within the close animation: it reopens and reports nothing.
+  Next(view, ^(SparkPopoverProps &p) { p.visible = false; });
+  Next(view, ^(SparkPopoverProps &p) { p.visible = true; });
+  Settle();
+  assert(popover.shown && closes == 1);
+  Next(view, ^(SparkPopoverProps &p) { p.visible = false; });
   Settle();
   assert(!popover.shown && closes == 1);
   // Content unmounts from the popover; removing the view from its window closes the popover.

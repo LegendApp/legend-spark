@@ -74,9 +74,10 @@ using namespace facebook::react;
 - (void)updatePresentation {
   BOOL show = _visible && _contentSize.width > 0 && _contentSize.height > 0 && self.window != nil;
   if (!show) {
-    if (_popover.shown) { _closingFromProps = YES; [_popover performClose:nil]; _closingFromProps = NO; }
+    if (_popover.shown && !_closingFromProps) { _closingFromProps = YES; [_popover performClose:nil]; }
     return;
   }
+  if (_closingFromProps) return; // popoverDidClose: shows it again once the close animation ends
   if (!NSEqualSizes(_popover.contentSize, _contentSize)) _popover.contentSize = _contentSize;
   if (_popover.shown) {
     if (!NSEqualRects(_popover.positioningRect, self.positioningRect)) _popover.positioningRect = self.positioningRect;
@@ -105,7 +106,12 @@ using namespace facebook::react;
   [self updatePresentation];
 }
 - (void)popoverDidClose:(NSNotification *)notification {
-  if (_closingFromProps || !_visible) return;
+  if (_closingFromProps) {
+    _closingFromProps = NO;
+    [self updatePresentation];
+    return;
+  }
+  if (!_visible) return;
   auto emitter = std::static_pointer_cast<const SparkPopoverEventEmitter>(_eventEmitter);
   if (emitter) emitter->onClose({});
 }
