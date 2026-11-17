@@ -50,6 +50,13 @@ test("toolbar menus use shared menu IDs and numeric slider values", () => {
   expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "segmented", id: "view", value: "", segments: [{ value: "", label: "Empty" }, { value: "", label: "Duplicate" }] }] } } }, "macos", false)).toThrow();
 });
 
+test("toolbar popups need options, a known value and action-only items", () => {
+  const popup = { type: "popup", id: "branch", value: "main", options: [{ value: "main", label: "main" }] };
+  expect(() => validateOptions({ macos: { toolbar: { items: [{ ...popup, items: [{ type: "separator" }, { type: "action", id: "new", label: "New" }], width: 160, tooltip: "Branch", disabled: true }] } } } as never, "macos", false)).not.toThrow();
+  for (const bad of [{ options: [] }, { value: "dev" }, { items: [{ type: "checkbox", id: "c", label: "C", checked: true }] }, { segments: [] }]) expect(() => validateOptions({ macos: { toolbar: { items: [{ ...popup, ...bad }] } } } as never, "macos", false)).toThrow();
+  expect(() => validateOptions({ macos: { toolbar: { items: [{ ...popup, value: null }] } } } as never, "macos", false)).not.toThrow();
+});
+
 test("toolbar buttons reject unsupported sizing and digit styling before native effects", () => {
   for (const option of [{ width: 100 }, { width: undefined }, { monospacedDigits: true }, { monospacedDigits: false }]) {
     for (const opening of [true, false]) expect(() => validateOptions({ ...(opening ? base : {}), macos: { toolbar: { items: [{ type: "button", id: "button", ...option }] } } } as never, "macos", opening)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));

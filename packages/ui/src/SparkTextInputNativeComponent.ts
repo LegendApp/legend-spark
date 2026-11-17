@@ -7,6 +7,8 @@ export interface NativeProps extends ViewProps {
   text?: string;
   controlled?: WithDefault<boolean, false>;
   disabled?: WithDefault<boolean, false>;
+  placeholder?: string;
+  multiline?: WithDefault<boolean, false>;
   eventCount?: Int32;
   onTextChange?: DirectEventHandler<Readonly<{ text: string; eventCount: Int32 }>>;
 }

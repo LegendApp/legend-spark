@@ -47,10 +47,10 @@ test("split views preserve zero metrics and expose explicit readiness without na
   const onResize = vi.fn(), onError = vi.fn();
   await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", onResize, onError, titleBar: { content: { height: 50, overlay: { color: "#ffffff" } } } }));
   const native = rendered.root.findByType("SidebarSplitView"); expect(native.props.contentTitlebarOverlayOpacity).toBe(1); expect(native.props.contentTitlebarHeight).toBe(50);
-  const data = { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, height: 100, isLayoutReady: false, isVertical: true };
+  const data = { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, inspectorHeight: 0, inspectorWidth: 0, inspectorX: 0, inspectorY: 0, height: 100, isLayoutReady: false, isVertical: true };
   await act(async () => native.props.onSplitViewDidResize({ nativeEvent: data }));
   expect(native.props.hasList).toBe(false);
-  expect(onResize.mock.calls[0][0]).toEqual({ contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, height: 100, phase: "provisional" });
+  expect(onResize.mock.calls[0][0]).toEqual({ contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, inspectorHeight: 0, inspectorWidth: 0, inspectorX: 0, inspectorY: 0, height: 100, phase: "provisional" });
   await act(async () => native.props.onSplitViewDidResize({ nativeEvent: { ...data, sidebarWidth: 0, sidebarHeight: 0, isLayoutReady: true } }));
   const panes = rendered.root.findAllByType("View"); expect(panes[0].props.style.width).toBe(0); expect(panes[0].props.style.height).toBe(0); expect(onResize.mock.calls[1][0].phase).toBe("ready");
   native.props.onSplitViewDidResize({ nativeEvent: { ...data, contentWidth: NaN } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onResize).toHaveBeenCalledTimes(2);
@@ -72,7 +72,7 @@ test("split views lay out native expansion while the collapsed prop is unchanged
   expect(native.findAllByType("View")[0].props.style.width).toBe(0);
   await act(async () => {
     native.props.onSidebarCollapsedChange({ nativeEvent: { collapsed: false } });
-    native.props.onSplitViewDidResize({ nativeEvent: { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 220, listHeight: 0, listWidth: 0, listX: 0, contentX: 221, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, height: 100, isLayoutReady: true } });
+    native.props.onSplitViewDidResize({ nativeEvent: { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 220, listHeight: 0, listWidth: 0, listX: 0, contentX: 221, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, inspectorHeight: 0, inspectorWidth: 0, inspectorX: 0, inspectorY: 0, height: 100, isLayoutReady: true } });
   });
   expect(native.props.sidebarCollapsed).toBe(true);
   expect(native.findAllByType("View")[0].props.style.width).toBe(220);
@@ -86,13 +86,41 @@ test("split views host an optional native list column after the sidebar and cont
   let panes = native.findAllByType("View").filter((view: { parent: unknown }) => view.parent === native);
   expect(panes.map((pane: { props: { children: unknown } }) => pane.props.children)).toEqual(["Sidebar", "Content", "List"]);
   expect(panes[2].props.style.width).toBe(360);
-  const data = { contentHeight: 100, contentWidth: 400, sidebarHeight: 100, sidebarWidth: 200, listHeight: 100, listWidth: 300, listX: 201, contentX: 502, sidebarX: 8, sidebarY: 52, contentY: 0, listY: 0, height: 100, isLayoutReady: true, isVertical: true };
+  const data = { contentHeight: 100, contentWidth: 400, sidebarHeight: 100, sidebarWidth: 200, listHeight: 100, listWidth: 300, listX: 201, contentX: 502, sidebarX: 8, sidebarY: 52, contentY: 0, listY: 0, inspectorHeight: 0, inspectorWidth: 0, inspectorX: 0, inspectorY: 0, height: 100, isLayoutReady: true, isVertical: true };
   await act(async () => native.props.onSplitViewDidResize({ nativeEvent: data }));
   panes = native.findAllByType("View").filter((view: { parent: unknown }) => view.parent === native);
   expect(panes[2].props.style).toMatchObject({ width: 300, height: 100 });
   // Fabric measures panes from these origins, so they must be where AppKit placed each pane.
   expect(panes.map((pane: { props: { style: { left: number; top: number } } }) => [pane.props.style.left, pane.props.style.top])).toEqual([[8, 52], [502, 0], [201, 0]]);
   expect(onResize.mock.calls[0][0]).toMatchObject({ listWidth: 300, listX: 201, contentX: 502, phase: "ready" });
+});
+test("split views host an optional trailing inspector, positioned from native metrics, and report native toggles", async () => {
+  const onInspectorCollapsedChange = vi.fn(), onResize = vi.fn(), onError = vi.fn();
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", inspector: "Inspector", inspectorWidth: 300, inspectorMinWidth: 240, onInspectorCollapsedChange, onResize, onError }));
+  const native = rendered.root.findByType("SidebarSplitView");
+  expect(native.props).toMatchObject({ hasInspector: true, hasList: false, inspectorWidth: 300, inspectorMinWidth: 240, inspectorCollapsed: false });
+  // Child order is the native mount contract: the inspector comes last (index 2 without a list, 3 with one).
+  let panes = native.findAllByType("View").filter((view: { parent: unknown }) => view.parent === native);
+  expect(panes.map((pane: { props: { children: unknown } }) => pane.props.children)).toEqual(["Sidebar", "Content", "Inspector"]);
+  expect(panes[2].props.style.width).toBe(300);
+  const data = { contentHeight: 100, contentWidth: 400, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, inspectorHeight: 100, inspectorWidth: 280, inspectorX: 602, inspectorY: 0, height: 100, isLayoutReady: true };
+  await act(async () => native.props.onSplitViewDidResize({ nativeEvent: data }));
+  panes = native.findAllByType("View").filter((view: { parent: unknown }) => view.parent === native);
+  expect(panes[2].props.style).toMatchObject({ left: 602, top: 0, width: 280, height: 100 });
+  expect(onResize.mock.calls[0][0]).toMatchObject({ inspectorWidth: 280, inspectorX: 602, phase: "ready" });
+  native.props.onSplitViewDidResize({ nativeEvent: { ...data, inspectorWidth: NaN } }); expect(onError).toHaveBeenLastCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  await act(async () => native.props.onInspectorCollapsedChange({ nativeEvent: { collapsed: true } }));
+  expect(onInspectorCollapsedChange.mock.calls).toEqual([[true]]);
+  native.props.onInspectorCollapsedChange({ nativeEvent: { collapsed: 1 } }); expect(onError).toHaveBeenLastCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", list: "List", inspector: "Inspector" }));
+  expect(rendered.root.findByType("SidebarSplitView").findAllByType("View").filter((view: { parent: unknown }) => view.parent === rendered.root.findByType("SidebarSplitView")).map((pane: { props: { children: unknown } }) => pane.props.children)).toEqual(["Sidebar", "Content", "List", "Inspector"]);
+});
+test("split views validate inspector options", async () => {
+  for (const props of [{ inspectorWidth: 100, inspectorMinWidth: 220 }, { inspectorMinWidth: NaN }, { inspectorCollapsed: "yes" }, { onInspectorCollapsedChange: "no" }]) {
+    await expect(mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", inspector: "Inspector", ...props } as never))).rejects.toThrow();
+  }
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", inspector: false }));
+  expect(rendered.root.findByType("SidebarSplitView").props.hasInspector).toBe(false);
 });
 test.each([undefined, null, false, true, ""])("split views omit non-rendering conditional list values (%s)", async list => {
   await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", list }));
@@ -117,7 +145,7 @@ test("split views require complete native list metrics but allow older initial h
   await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", onResize, onError,
     initialPaneMetrics: { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200 } }));
   const native = rendered.root.findByType("SidebarSplitView");
-  const data = { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, height: 100, isLayoutReady: true };
+  const data = { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, sidebarX: 0, sidebarY: 0, contentY: 0, listY: 0, inspectorHeight: 0, inspectorWidth: 0, inspectorX: 0, inspectorY: 0, height: 100, isLayoutReady: true };
   for (const field of ["listWidth", "listHeight"] as const) {
     for (const invalid of [undefined, NaN, -1]) {
       native.props.onSplitViewDidResize({ nativeEvent: { ...data, [field]: invalid } });

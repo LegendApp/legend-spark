@@ -29,14 +29,14 @@ struct Props { using Shared = std::shared_ptr<Props const>; virtual ~Props() = d
 struct SidebarSplitViewProps : Props {
   std::string appearance, contentTitlebarMaterial, contentTitlebarOverlayColor, sidebarTitlebarOverlayColor;
   double contentTitlebarHeight = 0, contentTitlebarOverlayOpacity = 0, contentMinWidth = 0, listMinWidth = 0, listWidth = 0;
-  double sidebarMinWidth = 0, sidebarTitlebarOverlayOpacity = 0, sidebarWidth = 0;
-  bool hasList = false, sidebarCollapsed = false;
+  double sidebarMinWidth = 0, sidebarTitlebarOverlayOpacity = 0, sidebarWidth = 0, inspectorMinWidth = 0, inspectorWidth = 0;
+  bool hasList = false, sidebarCollapsed = false, hasInspector = false, inspectorCollapsed = false;
 };
 struct DesktopDragViewProps : Props { std::string sourceJson, optionsJson; bool disabled = false; };
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
   struct OnSplitViewDidResize {
-    double contentHeight, contentWidth, contentX, contentY, height;
+    double contentHeight, contentWidth, contentX, contentY, height, inspectorHeight, inspectorWidth, inspectorX, inspectorY;
     bool isLayoutReady, isVertical;
     double listHeight, listWidth, listX, listY, sidebarHeight, sidebarWidth, sidebarX, sidebarY;
   };
@@ -44,6 +44,8 @@ struct SidebarSplitViewEventEmitter : EventEmitter {
   void onSplitViewDidResize(OnSplitViewDidResize event) const { events.push_back(event); }
   struct OnSidebarCollapsedChange { bool collapsed; };
   void onSidebarCollapsedChange(OnSidebarCollapsedChange event) const {}
+  struct OnInspectorCollapsedChange { bool collapsed; };
+  void onInspectorCollapsedChange(OnInspectorCollapsedChange event) const {}
 };
 struct DesktopDragViewEventEmitter : EventEmitter {
   struct Event { std::string payload; };

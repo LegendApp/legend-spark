@@ -309,6 +309,13 @@ test("macOS subtitles and toolbar progress items reach the native window manager
   expect(call).not.toHaveBeenCalled();
 });
 
+test("macOS toolbar popups reach the native window manager with their options, value and actions", async () => {
+  platform.OS = "macos";
+  await windows.setWindowOptions("main", { macos: { toolbar: { items: [{ type: "popup", id: "branch", label: "Branch", value: "dev", options: [{ value: "main", label: "main", symbol: "arrow.triangle.branch" }, { value: "dev", label: "dev" }], items: [{ type: "action", id: "new", label: "New Branch…" }] }] } } });
+  const options = JSON.parse(managed.setMainWindowOptions.mock.calls.at(-1)![0]);
+  expect(options.windowStyle.toolbarItems).toEqual([{ type: "popup", id: "branch", label: "Branch", enabled: true, selectedValue: "dev", options: [{ value: "main", label: "main", systemImageName: "arrow.triangle.branch" }, { value: "dev", label: "dev" }], menuItems: [{ id: "new", title: "New Branch…", enabled: true }] }]);
+});
+
 test("macOS window tabbing reaches the native window manager", async () => {
   platform.OS = "macos";
   await windows.setWindowOptions("main", { macos: { tabbing: { mode: "preferred", identifier: "review" } } });

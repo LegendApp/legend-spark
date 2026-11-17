@@ -18,7 +18,7 @@ import { Button, Select, TextInput } from '@legendapp/spark/ui';
 <Button onPress={save} disabled={saving}>Save</Button>
 ```
 
-TextInput is single-line. A controlled input receives `value`; an uncontrolled input receives optional `defaultValue`, read once on mount. They are mutually exclusive types. Switching modes requires a remount. Controlled desktop editing acknowledges native event counts so a render from before a keystroke cannot erase a newer edit. Returning the same controlled value restores that value after an edit. Mobile uses React Native's native TextInput for controlled editing and IME/selection handling: the pinned Expo UI fields provide an uncontrolled contract and are not exposed as Spark refs.
+TextInput is single-line unless `multiline` is set; `placeholder` shows while it is empty. A `multiline` input is an AppKit `NSTextView` in a bezeled scroll view on macOS (a `textarea` on web, WinUI `TextBox` with `AcceptsReturn` on Windows, React Native's multiline input on mobile): Return inserts a newline, long text wraps and scrolls, and its default height is 80 pt. Switching `multiline` keeps the text. A controlled input receives `value`; an uncontrolled input receives optional `defaultValue`, read once on mount. They are mutually exclusive types. Switching modes requires a remount. Controlled desktop editing acknowledges native event counts so a render from before a keystroke cannot erase a newer edit. Returning the same controlled value restores that value after an edit. Mobile uses React Native's native TextInput for controlled editing and IME/selection handling: the pinned Expo UI fields provide an uncontrolled contract and are not exposed as Spark refs.
 
 On macOS, `Button` and `Checkbox` take their AppKit intrinsic size (from the label and variant) unless a style sets `width` or `height`; the size arrives just after mount. Other platforms keep a fixed default button frame (Windows 160x36).
 
@@ -77,7 +77,7 @@ The earlier API passed packed macOS Settings/kitchen-sink checks and iPhone 17 s
 
 ## Specialized macOS views
 
-Search, sidebar, split view, swipe actions, glass, SF Symbols, progress indicators and popovers keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, `getSFSymbolAvailability`, `getSwipeActionsAvailability`, `getProgressIndicatorAvailability`, and `getPopoverAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`. These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
+Search, sidebar, split view, swipe actions, glass, SF Symbols, progress indicators, popovers, tables and sheets keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, `getSFSymbolAvailability`, `getSwipeActionsAvailability`, `getProgressIndicatorAvailability`, `getPopoverAvailability`, `getTableAvailability`, and `getSheetAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`. These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
 
 On macOS these views and the controls above follow their React layout direction, including one set by a `direction: "rtl"` style on an ancestor, and update when it changes. In right to left: the split view's sidebar sits on the right and pane widths are kept; `onResize` x positions stay measured from the left edge. Segments run from the right, while option order and values are unchanged. The search field's magnifier, text and cancel button mirror. Leading swipe actions sit on the right and are revealed by a leftward swipe; a direction change closes an open row. Directional SF Symbols (such as `chevron.forward`) mirror, and text fields align right.
 
@@ -102,11 +102,19 @@ Trees: data items nest with `children`; `SidebarItem` rows nest with `parentId`,
 
 An optional `list` pane adds AppKit's content-list column between sidebar and content (the Mail layout: mailboxes | messages | message) inside the same native split view, with `listWidth` and `listMinWidth`. Prefer it over nesting a second `SidebarSplitView` in `content`: a nested split only learns its frame after the outer split's metrics round-trip through React, so every outer divider drag resizes it a commit late and its panes tear. Sidebar and list hold their widths when the window resizes; the content column absorbs the change. `onResize` adds `listWidth`, `listHeight`, `listX` and `listY` (zero without a list).
 
-Preferred widths (`sidebarWidth`, `listWidth`) seed the dividers on the first layout with enough room for them and again when those props, `list` presence or `sidebarCollapsed` change. Afterwards a divider stays where the user dragged it across window resizes and re-layouts. Each native layout pass publishes one resize event with its final pane sizes. Content and list pane backgrounds are opaque in the semantic window background color (including the content pane in two-pane layouts); content is clipped to its pane. Pane content still receives its new React layout on the next commit.
+An optional `inspector` pane adds AppKit's inspector split item after the content (the Xcode or Keynote layout), with `inspectorWidth` (default `inspectorMinWidth`) and `inspectorMinWidth` (default 220). Like the sidebar, the user and `toggleInspector:` (a menu item or toolbar button) can collapse it: `inspectorCollapsed` is applied only when its value changes, and `onInspectorCollapsedChange(collapsed)` reports only the collapses AppKit makes itself. The inspector holds its width when the window resizes. `onResize` adds `inspectorWidth`, `inspectorHeight`, `inspectorX` and `inspectorY` (zero while absent or collapsed). Off macOS the inspector renders after the content unless collapsed.
+
+```tsx
+const [inspectorCollapsed, setInspectorCollapsed] = useState(true);
+<SidebarSplitView sidebar={<Sidebar />} content={<Thread />} inspector={<Comments />} inspectorWidth={280}
+  inspectorCollapsed={inspectorCollapsed} onInspectorCollapsedChange={setInspectorCollapsed} />
+```
+
+Preferred widths (`sidebarWidth`, `listWidth`, `inspectorWidth`) seed the dividers on the first layout with enough room for them and again when those props, `list` or `inspector` presence, `sidebarCollapsed` or `inspectorCollapsed` change. Afterwards a divider stays where the user dragged it across window resizes and re-layouts. Each native layout pass publishes one resize event with its final pane sizes. Content and list pane backgrounds are opaque in the semantic window background color (including the content pane in two-pane layouts); content is clipped to its pane. Pane content still receives its new React layout on the next commit.
 
 AppKit can collapse the sidebar itself (View > Hide Sidebar, the sidebar toolbar button, `toggleSidebar:`). The component adopts that state, publishes a resize with the sidebar at width zero, and calls `onSidebarCollapsedChange(collapsed)`; it is not called for changes you make through `sidebarCollapsed`. Uncontrolled use needs nothing more: the sidebar stays as AppKit left it. A controlled app sets `sidebarCollapsed` from the callback, which is then a no-op natively. Only a change of the `sidebarCollapsed` value is applied: an unchanged prop never undoes a native toggle, and when a prop change arrives before a native toggle is observed, the prop change wins and no event is sent for that toggle.
 
-`onResize` reports owned pane dimensions, each pane's origin in split-view coordinates (`sidebarX`/`sidebarY`, `contentX`/`contentY`, `listX`/`listY`; exported as `SidebarSplitViewPaneOrigins`), total `height`, and `phase: 'provisional' | 'ready'`. Panes are laid out at those origins, so `measure()` matches the screen once React layout catches up; a pane's content stays at its AppKit position even while a commit still carries an older origin. Both phases update layout. Zero dimensions remain zero, so collapsed panes cannot inherit stale sizes. Initial metrics are a mount-time hint; readiness comes from native layout. Title-bar overlay colors use `#RRGGBB` or `#RRGGBBAA`, with opacity in `[0, 1]` (default 1 when an overlay is supplied). Application-specific chrome presets are not exported.
+`onResize` reports owned pane dimensions, each pane's origin in split-view coordinates (`sidebarX`/`sidebarY`, `contentX`/`contentY`, `listX`/`listY`, `inspectorX`/`inspectorY`; exported as `SidebarSplitViewPaneOrigins`), total `height`, and `phase: 'provisional' | 'ready'`. Panes are laid out at those origins, so `measure()` matches the screen once React layout catches up; a pane's content stays at its AppKit position even while a commit still carries an older origin. Both phases update layout. Zero dimensions remain zero, so collapsed panes cannot inherit stale sizes. Initial metrics are a mount-time hint; readiness comes from native layout. Title-bar overlay colors use `#RRGGBB` or `#RRGGBBAA`, with opacity in `[0, 1]` (default 1 when an overlay is supplied). Application-specific chrome presets are not exported.
 
 `ProgressIndicator` under `/ui/progress` is AppKit's `NSProgressIndicator` for loading states: `variant` `bar` (default) or `spinner`, `size` (`regular` default, `small`; spinners also `mini`, since AppKit draws bars in two sizes) and `value` from 0 to 1 for determinate progress; an omitted or `null` value animates as indeterminate. A spinner takes its native size and a bar its native height (give it a width), unless a style sets them; `accessibilityLabel` names it. Values outside 0 to 1 throw during render. `getProgressIndicatorAvailability()` reports other platforms as unsupported; there the view keeps its layout and reports `E_UNSUPPORTED_PLATFORM`. For progress in a window toolbar, use a `progress` toolbar item (see the window docs).
 
@@ -125,6 +133,33 @@ import { Popover } from '@legendapp/spark/ui/popover';
 <Popover visible={open} onClose={() => setOpen(false)} content={<CommentComposer style={{ width: 280 }} />}>
   <Button onPress={() => setOpen(true)}>Add Comment…</Button>
 </Popover>
+```
+
+`Table` under `/ui/table` is AppKit's `NSTableView` with a column header, for lists with columns such as a commit history. `columns` lists `{ id, title }` with optional `width`, `minWidth`, `maxWidth`, `alignment` (`leading` default, `center`, `trailing`), `monospacedDigits` and `secondary` (the secondary label color); columns with a `width` keep it and columns without one share the remaining width; the user can resize them. `rows` are `{ id, values }`, where `values` maps column IDs to cell text (a missing value is an empty cell). AppKit creates cells only for visible rows and reuses them, so thousands of rows stay cheap; the rows are still sent as one prop, so keep the array stable between renders. Selection works like `Sidebar`: pass `selectedId` (one row, or `null`) or `selectedIds` (⌘/⇧ multiple selection); `onSelectionChange({ id, ids })` is required, and a selection the parent does not apply snaps back. Rows keep their selection by ID across updates. `onDoubleClick({ id })` reports double-clicks. `headerVisible` (default true), `alternatingRows` (instead of vertical grid lines) and `rowHeight` (default: the system row size) are optional. Cells are text; there is no sorting. Other platforms render the rows as plain text lines and report `E_UNSUPPORTED_PLATFORM`; check `getTableAvailability()`.
+
+```tsx
+import { Table } from '@legendapp/spark/ui/table';
+
+<Table
+  columns={[{ id: 'subject', title: 'Subject' }, { id: 'author', title: 'Author', width: 120, secondary: true }, { id: 'date', title: 'Date', width: 110, alignment: 'trailing', monospacedDigits: true }]}
+  rows={commits.map(commit => ({ id: commit.sha, values: { subject: commit.subject, author: commit.author, date: commit.date } }))}
+  selectedId={selected}
+  onSelectionChange={({ id }) => setSelected(id)}
+  onDoubleClick={({ id }) => checkout(id)}
+/>
+```
+
+`Sheet` under `/ui/sheet` is a document-modal AppKit sheet on the window the component renders in, hosting its React children (a New Branch or Create PR form, say). Render it anywhere in the window. `visible` is controlled; the content mounts while visible and the sheet takes the content's React layout size, so give the content a width and height (or content that sizes it). Escape and ⌘. call `onCancel`; the sheet never closes itself, so set `visible` to false there and in your form's buttons. Spark controls work inside it; React `Pressable`s have the same pointer-movement limit as in a popover. For a single text field, `showPrompt` (an alert with a text field) is lighter. Other platforms render visible content inline and report `E_UNSUPPORTED_PLATFORM`; check `getSheetAvailability()`.
+
+```tsx
+import { Sheet } from '@legendapp/spark/ui/sheet';
+
+<Sheet visible={creating} onCancel={() => setCreating(false)}>
+  <View style={{ width: 380 }}>
+    <TextInput placeholder="Branch name" value={name} onChangeText={setName} />
+    <Button onPress={() => { create(name); setCreating(false); }}>Create Branch</Button>
+  </View>
+</Sheet>
 ```
 
 `GlassView` under `/ui/glass` is the single native glass container, with `glassStyle: 'regular' | 'clear'` and RN `ColorValue` tint. It replaces the overlapping GlassEffectView/GlassSurface wrappers and requires macOS 26; older systems preserve children without an effect and report the host restriction. Colors use RN's standard conversion, including its dynamic/system representations.

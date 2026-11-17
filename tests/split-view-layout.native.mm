@@ -7,6 +7,8 @@ struct EventEmitter { virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
   struct OnSidebarCollapsedChange { bool collapsed; };
   void onSidebarCollapsedChange(OnSidebarCollapsedChange) const {}
+  struct OnInspectorCollapsedChange { bool collapsed; };
+  void onInspectorCollapsedChange(OnInspectorCollapsedChange) const {}
 };
 using Float = double;
 struct Point { Float x, y; };
@@ -63,6 +65,13 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
   BOOL _hasList, _sidebarCollapsed, _needsPreferredDividerPositions, _layingOutSplitView;
   LayoutMetrics _currentLayoutMetrics, _sidebarReactLayoutMetrics, _contentReactLayoutMetrics, _listReactLayoutMetrics;
   NSView<RCTComponentViewProtocol> *_sidebarReactView, *_listReactView;
+  NSViewController *_inspectorViewController;
+  NSSplitViewItem *_inspectorItem;
+  NSView *_inspectorContainer, *_inspectorHost;
+  NSView<RCTComponentViewProtocol> *_inspectorReactView;
+  LayoutMetrics _inspectorReactLayoutMetrics;
+  CGFloat _inspectorMinWidth, _inspectorWidth;
+  BOOL _hasInspector, _inspectorCollapsed;
   NSMutableArray<NSDictionary *> *_events;
   id _resizeObserver;
   std::shared_ptr<const facebook::react::EventEmitter> _eventEmitter;
@@ -85,6 +94,9 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
     _contentItem = [NSSplitViewItem splitViewItemWithViewController:_contentViewController];
     _listItem = [NSSplitViewItem contentListWithViewController:_listViewController];
     _sidebarItem.canCollapse = YES; _listItem.holdingPriority = NSLayoutPriorityDefaultLow + 1;
+    _inspectorMinWidth = 220; _inspectorContainer = [NSView new]; _inspectorHost = [NSView new]; [_inspectorContainer addSubview:_inspectorHost];
+    _inspectorViewController = [NSViewController new]; _inspectorViewController.view = _inspectorContainer;
+    _inspectorItem = [NSSplitViewItem inspectorWithViewController:_inspectorViewController]; _inspectorItem.holdingPriority = NSLayoutPriorityDefaultLow + 1;
     _splitViewController = [NSSplitViewController new]; _splitViewController.splitView = [TrackingSplitView new];
     _splitViewController.splitView.vertical = YES; _splitViewController.splitView.dividerStyle = NSSplitViewDividerStyleThin;
     [_splitViewController addSplitViewItem:_sidebarItem]; [_splitViewController addSplitViewItem:_contentItem];

@@ -553,6 +553,11 @@
     "TextInputSearchRef",
     "getSearchAvailability"
   ],
+  "./ui/sheet": [
+    "Sheet",
+    "SheetProps",
+    "getSheetAvailability"
+  ],
   "./ui/sidebar": [
     "Sidebar",
     "SidebarBaseProps",
@@ -593,6 +598,16 @@
     "SFSymbolProps",
     "SFSymbolScale",
     "getSFSymbolAvailability"
+  ],
+  "./ui/table": [
+    "Table",
+    "TableBaseProps",
+    "TableColumn",
+    "TableProps",
+    "TableRow",
+    "TableSelectionEvent",
+    "TableSelectionProps",
+    "getTableAvailability"
   ],
   "./ui/uniwind": [
     "Button",

@@ -138,7 +138,7 @@ export function validateMacOS(value: MacOSWindowOptions) {
     enumValue(value.toolbar.style, ["automatic", "expanded", "preference", "unified", "unifiedCompact"], "toolbar style");
     if (value.toolbar.visible === false && value.toolbar.items !== undefined) throw new SparkError("E_INVALID_ARGUMENT", "toolbar.items creates a toolbar; omit items when setting visible to false");
     if (value.toolbar.items !== undefined) for (const item of entries(value.toolbar.items, "toolbar item")) {
-      const fields: Record<string, string[]> = { button: ["disabled", "bordered", "symbol", "tooltip"], menu: ["disabled", "bordered", "symbol", "tooltip", "width", "items"], label: ["text", "width"], search: ["disabled", "collapses", "placeholder", "value", "width"], segmented: ["segments", "value"], progress: ["value", "variant", "width"] };
+      const fields: Record<string, string[]> = { button: ["disabled", "bordered", "symbol", "tooltip"], menu: ["disabled", "bordered", "symbol", "tooltip", "width", "items"], label: ["text", "width"], search: ["disabled", "collapses", "placeholder", "value", "width"], segmented: ["segments", "value"], popup: ["options", "value", "items", "disabled", "tooltip", "width"], progress: ["value", "variant", "width"] };
       if (typeof item.type !== "string" || !Object.hasOwn(fields, item.type)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown toolbar item type");
       keys(item, ["id", "label", "placement", "type", ...fields[item.type]]);
       flags(item, ["disabled", "bordered", "collapses"]);
@@ -152,15 +152,17 @@ export function validateMacOS(value: MacOSWindowOptions) {
         enumValue(item.variant, ["bar", "spinner"], "progress variant");
       }
       if (item.type === "menu") menuItems(item.items as never, { types: ["action", "checkbox", "separator", "slider"], icons: ["symbol"] }, "macos");
-      if (item.type === "segmented") {
-        if (!Array.isArray(item.segments) || !item.segments.length) throw new SparkError("E_INVALID_ARGUMENT", "Toolbar segments must be nonempty");
+      if (item.type === "popup" && item.items !== undefined) menuItems(item.items as never, { types: ["action", "separator"], icons: ["symbol"] }, "macos");
+      if (item.type === "segmented" || item.type === "popup") {
+        const segments = item.type === "popup" ? item.options : item.segments, what = item.type === "popup" ? "Toolbar popup options" : "Toolbar segments";
+        if (!Array.isArray(segments) || !segments.length) throw new SparkError("E_INVALID_ARGUMENT", `${what} must be nonempty`);
         const values = new Set<string>();
-        for (const segment of item.segments) {
+        for (const segment of segments) {
           object(segment, "segment"); keys(segment, ["value", "label", "symbol"]); text(segment.value, "segment value"); text(segment.label, "segment label", false);
           if (segment.symbol !== undefined) text(segment.symbol, "segment symbol", false);
           if (values.has(segment.value)) throw new SparkError("E_INVALID_ARGUMENT", "Segment values must be unique"); values.add(segment.value);
         }
-        if (item.value !== null && !values.has(item.value as string)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown toolbar segment value");
+        if (item.value !== null && !values.has(item.value as string)) throw new SparkError("E_INVALID_ARGUMENT", `Unknown toolbar ${item.type === "popup" ? "popup" : "segment"} value`);
       }
     }
   }

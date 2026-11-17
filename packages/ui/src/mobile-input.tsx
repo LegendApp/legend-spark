@@ -5,7 +5,7 @@ import type { TextInputProps } from "./types";
 export function TextInput(props: TextInputProps) {
   const control = useControl(props), state = useTextValue(props);
   return <RNTextInput ref={control.ref} value={state.controlled ? state.text : undefined} defaultValue={state.defaultText}
-    onChangeText={text => { if (control.active()) props.onChangeText?.(text); }} editable={!control.disabled} multiline={false}
+    onChangeText={text => { if (control.active()) props.onChangeText?.(text); }} editable={!control.disabled} multiline={props.multiline ?? false} placeholder={props.placeholder}
     accessibilityLabel={props.accessibilityLabel} accessibilityState={{ disabled: control.disabled }} testID={props.testID}
-    style={[{ width: 240, height: 44, borderWidth: 1, borderColor: "#8e8e93", borderRadius: 6, paddingHorizontal: 8 }, props.style]} />;
+    style={[{ width: 240, height: props.multiline ? 88 : 44, textAlignVertical: "top", borderWidth: 1, borderColor: "#8e8e93", borderRadius: 6, paddingHorizontal: 8 }, props.style]} />;
 }

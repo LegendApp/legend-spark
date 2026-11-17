@@ -46,6 +46,8 @@
         "SparkProgressIndicator": "RNSparkProgressIndicator",
         "SparkRadioGroup": "RNSparkRadioGroup",
         "SparkPopover": "RNSparkPopover",
+        "SparkTable": "RNSparkTable",
+        "SparkSheet": "RNSparkSheet",
         "SwipeActions": "RNSwipeActions",
         "NativeSelect": "RNNativeSelect",
         "NativeSegmentedControl": "RNNativeSegmentedControl",

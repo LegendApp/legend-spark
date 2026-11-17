@@ -18,13 +18,15 @@ namespace Xaml = Microsoft::UI::Xaml;
 namespace Json = Windows::Data::Json;
 struct Props : implements<Props, React::IComponentProps> {
   React::ViewProps view{nullptr};
-  std::string title, defaultText, text, itemsJson = "[]", value, variant = "default";
-  bool disabled = false, controlled = false;
+  std::string title, defaultText, text, placeholder, itemsJson = "[]", value, variant = "default";
+  bool disabled = false, controlled = false, multiline = false;
   int32_t eventCount = 0;
   void SetProp(uint32_t, hstring const &name, React::IJSValueReader const &reader) noexcept {
     if (name == L"title") React::ReadValue(reader, title);
     else if (name == L"defaultText") React::ReadValue(reader, defaultText);
     else if (name == L"text") React::ReadValue(reader, text);
+    else if (name == L"placeholder") React::ReadValue(reader, placeholder);
+    else if (name == L"multiline") React::ReadValue(reader, multiline);
     else if (name == L"controlled") React::ReadValue(reader, controlled);
     else if (name == L"eventCount") React::ReadValue(reader, eventCount);
     else if (name == L"itemsJson") React::ReadValue(reader, itemsJson);
@@ -125,6 +127,9 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
         auto input = control.as<Xaml::Controls::TextBox>();
         if (!initialized) input.Text(to_hstring(props.defaultText));
         if (props.controlled && props.eventCount >= eventCount && input.Text() != to_hstring(props.text)) input.Text(to_hstring(props.text));
+        input.PlaceholderText(to_hstring(props.placeholder));
+        input.AcceptsReturn(props.multiline);
+        input.TextWrapping(props.multiline ? Xaml::TextWrapping::Wrap : Xaml::TextWrapping::NoWrap);
       } else {
         auto select = control.as<Xaml::Controls::ComboBox>();
         if (items != props.itemsJson) {
@@ -157,7 +162,7 @@ inline void RegisterControls(React::IReactPackageBuilder const &package) {
         if (previous) {
           auto old = get_self<Props>(previous);
           props->title = old->title; props->defaultText = old->defaultText; props->itemsJson = old->itemsJson;
-          props->text = old->text; props->controlled = old->controlled; props->eventCount = old->eventCount;
+          props->text = old->text; props->placeholder = old->placeholder; props->multiline = old->multiline; props->controlled = old->controlled; props->eventCount = old->eventCount;
           props->value = old->value; props->variant = old->variant; props->disabled = old->disabled;
         }
         props->view = view; return props.as<React::IComponentProps>();

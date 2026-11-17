@@ -432,6 +432,29 @@ int main() { @autoreleasepool {
     assert(syncIndicator.indeterminate == (value == NSNull.null));
     if (value != NSNull.null) assert(syncIndicator.doubleValue == [value doubleValue]);
   }
+  // A popup item is an NSPopUpButton showing the current value; trailing actions report menu actions and keep the value.
+  NSDictionary *(^popupOptions)(NSString *) = ^NSDictionary *(NSString *value) {
+    return @{ @"windowStyle": @{ @"toolbarItems": @[@{ @"id": @"branch", @"type": @"popup", @"label": @"Branch", @"enabled": @YES, @"selectedValue": value,
+      @"options": @[@{ @"value": @"main", @"label": @"main", @"systemImageName": @"arrow.triangle.branch" }, @{ @"value": @"dev", @"label": @"dev" }],
+      @"menuItems": @[@{ @"id": @"new-branch", @"title": @"New Branch…" }] }] } };
+  };
+  [manager applyToolbarItemsFromOptions:popupOptions(@"dev") toWindow:window identifier:@"brightness-probe"];
+  NSToolbarItem *branch = toolbarItem(@"branch");
+  NSPopUpButton *branchPopup = (NSPopUpButton *)branch.view;
+  assert([branchPopup isKindOfClass:NSPopUpButton.class] && !branchPopup.pullsDown);
+  assert([branchPopup.titleOfSelectedItem isEqual:@"dev"] && branchPopup.numberOfItems == 4 && branchPopup.itemArray[2].isSeparatorItem);
+  [events removeAllObjects];
+  [branchPopup selectItemAtIndex:0];
+  [branchPopup sendAction:branchPopup.action to:branchPopup.target];
+  assert([events.lastObject[@"type"] isEqual:@"toolbarSelectionChanged"] && [events.lastObject[@"value"] isEqual:@"main"] && [events.lastObject[@"itemId"] isEqual:@"branch"]);
+  [branchPopup selectItemAtIndex:3];
+  [branchPopup sendAction:branchPopup.action to:branchPopup.target];
+  assert([events.lastObject[@"type"] isEqual:@"toolbarMenuAction"] && [events.lastObject[@"action"][@"itemId"] isEqual:@"new-branch"]);
+  assert(events.count == 2 && [branchPopup.titleOfSelectedItem isEqual:@"main"]);
+  for (NSString *value in @[@"main", @"dev"]) {
+    [manager applyToolbarItemsFromOptions:popupOptions(value) toWindow:window identifier:@"brightness-probe"];
+    assert(toolbarItem(@"branch") == branch && branch.view == branchPopup && [branchPopup.titleOfSelectedItem isEqual:value]);
+  }
   // A subtitle sits under the title; an empty one removes it.
   for (NSString *subtitle in @[@"main ↑1", @""]) {
     [manager setWindowOptions:@"brightness-probe" optionsJson:SparkJSON(@{ @"subtitle": subtitle }) resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
