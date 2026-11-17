@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
 import path from "node:path";
@@ -20,6 +20,7 @@ for (const relative of ["src/functions.ts", "lib/module/functions.js"]) {
     runInNewContext(code, {
       exports, global: { __OPSQLiteProxy: {} },
       require: (name: string) => {
+        if (/^\.\/rollback(\.js)?$/.test(name)) return { rollbackAndRethrow() {} };
         if (name !== "react-native") throw new Error(`Unexpected runtime import ${name}`);
         return { Platform: platform, NativeModules: { OPSQLite: { getDylibPath: (...args: unknown[]) => { calls.push(args); return result; } } } };
       },
@@ -43,7 +44,16 @@ test.skipIf(process.platform !== "darwin")("SQLite UTF-8 paths compile under C++
   const temporary = mkdtempSync(path.join(tmpdir(), "spark-sqlite-unicode-"));
   try {
     const binary = path.join(temporary, "test");
-    execFileSync("clang++", ["-std=c++20", "-Werror=deprecated-declarations", "-I", path.resolve(import.meta.dirname, "../patches/windows/sqlite/windows/SparkOPSQLite"), path.resolve(import.meta.dirname, "windows-sqlite.native.cpp"), "-o", binary]);
+    execFileSync("clang++", ["-std=c++20", "-Werror=deprecated-declarations", "-I", path.resolve(import.meta.dirname, "../patches/windows/sqlite/cpp"), path.resolve(import.meta.dirname, "windows-sqlite.native.cpp"), "-o", binary]);
     execFileSync(binary, [temporary]);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
+});
+
+test("every header the SQLite patch includes from cpp/ ships in cpp/, so macOS builds it too", () => {
+  const added = new Set<string>();
+  for (const file of ["OPBridge.cpp", "OPSqlite.cpp", "OPUtils.cpp"]) {
+    for (const [, header] of readFileSync(path.join(directory, "cpp", file), "utf8").matchAll(/^#include "([^"]+)"/gm)) added.add(header!);
+  }
+  expect(added).toContain("SparkWindowsPath.h");
+  for (const header of added) expect(existsSync(path.join(directory, "cpp", header)), header).toBe(true);
 });

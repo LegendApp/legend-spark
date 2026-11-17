@@ -13,7 +13,7 @@
   },
   "private": true,
   "peerDependencies": {
-    "@op-engineering/op-sqlite": "18.2.1"
+    "@op-engineering/op-sqlite": "19.0.5"
   },
   "peerDependenciesMeta": {
     "@op-engineering/op-sqlite": {

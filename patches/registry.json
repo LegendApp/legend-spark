@@ -9,6 +9,12 @@
           "minSpark": "0.0.4",
           "patch": "workspace/op-engineering-op-sqlite@18.2.1.patch",
           "sha256": "b25d750bf7cefb93080bea9cc408c9b81e48d9256fbffc14ad09990287c5c578"
+        },
+        {
+          "version": "19.0.5",
+          "minSpark": "0.0.4",
+          "patch": "workspace/op-engineering-op-sqlite@19.0.5.patch",
+          "sha256": "eaab348b2fba017b6304c2149906c845eaabecdd69122de514c04641969d8830"
         }
       ]
     },

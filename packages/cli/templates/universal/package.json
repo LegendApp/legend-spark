@@ -48,7 +48,7 @@
     "@expo/cli": "55.0.37",
     "react-native-nitro-modules": "0.37.0",
     "react-native-webview": "17.1.0",
-    "@op-engineering/op-sqlite": "18.2.1",
+    "@op-engineering/op-sqlite": "19.0.5",
     "expo-asset": "55.0.20",
     "expo-constants": "55.0.17",
     "expo-file-system": "55.0.26",

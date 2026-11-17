@@ -247,7 +247,7 @@ No framework native methods are exposed to web pages automatically. Define an
 explicit navigation policy and expose only intended operations in any message
 handler. It uses WebKit on macOS, not Chromium.
 
-SQLite uses @op-engineering/op-sqlite 18.2.1 with plain SQLite behind a Spark-owned
+SQLite uses @op-engineering/op-sqlite 19.0.5 with plain SQLite behind a Spark-owned
 query/transaction contract. openDatabase requires a simple .sqlite filename and
 places it in the current project's data directory:
 

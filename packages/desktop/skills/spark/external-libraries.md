@@ -109,7 +109,7 @@ Version-matched copy of the integration table for this Spark release. Import eac
 
 ## Optional backend dependencies
 
-Apps using `/markdown`, `/html`, `/webview`, or `/sqlite` must install the matching optional peer: `react-native-enriched-markdown@1.1.1`, `react-native-enriched-html@1.1.1`, `react-native-webview@17.1.0`, or `@op-engineering/op-sqlite@18.2.1`, and keep the SDK's overrides for WebView and SQLite (see [UPGRADING.md](UPGRADING.md)). `spark doctor` reports missing declarations. Universal apps targeting Windows exclude `react-native-enriched-html` and `react-native-enriched-markdown` in `expoByPlatform.windows.autolinking.exclude` in `desktop.config.json`; they have no Windows implementation. Spark applies the Enriched Markdown/HTML compatibility patches automatically; no package-manager patch declaration is needed.
+Apps using `/markdown`, `/html`, `/webview`, or `/sqlite` must install the matching optional peer: `react-native-enriched-markdown@1.1.1`, `react-native-enriched-html@1.1.1`, `react-native-webview@17.1.0`, or `@op-engineering/op-sqlite@19.0.5`, and keep the SDK's overrides for WebView and SQLite (see [UPGRADING.md](UPGRADING.md)). `spark doctor` reports missing declarations. Universal apps targeting Windows exclude `react-native-enriched-html` and `react-native-enriched-markdown` in `expoByPlatform.windows.autolinking.exclude` in `desktop.config.json`; they have no Windows implementation. Spark applies the Enriched Markdown/HTML compatibility patches automatically; no package-manager patch declaration is needed.
 
 ## Windows
 

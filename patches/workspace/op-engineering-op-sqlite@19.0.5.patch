@@ -1,0 +1,809 @@
+diff --git a/cpp/OPBridge.cpp b/cpp/OPBridge.cpp
+index 88da1797..85370202 100644
+--- a/cpp/OPBridge.cpp
++++ b/cpp/OPBridge.cpp
+@@ -1,3 +1,4 @@
++#include "SparkWindowsPath.h"
+ // This file contains pure sqlite operations without JSI interaction
+ // Allows a clear defined boundary between the JSI and the SQLite operations
+ // so that threading operations are safe and contained within OPDatabase
+@@ -119,7 +120,7 @@ std::string opsqlite_get_db_path(std::string const &db_name,
+   }
+ 
+   // Will return false if the directory already exists, no need to check
+-  std::filesystem::create_directories(location);
++  std::filesystem::create_directories(SparkWindowsPath(location));
+ 
+   if (!location.empty() && location.back() != '/') {
+     return location + "/" + db_name;
+@@ -209,7 +210,7 @@ void create_dirs_if_needed(const std::string &path) {
+   }
+ 
+   // Extract directory part from path (exclude filename)
+-  std::filesystem::path fs_path(path);
++  auto fs_path = SparkWindowsPath(path);
+   auto dir = fs_path.parent_path();
+   if (!dir.empty()) {
+     std::filesystem::create_directories(dir);
+@@ -244,7 +245,7 @@ void opsqlite_remove(sqlite3 *db, std::string const &name,
+     throw std::runtime_error("op-sqlite: db file not found:" + db_path);
+   }
+ 
+-  remove(db_path.c_str());
++  std::filesystem::remove(SparkWindowsPath(db_path));
+ }
+ 
+ void opsqlite_remove_v2(sqlite3 *db, std::string const &path) {
+@@ -254,7 +255,7 @@ void opsqlite_remove_v2(sqlite3 *db, std::string const &path) {
+     throw std::runtime_error("[op-sqlite] db file not found: " + path);
+   }
+ 
+-  remove(path.c_str());
++  std::filesystem::remove(SparkWindowsPath(path));
+ }
+ 
+ BridgeResult opsqlite_execute_prepared_statement(
+diff --git a/cpp/OPBridge.hpp b/cpp/OPBridge.hpp
+index 921965b2..44bf8475 100644
+--- a/cpp/OPBridge.hpp
++++ b/cpp/OPBridge.hpp
+@@ -25,7 +25,7 @@ typedef std::function<void(std::string dbName)> RollbackCallback;
+ // Path to the optional loadable extension, set once in install() and
+ // shared by every subsequent open() call instead of being threaded through
+ // as a parameter.
+-extern std::string _sqlite_vec_path;
++extern OP_SQLITE_CONTEXT_LOCAL std::string _sqlite_vec_path;
+ 
+ std::string opsqlite_get_db_path(std::string const &db_name,
+                                  std::string const &location);
+diff --git a/cpp/OPSqlite.cpp b/cpp/OPSqlite.cpp
+index 265b5039..425899d7 100644
+--- a/cpp/OPSqlite.cpp
++++ b/cpp/OPSqlite.cpp
+@@ -1,3 +1,4 @@
++#include "SparkWindowsPath.h"
+ #include "OPSqlite.hpp"
+ #include "OPDatabase.hpp"
+ #include "OPDumbHostObject.hpp"
+@@ -21,10 +22,10 @@ namespace opsqlite {
+ namespace jsi = facebook::jsi;
+ namespace react = facebook::react;
+ 
+-std::string _base_path;
+-std::string _sqlite_vec_path;
+-std::shared_ptr<react::CallInvoker> invoker;
+-std::shared_ptr<std::atomic<bool>> generation_alive;
++OP_SQLITE_CONTEXT_LOCAL std::string _base_path;
++OP_SQLITE_CONTEXT_LOCAL std::string _sqlite_vec_path;
++OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<react::CallInvoker> invoker;
++OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<std::atomic<bool>> generation_alive;
+ 
+ // Each platform module calls its own invalidate() lifecycle hook when React
+ // Native tears down the JS context (CodePush/Hot Reload, or any other
+@@ -88,7 +89,7 @@ install(jsi::Runtime &rt, const std::shared_ptr<react::CallInvoker> &invoker,
+     if (!location.empty()) {
+       if (location == ":memory:") {
+         path = ":memory:";
+-      } else if (location.rfind('/', 0) == 0) {
++      } else if (SparkWindowsPath(location).is_absolute()) {
+         path = location;
+       } else {
+         path = path + "/" + location;
+diff --git a/cpp/OPSqlite.hpp b/cpp/OPSqlite.hpp
+index 8e819037..62ba09bd 100644
+--- a/cpp/OPSqlite.hpp
++++ b/cpp/OPSqlite.hpp
+@@ -3,7 +3,9 @@
+ #include <ReactCommon/CallInvoker.h>
+ #include <atomic>
+ #include <jsi/jsi.h>
++#ifndef _WIN32
+ #include <jsi/jsilib.h>
++#endif
+ #include <memory>
+ 
+ namespace opsqlite {
+diff --git a/cpp/OPTypes.hpp b/cpp/OPTypes.hpp
+index bb84204e..b6349834 100644
+--- a/cpp/OPTypes.hpp
++++ b/cpp/OPTypes.hpp
+@@ -1,3 +1,8 @@
++#ifdef _WIN32
++#define OP_SQLITE_CONTEXT_LOCAL thread_local
++#else
++#define OP_SQLITE_CONTEXT_LOCAL
++#endif
+ #pragma once
+ 
+ #include <ReactCommon/CallInvoker.h>
+@@ -12,7 +17,7 @@
+ 
+ namespace opsqlite {
+ 
+-extern std::shared_ptr<facebook::react::CallInvoker> invoker;
++extern OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<facebook::react::CallInvoker> invoker;
+ 
+ // Liveness of the current JS runtime generation. Replaced by install() and
+ // cleared by invalidate(), so each generation gets its own flag rather than
+@@ -25,7 +30,7 @@ extern std::shared_ptr<facebook::react::CallInvoker> invoker;
+ // generations briefly overlap, might already have been reassigned to the
+ // incoming generation's flag by the time the outgoing generation's
+ // invalidate() runs.
+-extern std::shared_ptr<std::atomic<bool>> generation_alive;
++extern OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<std::atomic<bool>> generation_alive;
+ 
+ /// A failure reported by SQLite itself, carrying the result codes of the call
+ /// that failed.
+diff --git a/cpp/OPUtils.cpp b/cpp/OPUtils.cpp
+index f4bdbccd..8327bf3c 100644
+--- a/cpp/OPUtils.cpp
++++ b/cpp/OPUtils.cpp
+@@ -1,3 +1,4 @@
++#include "SparkWindowsPath.h"
+ 
+ #include "OPUtils.hpp"
+ #include "OPSmartHostObject.hpp"
+@@ -322,7 +323,7 @@ void to_batch_arguments(jsi::Runtime &rt, jsi::Array const &tuples,
+ #ifndef OP_SQLITE_USE_LIBSQL
+ BatchResult import_sql_file(sqlite3 *db, std::string path) {
+   std::string line;
+-  std::ifstream sqFile(path);
++  std::ifstream sqFile(SparkWindowsPath(path));
+   if (!sqFile.is_open()) {
+     throw std::runtime_error("Could not open file: " + path);
+   }
+@@ -348,13 +349,11 @@ BatchResult import_sql_file(sqlite3 *db, std::string path) {
+ #endif
+ 
+ bool folder_exists(const std::string &name) {
+-  struct stat buffer;
+-  return (stat(name.c_str(), &buffer) == 0);
++  return std::filesystem::exists(SparkWindowsPath(name));
+ }
+ 
+ bool file_exists(const std::string &path) {
+-  struct stat buffer;
+-  return (stat(path.c_str(), &buffer) == 0);
++  return std::filesystem::exists(SparkWindowsPath(path));
+ }
+ 
+ jsi::Value create_js_error(jsi::Runtime &rt, const std::string &message,
+diff --git a/cpp/SparkWindowsPath.h b/cpp/SparkWindowsPath.h
+new file mode 100644
+index 00000000..52b0a6aa
+--- /dev/null
++++ b/cpp/SparkWindowsPath.h
+@@ -0,0 +1,7 @@
++#pragma once
++#include <filesystem>
++#include <string>
++
++inline std::filesystem::path SparkWindowsPath(std::string const &value) {
++  return std::filesystem::path(std::u8string(value.begin(), value.end()));
++}
+diff --git a/lib/module/functions.js b/lib/module/functions.js
+index db751df6..a5f5ef91 100644
+--- a/lib/module/functions.js
++++ b/lib/module/functions.js
+@@ -282,7 +282,9 @@ export const moveAssetsDatabase = async args => {
+  * @returns
+  */
+ export const getDylibPath = (bundle, name) => {
+-  return NativeModules.OPSQLite.getDylibPath(bundle, name);
++  const result = NativeModules.OPSQLite.getDylibPath(bundle, name);
++  if (Platform.OS === "windows" && !result) throw new Error("Windows DLL lookup requires an empty bundle, a simple library filename, and an accessible app executable");
++  return result;
+ };
+ export const isSQLCipher = () => {
+   return OPSQLite.isSQLCipher();
+diff --git a/package.json b/package.json
+index 99d7cde2..d4568cc8 100644
+--- a/package.json
++++ b/package.json
+@@ -39,13 +39,13 @@
+     "!**/__tests__",
+     "!**/__fixtures__",
+     "!**/__mocks__",
+-    "!**/.*"
++    "!**/.*",
++    "windows"
+   ],
+   "scripts": {
+     "test:node": "yarn workspace node test",
+     "example": "yarn workspace op_sqlite_example",
+     "typecheck": "tsc",
+-    "prepare": "bob build && yarn build:node",
+     "build:node": "yarn workspace node build",
+     "build:turso": "./scripts/build-turso-binaries.sh",
+     "pods": "cd example && yarn pods",
+@@ -145,5 +145,9 @@
+     "type": "turbo-module",
+     "version": "0.52.1"
+   },
+-  "packageManager": "yarn@4.18.0"
++  "packageManager": "yarn@4.18.0",
++  "spark": {
++    "sdk": true,
++    "upstreamIntegrity": "sha512-sG0TP2K+x5Ti4wpjMBjSCyIMpKtbHYwYLT+jySMFef4VdPjId+FMIDsxHrWpIfpYOr9BjrMK1+pdAefeSSTjcw=="
++  }
+ }
+diff --git a/react-native.config.js b/react-native.config.js
+index 884ef1ae..3e0f5563 100644
+--- a/react-native.config.js
++++ b/react-native.config.js
+@@ -70,3 +70,7 @@ try {
+ }
+ 
+ module.exports = {};
++
++module.exports.dependency ??= {}; module.exports.dependency.platforms ??= {};
++if (process.platform === "win32") module.exports.dependencies = { ...module.exports.dependencies, "react-native-windows": {} };
++module.exports.dependency.platforms.windows = {"sourceDir":"windows","solutionFile":"SparkOPSQLite.sln","projects":[{"projectFile":"SparkOPSQLite/SparkOPSQLite.vcxproj","directDependency":true}]};
+diff --git a/src/functions.ts b/src/functions.ts
+index d26722ef..ebf4e87a 100644
+--- a/src/functions.ts
++++ b/src/functions.ts
+@@ -368,7 +368,9 @@ export const moveAssetsDatabase = async (args: {
+  * @returns
+  */
+ export const getDylibPath = (bundle: string, name: string): string => {
+-  return NativeModules.OPSQLite.getDylibPath(bundle, name);
++  const result = NativeModules.OPSQLite.getDylibPath(bundle, name);
++  if (Platform.OS === "windows" && !result) throw new Error("Windows DLL lookup requires an empty bundle, a simple library filename, and an accessible app executable");
++  return result;
+ };
+ 
+ export const isSQLCipher = (): boolean => {
+diff --git a/windows/ExperimentalFeatures.props b/windows/ExperimentalFeatures.props
+new file mode 100644
+index 00000000..d7b6c404
+--- /dev/null
++++ b/windows/ExperimentalFeatures.props
+@@ -0,0 +1,33 @@
++<?xml version="1.0" encoding="utf-8"?>
++<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++
++  <PropertyGroup Label="Microsoft.ReactNative Experimental Features">
++    <!--
++      Required for building a New Architecture project.
++
++      Library projects can change this value to test against Old and New
++      Architectures when building the library project's local sln file.
++
++      Otherwise this value will be decided by the consuming RNW app.
++
++      See https://microsoft.github.io/react-native-windows/docs/new-architecture
++    -->
++    <RnwNewArch>true</RnwNewArch>
++
++    <!--
++      Changes compilation to assume use of Microsoft.ReactNative NuGet packages
++      instead of building the framework from source. Defaults to true.
++
++      This is set during library project creation and is used when building
++      the library project's local sln file.
++
++      Otherwise this value will be decided by the consuming RNW app.
++
++      See https://microsoft.github.io/react-native-windows/docs/nuget
++    -->
++    <UseExperimentalNuget>true</UseExperimentalNuget>
++
++    <ReactExperimentalFeaturesSet>true</ReactExperimentalFeaturesSet>
++  </PropertyGroup>
++
++</Project>
+diff --git a/windows/LICENSE b/windows/LICENSE
+new file mode 100644
+index 00000000..b4f554e2
+--- /dev/null
++++ b/windows/LICENSE
+@@ -0,0 +1,25 @@
++The MIT License (MIT)
++
++Copyright (c) Microsoft Corporation and contributors. All rights reserved.
++
++Portions derived from React Native:
++
++Copyright (c) 2015-present, Facebook, Inc.
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/windows/SparkOPSQLite/ReactPackageProvider.cpp b/windows/SparkOPSQLite/ReactPackageProvider.cpp
+new file mode 100644
+index 00000000..bb3b576a
+--- /dev/null
++++ b/windows/SparkOPSQLite/ReactPackageProvider.cpp
+@@ -0,0 +1,20 @@
++#include "pch.h"
++
++#include "ReactPackageProvider.h"
++#if __has_include("ReactPackageProvider.g.cpp")
++#include "ReactPackageProvider.g.cpp"
++#endif
++
++#include "SparkOPSQLite.h"
++
++using namespace winrt::Microsoft::ReactNative;
++
++namespace winrt::SparkOPSQLite::implementation
++{
++
++void ReactPackageProvider::CreatePackage(IReactPackageBuilder const &packageBuilder) noexcept
++{
++  AddAttributedModules(packageBuilder, true);
++}
++
++} // namespace winrt::SparkOPSQLite::implementation
+diff --git a/windows/SparkOPSQLite/ReactPackageProvider.h b/windows/SparkOPSQLite/ReactPackageProvider.h
+new file mode 100644
+index 00000000..60995549
+--- /dev/null
++++ b/windows/SparkOPSQLite/ReactPackageProvider.h
+@@ -0,0 +1,24 @@
++#pragma once
++
++#include "ReactPackageProvider.g.h"
++
++using namespace winrt::Microsoft::ReactNative;
++
++namespace winrt::SparkOPSQLite::implementation
++{
++
++struct ReactPackageProvider : ReactPackageProviderT<ReactPackageProvider>
++{
++  ReactPackageProvider() = default;
++
++  void CreatePackage(IReactPackageBuilder const &packageBuilder) noexcept;
++};
++
++} // namespace winrt::SparkOPSQLite::implementation
++
++namespace winrt::SparkOPSQLite::factory_implementation
++{
++
++struct ReactPackageProvider : ReactPackageProviderT<ReactPackageProvider, implementation::ReactPackageProvider> {};
++
++} // namespace winrt::SparkOPSQLite::factory_implementation
+diff --git a/windows/SparkOPSQLite/ReactPackageProvider.idl b/windows/SparkOPSQLite/ReactPackageProvider.idl
+new file mode 100644
+index 00000000..797d2c95
+--- /dev/null
++++ b/windows/SparkOPSQLite/ReactPackageProvider.idl
+@@ -0,0 +1,9 @@
++namespace SparkOPSQLite
++{
++  [webhosthidden]
++  [default_interface]
++  runtimeclass ReactPackageProvider : Microsoft.ReactNative.IReactPackageProvider
++  {
++    ReactPackageProvider();
++  };
++}
+diff --git a/windows/SparkOPSQLite/SparkOPSQLite.cpp b/windows/SparkOPSQLite/SparkOPSQLite.cpp
+new file mode 100644
+index 00000000..7378fdda
+--- /dev/null
++++ b/windows/SparkOPSQLite/SparkOPSQLite.cpp
+@@ -0,0 +1,2 @@
++#include "pch.h"
++#include "SparkOPSQLite.h"
+diff --git a/windows/SparkOPSQLite/SparkOPSQLite.def b/windows/SparkOPSQLite/SparkOPSQLite.def
+new file mode 100644
+index 00000000..24e7c123
+--- /dev/null
++++ b/windows/SparkOPSQLite/SparkOPSQLite.def
+@@ -0,0 +1,3 @@
++﻿EXPORTS
++DllCanUnloadNow = WINRT_CanUnloadNow                    PRIVATE
++DllGetActivationFactory = WINRT_GetActivationFactory    PRIVATE
+diff --git a/windows/SparkOPSQLite/SparkOPSQLite.h b/windows/SparkOPSQLite/SparkOPSQLite.h
+new file mode 100644
+index 00000000..104df0ab
+--- /dev/null
++++ b/windows/SparkOPSQLite/SparkOPSQLite.h
+@@ -0,0 +1,57 @@
++#pragma once
++#include "NativeModules.h"
++#include <JSI/JsiApiContext.h>
++#include <OPSqlite.hpp>
++#include <filesystem>
++#include <shlobj.h>
++#include <winrt/Windows.Security.Cryptography.h>
++#include <winrt/Windows.Security.Cryptography.Core.h>
++#pragma comment(lib, "Shell32.lib")
++REACT_MODULE(SparkOPSQLiteModule, L"OPSQLite")
++struct SparkOPSQLiteModule {
++  winrt::Microsoft::ReactNative::ReactContext context;
++  std::shared_ptr<std::atomic<bool>> generation;
++  std::string databasePath;
++  REACT_INIT(Initialize) void Initialize(winrt::Microsoft::ReactNative::ReactContext const &value) noexcept { context = value; }
++  ~SparkOPSQLiteModule() { if (generation) opsqlite::invalidate(generation); }
++  static std::filesystem::path Directory() {
++    wchar_t project[32768]{}; if (!GetEnvironmentVariableW(L"SPARK_PROJECT_ID", project, 32768)) throw winrt::hresult_invalid_argument(L"Missing project identity");
++    using namespace winrt::Windows::Security::Cryptography;
++    auto hash = Core::HashAlgorithmProvider::OpenAlgorithm(Core::HashAlgorithmNames::Sha256());
++    auto id = CryptographicBuffer::EncodeToHexString(hash.HashData(CryptographicBuffer::ConvertStringToBinary(project, BinaryStringEncoding::Utf8)));
++    PWSTR raw = nullptr; winrt::check_hresult(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &raw)); std::filesystem::path path(raw); CoTaskMemFree(raw);
++    path /= L"Spark"; path /= id.c_str(); path /= L"data"; std::filesystem::create_directories(path); return path;
++  }
++  REACT_SYNC_METHOD(getConstants) winrt::Microsoft::ReactNative::JSValueObject getConstants() noexcept { return {{"WINDOWS_DATABASE_PATH", databasePath}}; }
++  REACT_SYNC_METHOD(install) bool install() noexcept {
++    try {
++      if (generation) return true;
++      auto handle = context.Handle().JSRuntime(); if (!handle) return false;
++      auto &runtime = winrt::Microsoft::ReactNative::GetOrCreateContextRuntime(context, handle);
++      databasePath = winrt::to_string(Directory().wstring());
++      generation = opsqlite::install(runtime, context.CallInvoker(), databasePath.c_str(), ""); return true;
++    } catch (std::exception const &error) { OutputDebugStringA(error.what()); }
++    catch (winrt::hresult_error const &error) { OutputDebugStringW(error.message().c_str()); }
++    return false;
++  }
++  REACT_METHOD(moveAssetsDatabase) void moveAssetsDatabase(winrt::Microsoft::ReactNative::JSValueObject args, winrt::Microsoft::ReactNative::ReactPromise<bool> promise) noexcept {
++    try {
++      if (args.count("path") && !args.at("path").IsNull()) throw winrt::hresult_invalid_argument(L"Windows asset imports do not support custom paths");
++      auto filename = args.at("filename").AsString(); std::filesystem::path name(winrt::to_hstring(filename).c_str());
++      if (name.empty() || name.has_parent_path() || name == L"." || name == L".." || filename.find('\0') != std::string::npos) throw winrt::hresult_invalid_argument(L"Asset filename must be a simple filename");
++      wchar_t executable[32768]{}; GetModuleFileNameW(nullptr, executable, 32768);
++      auto source = std::filesystem::path(executable).parent_path() / L"Assets" / name, destination = Directory() / name;
++      auto overwrite = args.count("overwrite") && args.at("overwrite").AsBoolean();
++      promise.Resolve(std::filesystem::copy_file(source, destination, overwrite ? std::filesystem::copy_options::overwrite_existing : std::filesystem::copy_options::none));
++    } catch (std::exception const &error) { promise.Reject(error.what()); }
++    catch (winrt::hresult_error const &error) { promise.Reject(winrt::to_string(error.message()).c_str()); }
++  }
++  REACT_SYNC_METHOD(getDylibPath) std::string getDylibPath(std::string bundle, std::string name) noexcept {
++    try {
++      std::filesystem::path file(winrt::to_hstring(name).c_str());
++      if (!bundle.empty() || file.empty() || file.has_parent_path() || name == "." || name == ".." || name.find('\0') != std::string::npos) return {};
++      wchar_t executable[32768]{}; auto length = GetModuleFileNameW(nullptr, executable, 32768); if (!length || length >= 32768) return {};
++      return winrt::to_string((std::filesystem::path(executable).parent_path() / (file.wstring() + L".dll")).wstring());
++    } catch (...) { return {}; }
++  }
++};
+diff --git a/windows/SparkOPSQLite/SparkOPSQLite.rc b/windows/SparkOPSQLite/SparkOPSQLite.rc
+new file mode 100644
+index 00000000..23aece17
+--- /dev/null
++++ b/windows/SparkOPSQLite/SparkOPSQLite.rc
+@@ -0,0 +1,3 @@
++// Microsoft Visual C++ generated resource script.
++//
++#include "resource.h"
+diff --git a/windows/SparkOPSQLite/SparkOPSQLite.vcxproj b/windows/SparkOPSQLite/SparkOPSQLite.vcxproj
+new file mode 100644
+index 00000000..5e1cf83a
+--- /dev/null
++++ b/windows/SparkOPSQLite/SparkOPSQLite.vcxproj
+@@ -0,0 +1,148 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- This project was created with react-native-windows 0.81.35 -->
++<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <Import Project="$(SolutionDir)\ExperimentalFeatures.props" Condition="Exists('$(SolutionDir)\ExperimentalFeatures.props')" />
++  <PropertyGroup Label="Globals">
++    <CppWinRTOptimized>true</CppWinRTOptimized>
++    <MinimalCoreWin>true</MinimalCoreWin>
++    <ProjectGuid>{96CE5E20-C675-425D-B566-7D0C8263959F}</ProjectGuid>
++    <ProjectName>SparkOPSQLite</ProjectName>
++    <Keyword>Win32Proj</Keyword>
++    <RootNamespace>SparkOPSQLite</RootNamespace>
++    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
++    <DefaultLanguage>en-US</DefaultLanguage>
++    <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
++    <AppxPackage>false</AppxPackage>
++  </PropertyGroup>
++  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
++  <PropertyGroup Label="ReactNativeWindowsProps">
++    <ReactNativeWindowsDir Condition="'$(ReactNativeWindowsDir)' == ''">$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), 'node_modules\react-native-windows\package.json'))\node_modules\react-native-windows\</ReactNativeWindowsDir>
++    <RunAutolinkCheck>false</RunAutolinkCheck>
++  </PropertyGroup>
++  <Import Project="$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.WindowsSdk.Default.props" />
++  <ItemGroup Label="ProjectConfigurations">
++    <ProjectConfiguration Include="Debug|Win32">
++      <Configuration>Debug</Configuration>
++      <Platform>Win32</Platform>
++    </ProjectConfiguration>
++    <ProjectConfiguration Include="Release|Win32">
++      <Configuration>Release</Configuration>
++      <Platform>Win32</Platform>
++    </ProjectConfiguration>
++    <ProjectConfiguration Include="Debug|x64">
++      <Configuration>Debug</Configuration>
++      <Platform>x64</Platform>
++    </ProjectConfiguration>
++    <ProjectConfiguration Include="Release|x64">
++      <Configuration>Release</Configuration>
++      <Platform>x64</Platform>
++    </ProjectConfiguration>
++    <ProjectConfiguration Include="Debug|ARM64">
++      <Configuration>Debug</Configuration>
++      <Platform>ARM64</Platform>
++    </ProjectConfiguration>
++    <ProjectConfiguration Include="Release|ARM64">
++      <Configuration>Release</Configuration>
++      <Platform>ARM64</Platform>
++    </ProjectConfiguration>
++  </ItemGroup>
++  <PropertyGroup Label="Configuration">
++    <ConfigurationType>DynamicLibrary</ConfigurationType>
++    <CharacterSet>Unicode</CharacterSet>
++    <PlatformToolset>v145</PlatformToolset>
++    <GenerateManifest>false</GenerateManifest>
++  </PropertyGroup>
++  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
++    <UseDebugLibraries>true</UseDebugLibraries>
++  </PropertyGroup>
++  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
++    <UseDebugLibraries>false</UseDebugLibraries>
++    <WholeProgramOptimization>true</WholeProgramOptimization>
++  </PropertyGroup>
++  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
++  <ImportGroup Label="ExtensionSettings">
++  </ImportGroup>
++  <ImportGroup Label="PropertySheets">
++    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
++  </ImportGroup>
++  <ImportGroup Label="ReactNativeWindowsPropertySheets">
++    <Import Project="$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.props" Condition="Exists('$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.props')" />
++  </ImportGroup>
++  <ItemDefinitionGroup>
++    <ClCompile>
++      <PrecompiledHeader>Use</PrecompiledHeader>
++      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
++      <PrecompiledHeaderOutputFile>$(IntDir)pch.pch</PrecompiledHeaderOutputFile>
++      <WarningLevel>Level4</WarningLevel>
++      <SDLCheck>true</SDLCheck>
++      <LanguageStandard>stdcpp20</LanguageStandard>
++      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
++      <DisableSpecificWarnings>4453;28204</DisableSpecificWarnings>
++      <PreprocessorDefinitions>_WINRT_DLL;NOMINMAX;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;SQLITE_THREADSAFE=1;SQLITE_ENABLE_FTS5;SQLITE_ENABLE_RTREE;SQLITE_ENABLE_COLUMN_METADATA;%(PreprocessorDefinitions)</PreprocessorDefinitions>
++      <AdditionalUsingDirectories>$(WindowsSDK_WindowsMetadata);$(AdditionalUsingDirectories)</AdditionalUsingDirectories>
++      <AdditionalIncludeDirectories>
++        $(MSBuildThisFileDirectory);$(MSBuildThisFileDirectory)..\..\cpp\;
++        %(AdditionalIncludeDirectories)
++      </AdditionalIncludeDirectories>
++    </ClCompile>
++    <Link>
++      <AdditionalDependencies>shell32.lib;user32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
++      <SubSystem>Console</SubSystem>
++      <GenerateWindowsMetadata>true</GenerateWindowsMetadata>
++      <ModuleDefinitionFile>SparkOPSQLite.def</ModuleDefinitionFile>
++    </Link>
++  </ItemDefinitionGroup>
++  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
++    <ClCompile>
++      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
++    </ClCompile>
++  </ItemDefinitionGroup>
++  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
++    <ClCompile>
++      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
++    </ClCompile>
++  </ItemDefinitionGroup>
++  <PropertyGroup Label="UserMacros" />
++  <ItemGroup>
++    <ClInclude Include="SparkOPSQLite.h" />
++    <ClInclude Include="ReactPackageProvider.h">
++      <DependentUpon>ReactPackageProvider.idl</DependentUpon>
++    </ClInclude>
++    <ClInclude Include="resource.h" />
++    <ClInclude Include="pch.h" />
++    <ClInclude Include="targetver.h" />
++  </ItemGroup>
++  <ItemGroup>
++    <ClCompile Include="SparkOPSQLite.cpp" />
++    <ClCompile Include="pch.cpp">
++      <PrecompiledHeader>Create</PrecompiledHeader>
++    </ClCompile>
++    <ClCompile Include="ReactPackageProvider.cpp">
++      <DependentUpon>ReactPackageProvider.idl</DependentUpon>
++    </ClCompile>
++    <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
++  </ItemGroup>
++  <ItemGroup>
++    <Midl Include="ReactPackageProvider.idl" />
++  </ItemGroup>
++  <ItemGroup>
++    <ResourceCompile Include="SparkOPSQLite.rc" />
++  </ItemGroup>
++  <ItemGroup>
++<ClCompile Include="$(MSBuildThisFileDirectory)..\..\cpp\*.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
++<ClCompile Include="$(MSBuildThisFileDirectory)..\..\cpp\sqlite3.c"><PrecompiledHeader>NotUsing</PrecompiledHeader><CompileAs>CompileAsC</CompileAs></ClCompile>
++</ItemGroup>
++<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
++  <ImportGroup Label="ReactNativeWindowsTargets">
++    <Import Project="$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.targets" Condition="Exists('$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.targets')" />
++  </ImportGroup>
++  <ItemGroup>
++  </ItemGroup>
++  <Target Name="EnsureReactNativeWindowsTargets" BeforeTargets="PrepareForBuild">
++    <PropertyGroup>
++      <ErrorText>This project references targets in your node_modules\react-native-windows folder. The missing file is {0}.</ErrorText>
++    </PropertyGroup>
++    <Error Condition="!Exists('$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.props')" Text="$([System.String]::Format('$(ErrorText)', '$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.props'))" />
++    <Error Condition="!Exists('$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.CppLib.targets'))" />
++  </Target>
++</Project>
+\ No newline at end of file
+diff --git a/windows/SparkOPSQLite/SparkOPSQLite.vcxproj.filters b/windows/SparkOPSQLite/SparkOPSQLite.vcxproj.filters
+new file mode 100644
+index 00000000..c99c53c0
+--- /dev/null
++++ b/windows/SparkOPSQLite/SparkOPSQLite.vcxproj.filters
+@@ -0,0 +1,44 @@
++﻿<?xml version="1.0" encoding="utf-8"?>
++<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <ItemGroup>
++    <Filter Include="Source Files">
++      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
++      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
++    </Filter>
++    <Filter Include="Header Files">
++      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
++      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
++    </Filter>
++    <Filter Include="Resource Files">
++      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
++      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
++    </Filter>
++  </ItemGroup>
++  <ItemGroup>
++    <ClInclude Include="targetver.h">
++      <Filter>Header Files</Filter>
++    </ClInclude>
++    <ClInclude Include="resource.h">
++      <Filter>Header Files</Filter>
++    </ClInclude>
++    <ClInclude Include="SparkOPSQLite.h">
++      <Filter>Header Files</Filter>
++    </ClInclude>
++    <ClInclude Include="pch.h">
++      <Filter>Header Files</Filter>
++    </ClInclude>
++  </ItemGroup>
++  <ItemGroup>
++    <ClCompile Include="SparkOPSQLite.cpp">
++      <Filter>Source Files</Filter>
++    </ClCompile>
++    <ClCompile Include="pch.cpp">
++      <Filter>Source Files</Filter>
++    </ClCompile>
++  </ItemGroup>
++  <ItemGroup>
++    <ResourceCompile Include="SparkOPSQLite.rc">
++      <Filter>Resource Files</Filter>
++    </ResourceCompile>
++  </ItemGroup>
++</Project>
+\ No newline at end of file
+diff --git a/windows/SparkOPSQLite/pch.cpp b/windows/SparkOPSQLite/pch.cpp
+new file mode 100644
+index 00000000..1d9f38c5
+--- /dev/null
++++ b/windows/SparkOPSQLite/pch.cpp
+@@ -0,0 +1 @@
++#include "pch.h"
+diff --git a/windows/SparkOPSQLite/pch.h b/windows/SparkOPSQLite/pch.h
+new file mode 100644
+index 00000000..61d356df
+--- /dev/null
++++ b/windows/SparkOPSQLite/pch.h
+@@ -0,0 +1,30 @@
++// pch.h : include file for standard system include files,
++// or project specific include files that are used frequently, but
++// are changed infrequently
++//
++
++#pragma once
++
++#include "targetver.h"
++
++#define NOMINMAX 1
++#define WIN32_LEAN_AND_MEAN 1
++#define WINRT_LEAN_AND_MEAN 1
++
++// Windows Header Files
++#include <windows.h>
++#undef GetCurrentTime
++#include <unknwn.h>
++
++// WinRT Header Files
++#include <winrt/base.h>
++#include <CppWinRTIncludes.h>
++#include <winrt/Microsoft.ReactNative.h>
++
++// C RunTime Header Files
++#include <malloc.h>
++#include <memory.h>
++#include <stdlib.h>
++#include <tchar.h>
++
++// Reference additional headers your project requires here
+diff --git a/windows/SparkOPSQLite/resource.h b/windows/SparkOPSQLite/resource.h
+new file mode 100644
+index 00000000..bb510d61
+--- /dev/null
++++ b/windows/SparkOPSQLite/resource.h
+@@ -0,0 +1,5 @@
++//
++// Microsoft Visual C++ generated include file.
++// Used by SparkOPSQLite.rc
++
++#pragma once
+diff --git a/windows/SparkOPSQLite/targetver.h b/windows/SparkOPSQLite/targetver.h
+new file mode 100644
+index 00000000..87c0086d
+--- /dev/null
++++ b/windows/SparkOPSQLite/targetver.h
+@@ -0,0 +1,8 @@
++#pragma once
++
++// Including SDKDDKVer.h defines the highest available Windows platform.
++
++// If you wish to build your application for a previous Windows platform, include WinSDKVer.h and
++// set the _WIN32_WINNT macro to the platform you wish to support before including SDKDDKVer.h.
++
++#include <SDKDDKVer.h>
+diff --git a/windows/SparkOPSQLite.sln b/windows/SparkOPSQLite.sln
+new file mode 100644
+index 00000000..38398062
+--- /dev/null
++++ b/windows/SparkOPSQLite.sln
+@@ -0,0 +1,43 @@
++﻿
++Microsoft Visual Studio Solution File, Format Version 12.00
++# Visual Studio Version 17
++VisualStudioVersion = 17.3.32929.385
++MinimumVisualStudioVersion = 10.0.40219.1
++Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SparkOPSQLite", "SparkOPSQLite\SparkOPSQLite.vcxproj", "{96CE5E20-C675-425D-B566-7D0C8263959F}"
++EndProject
++Global
++	GlobalSection(SolutionConfigurationPlatforms) = preSolution
++		Debug|x64 = Debug|x64
++		Debug|x86 = Debug|x86
++		Debug|ARM64 = Debug|ARM64
++		Release|x64 = Release|x64
++		Release|x86 = Release|x86
++		Release|ARM64 = Release|ARM64
++	EndGlobalSection
++	GlobalSection(ProjectConfigurationPlatforms) = postSolution
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|x64.ActiveCfg = Debug|x64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|x64.Build.0 = Debug|x64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|x64.Deploy.0 = Debug|x64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|x86.ActiveCfg = Debug|Win32
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|x86.Build.0 = Debug|Win32
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|x86.Deploy.0 = Debug|Win32
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|ARM64.ActiveCfg = Debug|ARM64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|ARM64.Build.0 = Debug|ARM64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Debug|ARM64.Deploy.0 = Debug|ARM64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|x64.ActiveCfg = Release|x64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|x64.Build.0 = Release|x64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|x64.Deploy.0 = Release|x64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|x86.ActiveCfg = Release|Win32
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|x86.Build.0 = Release|Win32
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|x86.Deploy.0 = Release|Win32
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|ARM64.ActiveCfg = Release|ARM64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|ARM64.Build.0 = Release|ARM64
++		{96CE5E20-C675-425D-B566-7D0C8263959F}.Release|ARM64.Deploy.0 = Release|ARM64
++	EndGlobalSection
++	GlobalSection(SolutionProperties) = preSolution
++		HideSolutionNode = FALSE
++	EndGlobalSection
++	GlobalSection(ExtensibilityGlobals) = postSolution
++		SolutionGuid = {D43FAD39-F619-437D-BB40-04A3982ACB6A}
++	EndGlobalSection
++EndGlobal

@@ -48,7 +48,7 @@
     "react-native-enriched-markdown": "1.1.1",
     "react-native-enriched-html": "1.1.1",
     "react-native-webview": "17.1.0",
-    "@op-engineering/op-sqlite": "18.2.1",
+    "@op-engineering/op-sqlite": "19.0.5",
     "react-native-mmkv": "4.3.2",
     "react-native-unistyles": "3.7.0",
     "react-native-quick-crypto": "1.1.9",

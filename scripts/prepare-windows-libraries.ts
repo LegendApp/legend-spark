@@ -87,31 +87,46 @@ export async function packWindowsLibraries(output: string) {
       // Spark uses the bundled SQLite backend. The opt-in libsql and Turso
       // binaries would push the archive past GitHub's 100 MB file limit.
       for (const dir of ["android/src/main/jniLibs", "android/src/main/tursoLibs", "ios/libsql_experimental.xcframework", "ios/turso_sdk_kit.xcframework"]) rmSync(path.join(stage, dir), { recursive: true });
-      const api = path.join(stage, "cpp/OPSqlite.cpp");
-      let apiSource = readFileSync(api, "utf8").replace("location.rfind('/', 0) == 0", "SparkWindowsPath(location).is_absolute()");
-      apiSource = '#include "SparkWindowsPath.h"\n' + apiSource;
-      // RNW runs each Hermes heap on its own JS thread. These upstream globals
-      // are only read on that owning thread; async DB operations capture them.
-      apiSource = apiSource.replace('std::string _base_path;', 'OP_SQLITE_CONTEXT_LOCAL std::string _base_path;')
-        .replace('std::string _sqlite_vec_path;', 'OP_SQLITE_CONTEXT_LOCAL std::string _sqlite_vec_path;')
-        .replace('std::shared_ptr<react::CallInvoker> invoker;', 'OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<react::CallInvoker> invoker;')
-        .replace('std::shared_ptr<std::atomic<bool>> generation_alive;', 'OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<std::atomic<bool>> generation_alive;');
-      writeFileSync(api, apiSource);
-      const types = path.join(stage, "cpp/OPTypes.hpp");
-      writeFileSync(types, '#ifdef _WIN32\n#define OP_SQLITE_CONTEXT_LOCAL thread_local\n#else\n#define OP_SQLITE_CONTEXT_LOCAL\n#endif\n' + readFileSync(types, "utf8")
-        .replace('extern std::shared_ptr<facebook::react::CallInvoker> invoker;', 'extern OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<facebook::react::CallInvoker> invoker;')
-        .replace('extern std::shared_ptr<std::atomic<bool>> generation_alive;', 'extern OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<std::atomic<bool>> generation_alive;'));
-      const header = path.join(stage, "cpp/OPSqlite.hpp");
-      writeFileSync(header, readFileSync(header, "utf8").replace('#include <jsi/jsilib.h>', '#ifndef _WIN32\n#include <jsi/jsilib.h>\n#endif'));
-      const bridgeHeader = path.join(stage, "cpp/OPBridge.hpp");
-      writeFileSync(bridgeHeader, readFileSync(bridgeHeader, "utf8").replace('extern std::string _sqlite_vec_path;', 'extern OP_SQLITE_CONTEXT_LOCAL std::string _sqlite_vec_path;'));
+      // Shared by macOS and Windows: the podspec compiles cpp/**, the vcxproj cpp/*.cpp.
+      cpSync(path.join(root, "patches/windows/sqlite/cpp"), path.join(stage, "cpp"), { recursive: true });
+      // Each anchor must match, so an upstream change fails the pack instead of shipping unpatched.
+      const edit = (relative: string, prefix: string, replacements: [string | RegExp, string][]) => {
+        const file = path.join(stage, "cpp", relative); let source = readFileSync(file, "utf8");
+        for (const [from, to] of replacements) {
+          const next = typeof from === "string" ? source.replaceAll(from, to) : source.replace(from, to);
+          if (next === source) throw new Error(`The pinned SQLite ${relative} changed: ${from}`);
+          source = next;
+        }
+        writeFileSync(file, prefix + source);
+      };
+      edit("OPSqlite.cpp", '#include "SparkWindowsPath.h"\n', [
+        // Only the first (bundled SQLite) open path; the second is libsql.
+        [/location\.rfind\('\/', 0\) == 0/, "SparkWindowsPath(location).is_absolute()"],
+        // RNW runs each Hermes heap on its own JS thread. These upstream globals
+        // are only read on that owning thread; async DB operations capture them.
+        ["std::string _base_path;", "OP_SQLITE_CONTEXT_LOCAL std::string _base_path;"],
+        ["std::string _sqlite_vec_path;", "OP_SQLITE_CONTEXT_LOCAL std::string _sqlite_vec_path;"],
+        ["std::shared_ptr<react::CallInvoker> invoker;", "OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<react::CallInvoker> invoker;"],
+        ["std::shared_ptr<std::atomic<bool>> generation_alive;", "OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<std::atomic<bool>> generation_alive;"],
+      ]);
+      edit("OPTypes.hpp", "#ifdef _WIN32\n#define OP_SQLITE_CONTEXT_LOCAL thread_local\n#else\n#define OP_SQLITE_CONTEXT_LOCAL\n#endif\n", [
+        ["extern std::shared_ptr<facebook::react::CallInvoker> invoker;", "extern OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<facebook::react::CallInvoker> invoker;"],
+        ["extern std::shared_ptr<std::atomic<bool>> generation_alive;", "extern OP_SQLITE_CONTEXT_LOCAL std::shared_ptr<std::atomic<bool>> generation_alive;"],
+      ]);
+      edit("OPSqlite.hpp", "", [["#include <jsi/jsilib.h>", "#ifndef _WIN32\n#include <jsi/jsilib.h>\n#endif"]]);
+      edit("OPBridge.hpp", "", [["extern std::string _sqlite_vec_path;", "extern OP_SQLITE_CONTEXT_LOCAL std::string _sqlite_vec_path;"]]);
       // SQLite accepts UTF-8 paths. std::filesystem/fstream on Windows need a
       // UTF-8 conversion to avoid interpreting those paths in the ANSI codepage.
-      const bridge = path.join(stage, "cpp/OPBridge.cpp"); let source = '#include "SparkWindowsPath.h"\n' + readFileSync(bridge, "utf8");
-      source = source.replaceAll("const char *errorMessage;", "std::string errorMessage;").replaceAll("const char *errorMessage = nullptr;", "std::string errorMessage;");
-      source = source.replaceAll("std::filesystem::create_directories(location)", "std::filesystem::create_directories(SparkWindowsPath(location))").replaceAll("std::filesystem::path fs_path(path)", "auto fs_path = SparkWindowsPath(path)").replaceAll("remove(db_path.c_str())", "std::filesystem::remove(SparkWindowsPath(db_path))").replaceAll("remove(path.c_str())", "std::filesystem::remove(SparkWindowsPath(path))");
-      writeFileSync(bridge, source);
-      const utils = path.join(stage, "cpp/OPUtils.cpp"); source = '#include "SparkWindowsPath.h"\n' + readFileSync(utils, "utf8"); source = source.replace("std::ifstream sqFile(path)", "std::ifstream sqFile(SparkWindowsPath(path))").replace(/struct stat buffer;\s*return \(stat\((name|path)\.c_str\(\), &buffer\) == 0\);/g, "return std::filesystem::exists(SparkWindowsPath($1));"); writeFileSync(utils, source);
+      edit("OPBridge.cpp", '#include "SparkWindowsPath.h"\n', [
+        ["std::filesystem::create_directories(location)", "std::filesystem::create_directories(SparkWindowsPath(location))"],
+        ["std::filesystem::path fs_path(path)", "auto fs_path = SparkWindowsPath(path)"],
+        ["remove(db_path.c_str())", "std::filesystem::remove(SparkWindowsPath(db_path))"],
+        ["remove(path.c_str())", "std::filesystem::remove(SparkWindowsPath(path))"],
+      ]);
+      edit("OPUtils.cpp", '#include "SparkWindowsPath.h"\n', [
+        ["std::ifstream sqFile(path)", "std::ifstream sqFile(SparkWindowsPath(path))"],
+        [/struct stat buffer;\s*return \(stat\((name|path)\.c_str\(\), &buffer\) == 0\);/g, "return std::filesystem::exists(SparkWindowsPath($1));"],
+      ]);
     }
     if (name === "react-native-webview") {
       const { parsePatch, applyPatch } = createRequire(import.meta.url)("diff");

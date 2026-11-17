@@ -19,7 +19,7 @@ On macOS settings, Spark SQLite, files and patched MMKV use `~/Library/Applicati
 - Settings values are finite JSON. Use `get(key, { decode })` to validate stored data on read; reads never repair corrupt data.
 - Observable files: `path` is a full absolute path including extension, and the parent directory must exist (`mkdir` first). Await `close()` before quitting, ideally in a `beforeQuit` guard. Use Legend State mutations; don't mutate `peek()` results. No remote sync: use Legend State sync for that.
 - Secure storage is the Expo SecureStore subset (`getItemAsync`, `setItemAsync`, `deleteItemAsync`, `isAvailableAsync`). Missing values are `null`. Only default options; authentication/service/access-group options reject. Windows limits values to 2560 bytes. Web has no secure storage (no localStorage fallback).
-- SQLite: `openDatabase` takes a simple `.sqlite` filename, not a path. Use `tx` inside `transaction`; direct calls on the database reject while a transaction is active. Integers beyond 2^53−1 reject by default; open with `{ integers: 'text' }` to read them as strings. Requires the optional peer `@op-engineering/op-sqlite@18.2.1`.
+- SQLite: `openDatabase` takes a simple `.sqlite` filename, not a path. Use `tx` inside `transaction`; direct calls on the database reject while a transaction is active. Integers beyond 2^53−1 reject by default; open with `{ integers: 'text' }` to read them as strings. Requires the optional peer `@op-engineering/op-sqlite@19.0.5`.
 
 ```ts
 import { createObservableSettings } from '@legendapp/spark/settings/observable';
