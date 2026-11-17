@@ -109,12 +109,15 @@ type ToolbarMenuItem =
   | (ToolbarMenuEntry & { type: "action" })
   | (ToolbarMenuEntry & { type: "checkbox"; checked: boolean })
   | (ToolbarMenuEntry & { type: "slider"; min: number; max: number; value: number; suffix?: string });
+type ToolbarPopupMenuItem = Extract<ToolbarMenuItem, { type: "separator" | "action" }>;
 export type MacOSToolbarItem =
   | (ToolbarEntry & { type: "button"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string })
   | (ToolbarEntry & { type: "menu"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; width?: number; items: readonly ToolbarMenuItem[] })
   | (ToolbarEntry & { type: "label"; text: string; width?: number })
   | (ToolbarEntry & { type: "search"; disabled?: boolean; collapses?: boolean; placeholder?: string; value?: string; width?: number })
   | (ToolbarEntry & { type: "segmented"; segments: readonly MacOSToolbarSegment[]; value: string | null })
+  /** An NSPopUpButton showing the current `value` (null shows nothing selected); choosing an option emits `toolbarSelectionChanged`. `items` (actions and separators) follow the options after a separator and emit `toolbarMenuAction`, leaving the value shown. */
+  | (ToolbarEntry & { type: "popup"; options: readonly MacOSToolbarSegment[]; value: string | null; items?: readonly ToolbarPopupMenuItem[]; disabled?: boolean; tooltip?: string; width?: number })
   /** An NSProgressIndicator: `value` from 0 to 1 is determinate; omitted or null is indeterminate (animating). `bar` (default) or `spinner`. Value changes update the item in place. */
   | (ToolbarEntry & { type: "progress"; value?: number | null; variant?: "bar" | "spinner"; width?: number });
 export interface MacOSToolbarOptions {

@@ -627,6 +627,19 @@ static BOOL LegendDictionaryHasKey(NSDictionary *dictionary, NSString *key)
 }
 
 // A number from 0 to 1 is determinate progress; anything else (null or absent) animates as indeterminate.
+// Shows `value` in a toolbar popup and remembers it, so an action item can put it back.
+static void LegendSelectPopupValue(NSPopUpButton *popup, id value)
+{
+  NSInteger index = -1;
+  for (NSMenuItem *item in popup.itemArray) {
+    if ([item.representedObject isKindOfClass:NSDictionary.class] && [item.representedObject[@"value"] isEqual:value]) { index = [popup indexOfItem:item]; break; }
+  }
+  [popup selectItemAtIndex:index];
+  NSMutableDictionary *metadata = [objc_getAssociatedObject(popup, &LegendToolbarControlMetadataKey) mutableCopy] ?: [NSMutableDictionary new];
+  metadata[@"value"] = index >= 0 ? value : @"";
+  objc_setAssociatedObject(popup, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 static void LegendApplyProgressValue(NSProgressIndicator *indicator, id value)
 {
   BOOL determinate = [value isKindOfClass:NSNumber.class];
@@ -1316,7 +1329,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   for (NSUInteger index = 0; inPlaceUpdate && index < configs.count; index++) {
     NSMutableDictionary *previous = [previousConfigs[index] mutableCopy];
     NSMutableDictionary *next = [configs[index] mutableCopy];
-    NSString *inPlaceKey = [next[@"type"] isEqual:@"menuButton"] ? @"menuItems" : [next[@"type"] isEqual:@"progress"] ? @"value" : nil;
+    NSString *inPlaceKey = [next[@"type"] isEqual:@"menuButton"] ? @"menuItems" : [next[@"type"] isEqual:@"progress"] ? @"value" : [next[@"type"] isEqual:@"popup"] ? @"selectedValue" : nil;
     if (inPlaceKey) {
       [previous removeObjectForKey:inPlaceKey];
       [next removeObjectForKey:inPlaceKey];
@@ -1326,8 +1339,8 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   self.toolbarItemConfigs[toolbar.identifier] = configs;
   if (inPlaceUpdate) {
     for (NSDictionary *config in configs) {
-      BOOL menu = [config[@"type"] isEqual:@"menuButton"], progress = [config[@"type"] isEqual:@"progress"];
-      if (!menu && !progress) continue;
+      BOOL menu = [config[@"type"] isEqual:@"menuButton"], progress = [config[@"type"] isEqual:@"progress"], popup = [config[@"type"] isEqual:@"popup"];
+      if (!menu && !progress && !popup) continue;
       NSString *itemId = config[@"id"];
       if (![itemId isKindOfClass:NSString.class] || itemId.length == 0) { inPlaceUpdate = NO; break; }
       NSString *itemIdentifier = [@"legend.toolbar." stringByAppendingString:itemId];
@@ -1338,6 +1351,11 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       if (progress) {
         if (![item.view isKindOfClass:NSProgressIndicator.class]) { inPlaceUpdate = NO; break; }
         LegendApplyProgressValue((NSProgressIndicator *)item.view, config[@"value"]);
+        continue;
+      }
+      if (popup) {
+        if (![item.view isKindOfClass:NSPopUpButton.class]) { inPlaceUpdate = NO; break; }
+        LegendSelectPopupValue((NSPopUpButton *)item.view, config[@"selectedValue"]);
         continue;
       }
       id control = item.view ?: item;
@@ -1584,6 +1602,56 @@ willBeInsertedIntoToolbar:(BOOL)flag
     return toolbarItem;
   }
 
+  if ([type isEqualToString:@"popup"]) {
+    NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+    NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+    NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+    popup.target = self;
+    popup.action = @selector(toolbarPopupChanged:);
+    popup.controlSize = NSControlSizeRegular;
+    popup.enabled = LegendDictionaryHasKey(config, @"enabled") ? [config[@"enabled"] boolValue] : YES;
+    popup.toolTip = [config[@"tooltip"] isKindOfClass:NSString.class] ? config[@"tooltip"] : label;
+    popup.accessibilityLabel = label;
+    popup.menu.autoenablesItems = NO;
+    for (NSDictionary *option in [config[@"options"] isKindOfClass:NSArray.class] ? config[@"options"] : @[]) {
+      if (![option isKindOfClass:NSDictionary.class] || ![option[@"value"] isKindOfClass:NSString.class]) continue;
+      NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[option[@"label"] isKindOfClass:NSString.class] ? option[@"label"] : option[@"value"] action:nil keyEquivalent:@""];
+      NSString *symbol = [option[@"systemImageName"] isKindOfClass:NSString.class] ? option[@"systemImageName"] : nil;
+      if (symbol.length > 0) item.image = [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:item.title];
+      item.representedObject = @{ @"value": option[@"value"] };
+      [popup.menu addItem:item];
+    }
+    NSArray *menuItems = [config[@"menuItems"] isKindOfClass:NSArray.class] ? config[@"menuItems"] : @[];
+    if (menuItems.count > 0) [popup.menu addItem:NSMenuItem.separatorItem];
+    for (NSDictionary *entry in menuItems) {
+      if (![entry isKindOfClass:NSDictionary.class]) continue;
+      if ([entry[@"separator"] boolValue]) { [popup.menu addItem:NSMenuItem.separatorItem]; continue; }
+      if (![entry[@"id"] isKindOfClass:NSString.class] || ![entry[@"title"] isKindOfClass:NSString.class]) continue;
+      NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:entry[@"title"] action:nil keyEquivalent:@""];
+      item.enabled = LegendDictionaryHasKey(entry, @"enabled") ? [entry[@"enabled"] boolValue] : YES;
+      NSString *symbol = [entry[@"systemImageName"] isKindOfClass:NSString.class] ? entry[@"systemImageName"] : nil;
+      if (symbol.length > 0) item.image = [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:item.title];
+      item.representedObject = @{ @"action": entry[@"id"] };
+      [popup.menu addItem:item];
+    }
+    objc_setAssociatedObject(popup, &LegendToolbarControlMetadataKey, @{
+      @"itemId": itemId, @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar), @"instanceId": config[@"instanceId"] ?: @"",
+    }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    LegendSelectPopupValue(popup, config[@"selectedValue"]);
+    [popup sizeToFit];
+    NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
+    if (widthNumber) popup.frame = NSMakeRect(0, 0, widthNumber.doubleValue, NSHeight(popup.frame));
+
+    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+    toolbarItem.view = popup;
+    toolbarItem.label = label;
+    toolbarItem.paletteLabel = label;
+    toolbarItem.toolTip = popup.toolTip;
+    toolbarItem.enabled = popup.enabled;
+    if (@available(macOS 11.0, *)) toolbarItem.navigational = [config[@"placement"] isEqual:@"leading"];
+    return toolbarItem;
+  }
+
   if (![type isEqualToString:@"segmented"]) {
     return nil;
   }
@@ -1666,6 +1734,25 @@ willBeInsertedIntoToolbar:(BOOL)flag
     toolbarItem.navigational = [config[@"placement"] isEqual:@"leading"];
   }
   return toolbarItem;
+}
+
+- (void)toolbarPopupChanged:(NSPopUpButton *)sender
+{
+  NSDictionary *metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey) ?: @{};
+  NSDictionary *chosen = [sender.selectedItem.representedObject isKindOfClass:NSDictionary.class] ? sender.selectedItem.representedObject : @{};
+  NSMutableDictionary *body = [@{ @"identifier": metadata[@"windowIdentifier"] ?: @"", @"itemId": metadata[@"itemId"] ?: @"", @"instanceId": metadata[@"instanceId"] ?: @"" } mutableCopy];
+  if (chosen[@"action"]) {
+    // An action leaves the popup showing the value it showed before.
+    LegendSelectPopupValue(sender, metadata[@"value"]);
+    body[@"action"] = @{ @"type": @"action", @"itemId": chosen[@"action"] };
+  } else {
+    NSMutableDictionary *nextMetadata = [metadata mutableCopy];
+    nextMetadata[@"value"] = chosen[@"value"] ?: @"";
+    objc_setAssociatedObject(sender, &LegendToolbarControlMetadataKey, nextMetadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    body[@"value"] = chosen[@"value"] ?: @"";
+    body[@"kind"] = @"selection";
+  }
+  [self sendWindowEventWithName:@"onToolbarItemSelected" body:body];
 }
 
 - (void)toolbarMenuSliderChanged:(NSSlider *)sender
