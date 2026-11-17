@@ -8,7 +8,7 @@ export interface TableColumn {
   id: string;
   /** Header title. */
   title: string;
-  /** Initial width; the user can resize columns, and the last column takes the remaining width. */
+  /** Fixed width (the user can still resize it). Columns without one share the remaining width. */
   width?: number;
   minWidth?: number;
   maxWidth?: number;

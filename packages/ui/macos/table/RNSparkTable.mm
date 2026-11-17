@@ -33,7 +33,7 @@ static id RNSparkTableJSON(const std::string &json, Class expected) {
     _rowIndexes = @{};
     _tableView = [[NSTableView alloc] initWithFrame:NSZeroRect];
     _tableView.style = NSTableViewStyleFullWidth;
-    _tableView.columnAutoresizingStyle = NSTableViewLastColumnOnlyAutoresizingStyle;
+    _tableView.columnAutoresizingStyle = NSTableViewUniformColumnAutoresizingStyle;
     _tableView.allowsColumnReordering = NO;
     _tableView.allowsEmptySelection = YES;
     _tableView.dataSource = self;
@@ -62,8 +62,10 @@ static id RNSparkTableJSON(const std::string &json, Class expected) {
     column.headerToolTip = column.title;
     column.minWidth = [config[@"minWidth"] isKindOfClass:NSNumber.class] ? [config[@"minWidth"] doubleValue] : 40;
     column.maxWidth = [config[@"maxWidth"] isKindOfClass:NSNumber.class] ? [config[@"maxWidth"] doubleValue] : CGFLOAT_MAX;
-    if ([config[@"width"] isKindOfClass:NSNumber.class]) column.width = [config[@"width"] doubleValue];
-    column.resizingMask = NSTableColumnUserResizingMask | NSTableColumnAutoresizingMask;
+    // A column with a width keeps it as the table resizes; the others share the remaining width.
+    BOOL fixed = [config[@"width"] isKindOfClass:NSNumber.class];
+    if (fixed) column.width = [config[@"width"] doubleValue];
+    column.resizingMask = fixed ? NSTableColumnUserResizingMask : NSTableColumnUserResizingMask | NSTableColumnAutoresizingMask;
     NSString *alignment = config[@"alignment"];
     column.headerCell.alignment = [alignment isEqual:@"trailing"] ? NSTextAlignmentRight : [alignment isEqual:@"center"] ? NSTextAlignmentCenter : NSTextAlignmentNatural;
     [_tableView addTableColumn:column];

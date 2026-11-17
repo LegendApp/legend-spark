@@ -73,6 +73,9 @@ int main() { @autoreleasepool {
   assert(table.tableColumns.count == 3 && table.headerView != nil && table.enclosingScrollView.superview == view);
   assert([table.tableColumns[0].title isEqual:@"Subject"] && table.tableColumns[0].minWidth == 120 && table.tableColumns[1].width == 120);
   assert(table.tableColumns[2].headerCell.alignment == NSTextAlignmentRight);
+  // Columns with a width keep it; the flexible Subject column takes the rest of the 600 pt table.
+  [table sizeToFit];
+  assert(table.tableColumns[1].width == 120 && table.tableColumns[2].width == 100 && table.tableColumns[0].width > 300);
   // 10,000 rows, but cells exist only for the visible ones.
   assert(table.numberOfRows == 10000 && [Cell(table, 0, 0) isEqual:@"Commit 0"] && [Cell(table, 0, 1) isEqual:@""]);
   NSTableCellView *date = [table viewAtColumn:2 row:3 makeIfNecessary:YES];
