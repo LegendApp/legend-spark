@@ -308,3 +308,9 @@ test("macOS subtitles and toolbar progress items reach the native window manager
   expect(options.windowStyle.toolbarItems).toEqual([{ type: "progress", id: "sync", label: "Sync", value: 0.5 }, { type: "progress", id: "busy", variant: "spinner", value: null }]);
   expect(call).not.toHaveBeenCalled();
 });
+
+test("macOS window tabbing reaches the native window manager", async () => {
+  platform.OS = "macos";
+  await windows.setWindowOptions("main", { macos: { tabbing: { mode: "preferred", identifier: "review" } } });
+  expect(JSON.parse(managed.setMainWindowOptions.mock.calls.at(-1)![0])).toMatchObject({ tabbingMode: "preferred", tabbingIdentifier: "review" });
+});

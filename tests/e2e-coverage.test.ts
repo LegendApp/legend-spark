@@ -135,7 +135,7 @@ describe("SDK surface", () => {
     const availability = Object.entries(surface).flatMap(([subpath, entry]) => entry.values.filter(name => /^get\w*Availability$/.test(name)).map(name => `${subpath}#${name}`));
     expect(flagged).toEqual(availability);
     expect(surface["./windows"]!.flags).toEqual({ getWindowAvailability: ["().available"] });
-    expect(surface["./ui"]!.flags.getControlAvailability).toEqual(["(checkbox).available", "(button).available", "(text-input).available", "(select).available", "(segmented-control).available"]);
+    expect(surface["./ui"]!.flags.getControlAvailability).toEqual(["(checkbox).available", "(button).available", "(text-input).available", "(select).available", "(segmented-control).available", "(radio-group).available"]);
     expect(surface["./ai"]!.flags.getAICommandAvailability).toEqual(["().claude", "().codex"]);
   });
 });

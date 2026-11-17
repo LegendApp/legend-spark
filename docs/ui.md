@@ -1,6 +1,6 @@
 # Common controls
 
-Import `Button`, `Checkbox`, `TextInput`, `Select`, and `SegmentedControl` from `@legendapp/spark/ui`. Spark owns their props and consumer events; React Native, Expo UI and AppKit/WinUI implement the controls internally. The separate ordinary `NativeSelect` API and `/ui/select-controls` path are removed. Generated native components and their event envelopes are internal.
+Import `Button`, `Checkbox`, `RadioGroup`, `TextInput`, `Select`, and `SegmentedControl` from `@legendapp/spark/ui`. Spark owns their props and consumer events; React Native, Expo UI and AppKit/WinUI implement the controls internally. The separate ordinary `NativeSelect` API and `/ui/select-controls` path are removed. Generated native components and their event envelopes are internal.
 
 All controls accept `disabled`, `accessibilityLabel`, `testID`, layout `style`, `onError`, and a `ref` to `ControlRef`. The ref exposes only `measureInWindow(callback)`, in React Native logical coordinates. A retained ref rejects after unmount; it does not expose backend objects, text setters, or a focus API that every backend cannot support. Button labels default to their text children. Layout styles size the native control; they do not restyle all OS chrome.
 
@@ -32,8 +32,11 @@ On macOS, `Button` and `Checkbox` take their AppKit intrinsic size (from the lab
 
 `Checkbox` is a controlled checkbox: `value`, `onValueChange(next)` and optional string `children` as its label (without a label, `accessibilityLabel` is required). It is an AppKit checkbox (`NSButton` switch) on macOS and an HTML checkbox on web; Windows, iOS and Android render the disabled fallback and report `E_UNSUPPORTED_PLATFORM`.
 
+`RadioGroup` is a controlled group of radio buttons, one per option: `options`, `value` and `onValueChange(next)` as for Select, plus `orientation` (`vertical` default, `horizontal`) and `size` (`regular` default, `small`, `mini`). On macOS it is AppKit radio buttons (`NSButton`) in a stack with the radio-group accessibility role, sized to its buttons unless a style sets a width or height; a click the parent does not accept snaps back. Web uses HTML radio inputs; Windows, iOS and Android render the options as disabled text and report `E_UNSUPPORTED_PLATFORM`.
+
 ```tsx
 <Checkbox value={amend} onValueChange={setAmend}>Amend last commit</Checkbox>
+<RadioGroup orientation="horizontal" accessibilityLabel="Review" options={[{ label: 'Comment', value: 'comment' }, { label: 'Approve', value: 'approve' }, { label: 'Request changes', value: 'request' }]} value={kind} onValueChange={setKind} />
 <Button variant="disclosure" expanded={open} onPress={() => setOpen(!open)}>Details</Button>
 <SegmentedControl size="small" distribution="fill" options={modes} value={mode} onValueChange={setMode} />
 ```
@@ -47,6 +50,7 @@ Select and SegmentedControl use the same `SelectOption` array and controlled `va
 | Select | Popup | ComboBox | Menu picker | Inline choices | HTML select |
 | SegmentedControl | Segmented control | Unsupported | Segmented picker | Inline choices | Button group |
 | Checkbox | Checkbox (`NSButton` switch) | Unsupported | Unsupported | Unsupported | HTML checkbox |
+| RadioGroup | Radio buttons (`NSButton` radio) | Unsupported | Unsupported | Unsupported | HTML radio inputs |
 | Button `disclosure` | Disclosure button | Unsupported | Unsupported | Unsupported | `aria-expanded` button |
 | Button `symbol` | SF Symbol image | Unsupported | Unsupported | Unsupported | Unsupported |
 | Button `size` small/mini | Control size | Unsupported | Unsupported | Unsupported | Smaller text |
@@ -55,9 +59,9 @@ SegmentedControl `size` (`regular` default, `small`) and `distribution` (`fit` d
 
 Android retains inline selection instead of promising a dropdown absent from the pinned backend. Its choices use native Compose buttons, which support disabled state; the pinned Compose Picker does not. Windows has no segmented-control backend and reports that limitation explicitly.
 
-`getControlAvailability('button' | 'text-input' | 'select' | 'segmented-control' | 'checkbox')` is a synchronous capability query. Missing or unsupported controls report `SparkError` through `onError` (default `console.error`) and render a disabled fallback containing the current label/text. Runtime host failure also uses this callback. Framework error instructions are not inserted into the application UI. Invalid props throw a shared argument/option error during render; an error boundary can handle them. Optional Expo view implementations load only when their native module is present.
+`getControlAvailability('button' | 'text-input' | 'select' | 'segmented-control' | 'checkbox' | 'radio-group')` is a synchronous capability query. Missing or unsupported controls report `SparkError` through `onError` (default `console.error`) and render a disabled fallback containing the current label/text. Runtime host failure also uses this callback. Framework error instructions are not inserted into the application UI. Invalid props throw a shared argument/option error during render; an error boundary can handle them. Optional Expo view implementations load only when their native module is present.
 
-`/ui/uniwind` provides the same five components with its explicit Uniwind integration. Specialized search, split-view, sidebar, glass and symbol components retain separate imports while their contracts are reviewed.
+`/ui/uniwind` provides the same six components with its explicit Uniwind integration. Specialized search, split-view, sidebar, glass and symbol components retain separate imports while their contracts are reviewed.
 
 Validation includes mounted React tests for disabled controls, controlled input/selection reconciliation, invalid events, callbacks, unavailable modules, refs and mobile/web adapters. An AppKit fixture executes the actual text and selector implementations for stale edits, defaults, repeated labels and empty values. It substitutes RN bridge declarations, so it does not establish full Fabric integration. Mobile/desktop interactive UI acceptance and Windows compilation remain pending.
 
@@ -73,7 +77,7 @@ The earlier API passed packed macOS Settings/kitchen-sink checks and iPhone 17 s
 
 ## Specialized macOS views
 
-Search, sidebar, split view, swipe actions, glass, SF Symbols and progress indicators keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, `getSFSymbolAvailability`, `getSwipeActionsAvailability`, and `getProgressIndicatorAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`. These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
+Search, sidebar, split view, swipe actions, glass, SF Symbols, progress indicators and popovers keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, `getSFSymbolAvailability`, `getSwipeActionsAvailability`, `getProgressIndicatorAvailability`, and `getPopoverAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`. These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
 
 On macOS these views and the controls above follow their React layout direction, including one set by a `direction: "rtl"` style on an ancestor, and update when it changes. In right to left: the split view's sidebar sits on the right and pane widths are kept; `onResize` x positions stay measured from the left edge. Segments run from the right, while option order and values are unchanged. The search field's magnifier, text and cancel button mirror. Leading swipe actions sit on the right and are revealed by a leftward swipe; a direction change closes an open row. Directional SF Symbols (such as `chevron.forward`) mirror, and text fields align right.
 
@@ -111,6 +115,16 @@ import { ProgressIndicator } from '@legendapp/spark/ui/progress';
 
 <ProgressIndicator value={fetched / total} style={{ width: 160 }} accessibilityLabel="Fetching" />
 <ProgressIndicator variant="spinner" size="small" />
+```
+
+`Popover` under `/ui/popover` is AppKit's `NSPopover` hosting React `content`, anchored to the popover's children or to `anchorRect` (`{ x, y, width, height }` in the view's coordinates, such as a text selection's rect). `visible` is controlled; `onClose` reports AppKit closing a visible popover (a click outside, Escape), so set `visible` to false there. `edge` is the preferred side (`bottom` default, `top`, `leading`, `trailing`; AppKit flips it when there is no room) and `behavior` is `transient` (default: any click outside closes it), `semitransient` (clicks in other windows do not) or `applicationDefined` (only `visible` closes it). The content mounts while visible and is shown at its React layout size, so give it a width; without one, text wraps to the anchor's width. Spark controls work inside it. React `Pressable`s receive clicks, but a press can cancel if the pointer moves while the button is down, because React Native measures their position in the main window; use Spark `Button`s for the popover's actions. Other platforms render only the children and report `E_UNSUPPORTED_PLATFORM`; check `getPopoverAvailability()`.
+
+```tsx
+import { Popover } from '@legendapp/spark/ui/popover';
+
+<Popover visible={open} onClose={() => setOpen(false)} content={<CommentComposer style={{ width: 280 }} />}>
+  <Button onPress={() => setOpen(true)}>Add Comment…</Button>
+</Popover>
 ```
 
 `GlassView` under `/ui/glass` is the single native glass container, with `glassStyle: 'regular' | 'clear'` and RN `ColorValue` tint. It replaces the overlapping GlassEffectView/GlassSurface wrappers and requires macOS 26; older systems preserve children without an effect and report the host restriction. Colors use RN's standard conversion, including its dynamic/system representations.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
-import type { ButtonProps, CheckboxProps, ControlProps, ControlRef, SegmentedControlProps, TextInputProps } from "./types";
+import { selectionIndex } from "./select";
+import type { ButtonProps, CheckboxProps, ControlProps, ControlRef, RadioGroupProps, SegmentedControlProps, TextInputProps } from "./types";
 export type MeasureTarget = ControlRef | null;
 export function useControl(props: ControlProps, availability: Availability = { available: true }) {
   const { disabled = false, onError = console.error } = props;
@@ -29,7 +30,7 @@ export function useControl(props: ControlProps, availability: Availability = { a
   const ref = useCallback((value: MeasureTarget) => { target.current = value; }, []);
   return { ref, disabled, failed: failed || !availability.available, error, unavailable, mounted: () => mounted.current, active: () => mounted.current && !disabled && !failed && availability.available };
 }
-export const controlKinds = ["button", "text-input", "select", "segmented-control", "checkbox"] as const;
+export const controlKinds = ["button", "text-input", "select", "segmented-control", "checkbox", "radio-group"] as const;
 export const unsupportedPlatform: Availability = { available: false, reason: "unsupported-platform" };
 export function validateButton(props: ButtonProps) {
   if (typeof props.children !== "string" || !props.children.length || (props.onPress !== undefined && typeof props.onPress !== "function") || (props.variant !== undefined && !["default", "bordered", "borderless", "disclosure"].includes(props.variant))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid button options");
@@ -47,6 +48,10 @@ export function validateCheckbox(props: CheckboxProps) {
 }
 export function validateSegmented(props: SegmentedControlProps) {
   if ((props.size !== undefined && !["regular", "small"].includes(props.size)) || (props.distribution !== undefined && !["fit", "fill"].includes(props.distribution))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid segmented control options");
+}
+export function validateRadioGroup(props: RadioGroupProps) {
+  selectionIndex(props.options, props.value);
+  if (typeof props.onValueChange !== "function" || (props.orientation !== undefined && !["vertical", "horizontal"].includes(props.orientation)) || (props.size !== undefined && !["regular", "small", "mini"].includes(props.size))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid radio group options");
 }
 export function useTextValue(props: TextInputProps) {
   const controlled = props.value !== undefined;

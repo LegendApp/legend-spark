@@ -2,9 +2,9 @@ import { selectionIndex } from "./select";
 import type { CSSProperties } from "react";
 import { View } from "react-native";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
-import { controlKinds, unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateSegmented } from "./control";
-import type { ButtonProps, CheckboxProps, TextInputProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
-export type { ButtonProps, CheckboxProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+import { controlKinds, unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateRadioGroup, validateSegmented } from "./control";
+import type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
+export type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export function getControlAvailability(control: ControlKind): Availability {
   if (!controlKinds.includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
   return { available: true };
@@ -59,6 +59,17 @@ export function SegmentedControl(props: SegmentedControlProps) {
   return <View ref={control.ref} style={[{ width: 240, height: 36 }, props.style]} testID={props.testID}>
     <div role="group" aria-label={props.accessibilityLabel} style={{ display: "flex", width: "100%", height: "100%" }}>
       {props.options.map(option => <button type="button" key={option.value} disabled={control.disabled} aria-pressed={option.value === props.value} onClick={() => control.change(option.value)} style={{ ...nativeStyle, font, flex: fill ? 1 : "0 0 auto", width: fill ? "100%" : "auto" }}>{option.label}</button>)}
+    </div>
+  </View>;
+}
+export function RadioGroup(props: RadioGroupProps) {
+  validateRadioGroup(props);
+  const control = useSelection(props), font = props.size === "small" ? "12px system-ui" : props.size === "mini" ? "10px system-ui" : nativeStyle.font;
+  return <View ref={control.ref} style={props.style} testID={props.testID}>
+    <div role="radiogroup" aria-label={props.accessibilityLabel} style={{ display: "flex", flexDirection: props.orientation === "horizontal" ? "row" : "column", gap: props.orientation === "horizontal" ? 16 : 6, font }}>
+      {props.options.map(option => <label key={option.value} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <input type="radio" checked={option.value === props.value} disabled={control.disabled} onChange={() => control.change(option.value)} />{option.label}
+      </label>)}
     </div>
   </View>;
 }

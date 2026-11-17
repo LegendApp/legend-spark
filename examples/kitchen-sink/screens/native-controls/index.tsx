@@ -1,6 +1,7 @@
 import { defineScreens, lazyScreen } from "../../shell/registry";
 import { CommonControls } from "./CommonControls";
 import { Glass } from "./Glass";
+import { PopoverDemo } from "./PopoverDemo";
 import { Search } from "./Search";
 import { SFSymbols } from "./SFSymbols";
 import { SidebarDataItems, SidebarDynamicHeights, SidebarPlainList, SidebarReactRows, SidebarTree, SidebarTreeReactRows } from "./Sidebar";
@@ -14,7 +15,8 @@ export default defineScreens("native-controls", [
   { id: "sidebar-plain-list", title: "Sidebar: plain list", titles: { ar: "الشريط الجانبي: قائمة عادية" }, summary: "The plain list style for lists inside content, with native selection.", summaries: { ar: "نمط القائمة العادية للقوائم داخل المحتوى، مع تحديد أصلي." }, component: SidebarPlainList },
   { id: "sidebar-tree", title: "Sidebar: tree", titles: { ar: "الشريط الجانبي: شجرة" }, summary: "Source-list section headers, nested rows, trailing counts, collapsible sections, double-click and multiple selection.", summaries: { ar: "عناوين أقسام قائمة المصادر، وصفوف متداخلة، وأعداد في نهاية الصف، وأقسام قابلة للطي، والنقر المزدوج، والتحديد المتعدد." }, component: SidebarTree },
   { id: "sidebar-tree-react-rows", title: "Sidebar: tree of React rows", titles: { ar: "الشريط الجانبي: شجرة من صفوف React" }, summary: "React rows nested with parentId under a group row, with a trailing count.", summaries: { ar: "صفوف React متداخلة عبر parentId تحت صف مجموعة، مع عدد في نهاية الصف." }, component: SidebarTreeReactRows },
-  { id: "common-controls", title: "Buttons, checkboxes and segments", titles: { ar: "الأزرار ومربعات الاختيار والمقاطع" }, summary: "Intrinsically sized buttons, checkboxes, a disclosure button, and small and fill segmented controls.", summaries: { ar: "أزرار بحجمها الطبيعي، ومربعات اختيار، وزر إفصاح، وعناصر تحكم مقسّمة صغيرة وممتدة." }, component: CommonControls },
+  { id: "common-controls", title: "Buttons, checkboxes, radios and segments", titles: { ar: "الأزرار ومربعات الاختيار وأزرار الاختيار والمقاطع" }, summary: "Intrinsically sized buttons, checkboxes, a disclosure button, radio groups, and small and fill segmented controls.", summaries: { ar: "أزرار بحجمها الطبيعي، ومربعات اختيار، وزر إفصاح، ومجموعات أزرار اختيار، وعناصر تحكم مقسّمة صغيرة وممتدة." }, component: CommonControls },
+  { id: "popover", title: "Popover", titles: { ar: "النافذة المنبثقة" }, summary: "An NSPopover hosting React content, anchored to a button or to a rect inside a view.", summaries: { ar: "‏NSPopover يستضيف محتوى React، مثبّت على زر أو على مستطيل داخل عرض." }, component: PopoverDemo },
   { id: "split-view", title: "Split view", titles: { ar: "العرض المقسّم" }, summary: "A native sidebar split view with React sidebar and content panes.", summaries: { ar: "عرض مقسّم أصلي بشريط جانبي، فيه جزءا الشريط الجانبي والمحتوى من React." }, component: SplitView },
   { id: "glass", title: "Glass", titles: { ar: "الزجاج" }, summary: "A native glass effect view.", summaries: { ar: "عرض أصلي بتأثير الزجاج." }, component: Glass },
   { id: "symbol", title: "SF Symbols", titles: { ar: "رموز SF" }, summary: "SF Symbols at several sizes, scales and colors.", summaries: { ar: "رموز SF بعدة أحجام ومقاييس وألوان." }, component: SFSymbols },

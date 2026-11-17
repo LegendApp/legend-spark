@@ -514,6 +514,8 @@
     "ControlProps",
     "ControlRef",
     "ControlledTextInputProps",
+    "RadioGroup",
+    "RadioGroupProps",
     "SegmentedControl",
     "SegmentedControlProps",
     "Select",
@@ -533,6 +535,12 @@
     "GlassView",
     "GlassViewProps",
     "getGlassAvailability"
+  ],
+  "./ui/popover": [
+    "Popover",
+    "PopoverAnchorRect",
+    "PopoverProps",
+    "getPopoverAvailability"
   ],
   "./ui/progress": [
     "ProgressIndicator",
@@ -589,6 +597,7 @@
   "./ui/uniwind": [
     "Button",
     "Checkbox",
+    "RadioGroup",
     "SegmentedControl",
     "Select",
     "TextInput"
@@ -637,6 +646,7 @@
     "MacOSWindowBoundsOptions",
     "MacOSWindowEvent",
     "MacOSWindowOptions",
+    "MacOSWindowTabbingOptions",
     "MacOSWindowUpdateOptions",
     "MenuAction",
     "NavigatorOpenOptions",
