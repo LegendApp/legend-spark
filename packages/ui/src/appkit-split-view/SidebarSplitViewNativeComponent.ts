@@ -8,6 +8,10 @@ export type SidebarSplitViewResizeEvent = Readonly<{
   contentX: Double;
   contentY: Double;
   height: Double;
+  inspectorHeight: Double;
+  inspectorWidth: Double;
+  inspectorX: Double;
+  inspectorY: Double;
   isLayoutReady: boolean;
   isVertical: boolean;
   listHeight: Double;
@@ -31,9 +35,14 @@ export interface NativeProps extends ViewProps {
   contentTitlebarOverlayColor?: string;
   contentTitlebarOverlayOpacity?: Double;
   contentMinWidth?: Double;
+  hasInspector?: boolean;
   hasList?: boolean;
+  inspectorCollapsed?: boolean;
+  inspectorMinWidth?: Double;
+  inspectorWidth?: Double;
   listMinWidth?: Double;
   listWidth?: Double;
+  onInspectorCollapsedChange?: DirectEventHandler<SidebarSplitViewCollapsedChangeEvent>;
   onSidebarCollapsedChange?: DirectEventHandler<SidebarSplitViewCollapsedChangeEvent>;
   onSplitViewDidResize?: DirectEventHandler<SidebarSplitViewResizeEvent>;
   sidebarCollapsed?: boolean;

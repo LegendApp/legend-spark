@@ -481,29 +481,41 @@ static char RNSidebarSplitViewStartupKey;
   NSViewController *_sidebarViewController;
   NSViewController *_contentViewController;
   NSViewController *_listViewController;
+  NSViewController *_inspectorViewController;
   NSSplitViewItem *_sidebarItem;
   NSSplitViewItem *_contentItem;
   NSSplitViewItem *_listItem;
+  NSSplitViewItem *_inspectorItem;
   NSView *_sidebarContainer;
   NSView *_contentContainer;
   NSView *_listContainer;
+  NSView *_inspectorContainer;
   NSView *_sidebarHost;
   NSView *_contentHost;
   NSView *_listHost;
+  NSView *_inspectorHost;
   RCTUIView<RCTComponentViewProtocol> *_sidebarReactView;
   RCTUIView<RCTComponentViewProtocol> *_contentReactView;
   RCTUIView<RCTComponentViewProtocol> *_listReactView;
+  RCTUIView<RCTComponentViewProtocol> *_inspectorReactView;
   id _resizeObserver;
   LayoutMetrics _currentLayoutMetrics;
   LayoutMetrics _sidebarReactLayoutMetrics;
   LayoutMetrics _contentReactLayoutMetrics;
   LayoutMetrics _listReactLayoutMetrics;
+  LayoutMetrics _inspectorReactLayoutMetrics;
   CGFloat _sidebarMinWidth;
   CGFloat _sidebarWidth;
   CGFloat _contentMinWidth;
   CGFloat _listMinWidth;
   CGFloat _listWidth;
   BOOL _hasList;
+  CGFloat _inspectorMinWidth;
+  CGFloat _inspectorWidth;
+  BOOL _hasInspector;
+  // The inspector's effective and prop collapsed states, owned like the sidebar's below.
+  BOOL _inspectorCollapsed;
+  BOOL _inspectorCollapsedProp;
   // Effective collapsed state, which React knows. Follows the prop when the prop changes and the sidebar item when
   // AppKit collapses it (toggleSidebar:, the toolbar button, ...); the latter is reported via onSidebarCollapsedChange.
   BOOL _sidebarCollapsed;
@@ -521,6 +533,8 @@ static char RNSidebarSplitViewStartupKey;
   CGPoint _lastSidebarOrigin;
   CGPoint _lastContentOrigin;
   CGPoint _lastListOrigin;
+  CGFloat _lastInspectorWidth;
+  CGPoint _lastInspectorOrigin;
   BOOL _lastLayoutReady;
   BOOL _didPublishMount;
   NSString *_appearanceName;
@@ -550,6 +564,13 @@ static char RNSidebarSplitViewStartupKey;
     _sidebarReactLayoutMetrics = EmptyLayoutMetrics;
     _contentReactLayoutMetrics = EmptyLayoutMetrics;
     _listReactLayoutMetrics = EmptyLayoutMetrics;
+    _inspectorReactLayoutMetrics = EmptyLayoutMetrics;
+    _inspectorMinWidth = 220;
+    _inspectorWidth = 0;
+    _hasInspector = NO;
+    _inspectorCollapsed = NO;
+    _inspectorCollapsedProp = NO;
+    _lastInspectorWidth = -1;
     _sidebarMinWidth = 180;
     _sidebarWidth = 0;
     _contentMinWidth = 320;
@@ -573,6 +594,10 @@ static char RNSidebarSplitViewStartupKey;
     _sidebarContainer = [NSView new];
     _contentContainer = [RNSidebarSplitViewPaneView new];
     _listContainer = [RNSidebarSplitViewPaneView new];
+    _inspectorContainer = [RNSidebarSplitViewPaneView new];
+    _inspectorContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _inspectorContainer.wantsLayer = YES;
+    _inspectorContainer.layer.masksToBounds = YES;
     _sidebarContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     _contentContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     _listContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -589,12 +614,14 @@ static char RNSidebarSplitViewStartupKey;
     _sidebarHost = [RNSidebarSplitViewPaneHost new];
     _contentHost = [RNSidebarSplitViewPaneHost new];
     _listHost = [RNSidebarSplitViewPaneHost new];
-    for (NSView *host in @[ _sidebarHost, _contentHost, _listHost ]) {
+    _inspectorHost = [RNSidebarSplitViewPaneHost new];
+    for (NSView *host in @[ _sidebarHost, _contentHost, _listHost, _inspectorHost ]) {
       host.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     }
     [_sidebarContainer addSubview:_sidebarHost];
     [_contentContainer addSubview:_contentHost];
     [_listContainer addSubview:_listHost];
+    [_inspectorContainer addSubview:_inspectorHost];
 
     _sidebarViewController = [NSViewController new];
     _contentViewController = [NSViewController new];
@@ -602,6 +629,8 @@ static char RNSidebarSplitViewStartupKey;
     _sidebarViewController.view = _sidebarContainer;
     _contentViewController.view = _contentContainer;
     _listViewController.view = _listContainer;
+    _inspectorViewController = [NSViewController new];
+    _inspectorViewController.view = _inspectorContainer;
 
     _sidebarItem = [NSSplitViewItem sidebarWithViewController:_sidebarViewController];
     _contentItem = [NSSplitViewItem splitViewItemWithViewController:_contentViewController];
@@ -612,12 +641,17 @@ static char RNSidebarSplitViewStartupKey;
     _listItem.canCollapse = NO;
     // Window resizes go to the content column; sidebar (260) and list keep their widths.
     _listItem.holdingPriority = NSLayoutPriorityDefaultLow + 1;
+    // Trailing inspector (as in Xcode or Keynote), appended after the content only while an inspector pane is supplied.
+    _inspectorItem = [NSSplitViewItem inspectorWithViewController:_inspectorViewController];
+    _inspectorItem.canCollapse = YES;
+    _inspectorItem.holdingPriority = NSLayoutPriorityDefaultLow + 1;
     [self updateSplitItemSizing];
 
     if (@available(macOS 11.0, *)) {
       _sidebarItem.allowsFullHeightLayout = YES;
       _contentItem.allowsFullHeightLayout = YES;
       _listItem.allowsFullHeightLayout = YES;
+      _inspectorItem.allowsFullHeightLayout = YES;
     }
 
     _splitViewController = [RNSidebarSplitViewController new];
@@ -662,6 +696,64 @@ static char RNSidebarSplitViewStartupKey;
   _sidebarItem.preferredThicknessFraction = 0.26;
   _contentItem.minimumThickness = MAX(240, _contentMinWidth);
   _listItem.minimumThickness = MAX(120, _listMinWidth);
+  _inspectorItem.minimumThickness = MAX(120, _inspectorMinWidth);
+}
+
+- (void)updateInspectorItem
+{
+  BOOL installed = [_splitViewController.splitViewItems containsObject:_inspectorItem];
+  if (_hasInspector && !installed) {
+    [_splitViewController addSplitViewItem:_inspectorItem];
+  } else if (!_hasInspector && installed) {
+    [_splitViewController removeSplitViewItem:_inspectorItem];
+  }
+}
+
+- (CGFloat)inspectorReserveWidth
+{
+  return _hasInspector && !_inspectorCollapsed ? _inspectorItem.minimumThickness + _splitViewController.splitView.dividerThickness : 0;
+}
+
+- (CGFloat)preferredInspectorWidthForBounds:(CGRect)bounds sidebarExtent:(CGFloat)sidebarExtent
+{
+  if (!_hasInspector || _inspectorCollapsed) {
+    return 0;
+  }
+  CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
+  CGFloat maxWidth = bounds.size.width - sidebarExtent - [self listReserveWidth] - _contentItem.minimumThickness - dividerThickness;
+  CGFloat preferred = _inspectorWidth > 0 ? _inspectorWidth : _inspectorMinWidth;
+  return MAX(0, MIN(MAX(_inspectorItem.minimumThickness, preferred), maxWidth));
+}
+
+/// The inspector's counterparts of updateSidebarCollapsed and adoptNativeSidebarCollapsed below.
+- (void)updateInspectorCollapsed
+{
+  if (_inspectorItem.collapsed != _inspectorCollapsed) {
+    _inspectorItem.collapsed = _inspectorCollapsed;
+  }
+}
+
+- (void)adoptNativeInspectorCollapsed
+{
+  if (!_hasInspector || _inspectorItem.collapsed == _inspectorCollapsed) {
+    return;
+  }
+  _inspectorCollapsed = _inspectorItem.collapsed;
+  const auto eventEmitter = std::static_pointer_cast<const SidebarSplitViewEventEmitter>(_eventEmitter);
+  if (eventEmitter) {
+    eventEmitter->onInspectorCollapsedChange(SidebarSplitViewEventEmitter::OnInspectorCollapsedChange{
+      .collapsed = static_cast<bool>(_inspectorCollapsed),
+    });
+  }
+}
+
+- (CGRect)inspectorPaneBounds
+{
+  CGRect bounds = _inspectorContainer.bounds;
+  if (!_hasInspector || _inspectorItem.collapsed) {
+    bounds.size.width = 0;
+  }
+  return bounds;
 }
 
 - (void)updateListItem
@@ -682,7 +774,7 @@ static char RNSidebarSplitViewStartupKey;
 - (CGFloat)preferredSidebarWidthForBounds:(CGRect)bounds
 {
   CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
-  CGFloat maxSidebarWidth = bounds.size.width - _contentItem.minimumThickness - dividerThickness - [self listReserveWidth];
+  CGFloat maxSidebarWidth = bounds.size.width - _contentItem.minimumThickness - dividerThickness - [self listReserveWidth] - [self inspectorReserveWidth];
   CGFloat preferredSidebarWidth = _sidebarWidth > 0 ? _sidebarWidth : _sidebarMinWidth;
   CGFloat sidebarWidth = MIN(MAX(_sidebarItem.minimumThickness, preferredSidebarWidth), maxSidebarWidth);
   return MAX(0, sidebarWidth);
@@ -694,7 +786,7 @@ static char RNSidebarSplitViewStartupKey;
     return 0;
   }
   CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
-  CGFloat maxListWidth = bounds.size.width - sidebarExtent - _contentItem.minimumThickness - dividerThickness;
+  CGFloat maxListWidth = bounds.size.width - sidebarExtent - _contentItem.minimumThickness - dividerThickness - [self inspectorReserveWidth];
   CGFloat preferredListWidth = _listWidth > 0 ? _listWidth : _listMinWidth;
   return MAX(0, MIN(MAX(_listItem.minimumThickness, preferredListWidth), maxListWidth));
 }
@@ -896,6 +988,9 @@ static char RNSidebarSplitViewStartupKey;
   [self syncReactSubview:_listReactView
              nativeBounds:_hasList ? _listContainer.bounds : CGRectZero
     previousLayoutMetrics:&_listReactLayoutMetrics];
+  [self syncReactSubview:_inspectorReactView
+             nativeBounds:[self inspectorPaneBounds]
+    previousLayoutMetrics:&_inspectorReactLayoutMetrics];
 }
 
 - (CGPoint)splitViewOriginOfPane:(nullable NSView *)pane
@@ -954,7 +1049,7 @@ static char RNSidebarSplitViewStartupKey;
     return;
   }
 
-  BOOL panesReady = layoutReady && _sidebarReactView && _contentReactView && (!_hasList || _listReactView);
+  BOOL panesReady = layoutReady && _sidebarReactView && _contentReactView && (!_hasList || _listReactView) && (!_hasInspector || _inspectorReactView);
   if (panesReady && self.window && !_didPublishMount) {
     // This also runs when an already-laid-out Fabric tree joins its window.
     // Keep it before metrics deduplication so the startup cover cannot linger.
@@ -965,7 +1060,11 @@ static char RNSidebarSplitViewStartupKey;
   CGPoint sidebarOrigin = [self splitViewOriginOfPane:_sidebarContainer];
   CGPoint contentOrigin = [self splitViewOriginOfPane:_contentContainer];
   CGPoint listOrigin = _hasList ? [self splitViewOriginOfPane:_listContainer] : CGPointZero;
+  CGFloat inspectorWidth = [self inspectorPaneBounds].size.width;
+  CGPoint inspectorOrigin = inspectorWidth > 0 ? [self splitViewOriginOfPane:_inspectorContainer] : CGPointZero;
   if (fabs(sidebarWidth - _lastSidebarWidth) < 0.5 &&
+      fabs(inspectorWidth - _lastInspectorWidth) < 0.5 &&
+      CGPointEqualToPoint(inspectorOrigin, _lastInspectorOrigin) &&
       fabs(contentWidth - _lastContentWidth) < 0.5 &&
       fabs(listWidth - _lastListWidth) < 0.5 &&
       fabs(height - _lastHeight) < 0.5 &&
@@ -983,6 +1082,8 @@ static char RNSidebarSplitViewStartupKey;
   _lastSidebarOrigin = sidebarOrigin;
   _lastContentOrigin = contentOrigin;
   _lastListOrigin = listOrigin;
+  _lastInspectorWidth = inspectorWidth;
+  _lastInspectorOrigin = inspectorOrigin;
   _lastLayoutReady = panesReady;
 
   eventEmitter->onSplitViewDidResize(SidebarSplitViewEventEmitter::OnSplitViewDidResize{
@@ -991,6 +1092,10 @@ static char RNSidebarSplitViewStartupKey;
     .contentX = contentOrigin.x,
     .contentY = contentOrigin.y,
     .height = height,
+    .inspectorHeight = inspectorWidth > 0 ? height : 0,
+    .inspectorWidth = inspectorWidth,
+    .inspectorX = inspectorOrigin.x,
+    .inspectorY = inspectorOrigin.y,
     .isLayoutReady = static_cast<bool>(panesReady),
     .isVertical = true,
     .listHeight = listWidth > 0 ? height : 0,
@@ -1025,12 +1130,15 @@ static char RNSidebarSplitViewStartupKey;
   CGFloat listX = sidebarWidth > 0 ? sidebarWidth + dividerThickness : 0;
   CGFloat listWidth = [self preferredListWidthForBounds:bounds sidebarExtent:listX];
   CGFloat contentX = listWidth > 0 ? listX + listWidth + dividerThickness : listX;
-  CGFloat contentWidth = MAX(0, bounds.size.width - contentX);
+  CGFloat inspectorWidth = [self preferredInspectorWidthForBounds:bounds sidebarExtent:listX];
+  CGFloat contentWidth = MAX(0, bounds.size.width - contentX - (inspectorWidth > 0 ? inspectorWidth + dividerThickness : 0));
   if (contentWidth <= 0) {
     contentWidth = bounds.size.width;
     contentX = 0;
     listWidth = 0;
+    inspectorWidth = 0;
   }
+  CGFloat inspectorX = bounds.size.width - inspectorWidth;
 
   // The offsets above run from the leading edge, as AppKit's split view lays out panes.
   CGFloat sidebarX = 0;
@@ -1038,12 +1146,16 @@ static char RNSidebarSplitViewStartupKey;
     sidebarX = bounds.size.width - sidebarWidth;
     listX = bounds.size.width - listX - listWidth;
     contentX = bounds.size.width - contentX - contentWidth;
+    inspectorX = 0;
   }
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
   [self setPane:_sidebarContainer splitViewFrame:CGRectMake(sidebarX, 0, sidebarWidth, bounds.size.height)];
   [self setPane:_listContainer splitViewFrame:CGRectMake(listX, 0, listWidth, bounds.size.height)];
   [self setPane:_contentContainer splitViewFrame:CGRectMake(contentX, 0, contentWidth, bounds.size.height)];
+  if (_hasInspector) {
+    [self setPane:_inspectorContainer splitViewFrame:CGRectMake(inspectorX, 0, inspectorWidth, bounds.size.height)];
+  }
 
   CGRect sidebarBounds = CGRectMake(0, 0, sidebarWidth, bounds.size.height);
   CGRect contentBounds = CGRectMake(0, 0, contentWidth, bounds.size.height);
@@ -1056,6 +1168,9 @@ static char RNSidebarSplitViewStartupKey;
   [self syncReactSubview:_listReactView
            nativeBounds:CGRectMake(0, 0, listWidth, bounds.size.height)
   previousLayoutMetrics:&_listReactLayoutMetrics];
+  [self syncReactSubview:_inspectorReactView
+           nativeBounds:CGRectMake(0, 0, inspectorWidth, bounds.size.height)
+  previousLayoutMetrics:&_inspectorReactLayoutMetrics];
   [self layoutContentTitlebarMaterial];
   if (!_layingOutSplitView) {
     [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
@@ -1073,6 +1188,7 @@ static char RNSidebarSplitViewStartupKey;
 - (void)publishSplitViewLayoutAllowEstimatedReady:(BOOL)allowEstimatedReady
 {
   [self adoptNativeSidebarCollapsed];
+  [self adoptNativeInspectorCollapsed];
   CGFloat sidebarWidth = [self sidebarPaneBounds].size.width;
   CGFloat contentWidth = _contentContainer.bounds.size.width;
   CGFloat contentX = [self splitViewOriginOfPane:_contentContainer].x;
@@ -1149,13 +1265,20 @@ static char RNSidebarSplitViewStartupKey;
     }
     [_splitViewController.splitView setPosition:sidebarExtent + listWidth ofDividerAtIndex:1];
   }
+  CGFloat inspectorWidth = [self preferredInspectorWidthForBounds:bounds sidebarExtent:sidebarExtent];
+  if (inspectorWidth > 0) {
+    // The split view can hold views besides the items' (title-bar materials), so dividers are counted from the items.
+    NSInteger divider = (NSInteger)_splitViewController.splitViewItems.count - 2;
+    [_splitViewController.splitView setPosition:bounds.size.width - inspectorWidth - dividerThickness ofDividerAtIndex:divider];
+  }
   // A small startup frame can clamp a preference. Retry on later layouts until it fits,
   // unless a real divider drag takes ownership in splitViewDidResize.
   CGFloat desiredSidebarWidth = MAX(_sidebarItem.minimumThickness, _sidebarWidth > 0 ? _sidebarWidth : _sidebarMinWidth);
   CGFloat desiredListWidth = MAX(_listItem.minimumThickness, _listWidth > 0 ? _listWidth : _listMinWidth);
   _needsPreferredDividerPositions =
     (!_sidebarCollapsed && [self preferredSidebarWidthForBounds:bounds] < desiredSidebarWidth - 0.5) ||
-    (_hasList && [self preferredListWidthForBounds:bounds sidebarExtent:sidebarExtent] < desiredListWidth - 0.5);
+    (_hasList && [self preferredListWidthForBounds:bounds sidebarExtent:sidebarExtent] < desiredListWidth - 0.5) ||
+    (inspectorWidth > 0 && inspectorWidth < MAX(_inspectorItem.minimumThickness, _inspectorWidth > 0 ? _inspectorWidth : _inspectorMinWidth) - 0.5);
 }
 
 - (void)splitViewDidResize
@@ -1200,8 +1323,10 @@ static char RNSidebarSplitViewStartupKey;
   _splitViewController.splitView.frame = bounds;
   [self updateSplitItemSizing];
   [self updateListItem];
+  [self updateInspectorItem];
   [self updateItemLayoutDirection];
   [self adoptNativeSidebarCollapsed];
+  [self adoptNativeInspectorCollapsed];
   if (_contentContainer.bounds.size.width <= 0 ||
       _contentContainer.bounds.size.height <= 0 ||
       fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
@@ -1219,6 +1344,7 @@ static char RNSidebarSplitViewStartupKey;
   _lastSidebarWidth = -1;
   _lastContentWidth = -1;
   _lastListWidth = -1;
+  _lastInspectorWidth = -1;
   _lastHeight = -1;
   _lastLayoutReady = NO;
 }
@@ -1275,6 +1401,22 @@ static char RNSidebarSplitViewStartupKey;
     return;
   }
 
+  // React renders the inspector pane last: after the list when there is one.
+  if (index == 3 || (index == 2 && !_hasList && _hasInspector)) {
+    [_inspectorReactView removeFromSuperview];
+    _inspectorReactView = childComponentView;
+    _inspectorReactLayoutMetrics = EmptyLayoutMetrics;
+    childComponentView.hidden = YES;
+    [_inspectorHost addSubview:childComponentView];
+    [self syncReactSubview:_inspectorReactView
+               nativeBounds:[self inspectorPaneBounds]
+      previousLayoutMetrics:&_inspectorReactLayoutMetrics];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self publishSplitViewLayoutAllowEstimatedReady:NO];
+    });
+    return;
+  }
+
   if (index == 2) {
     [_listReactView removeFromSuperview];
     _listReactView = childComponentView;
@@ -1295,7 +1437,7 @@ static char RNSidebarSplitViewStartupKey;
     return;
   }
 
-  if (index == 1 || index == 2) {
+  if (index == 1 || index == 2 || index == 3) {
     [_contentContainer addSubview:childComponentView];
     return;
   }
@@ -1328,8 +1470,15 @@ static char RNSidebarSplitViewStartupKey;
     [childComponentView removeFromSuperview];
     return;
   }
+
+  if (childComponentView == _inspectorReactView) {
+    _inspectorReactView = nil;
+    _inspectorReactLayoutMetrics = EmptyLayoutMetrics;
+    [childComponentView removeFromSuperview];
+    return;
+  }
 #else
-  if (index == 0 || index == 1 || index == 2) {
+  if (index == 0 || index == 1 || index == 2 || index == 3) {
     [childComponentView removeFromSuperview];
     return;
   }
@@ -1359,7 +1508,15 @@ static char RNSidebarSplitViewStartupKey;
   }
   // Echoing an adopted native state acknowledges it; it must not reseed user-dragged dividers.
   BOOL effectiveCollapsedChanged = collapsedPropChanged && _sidebarCollapsed != newProps.sidebarCollapsed;
+  BOOL inspectorCollapsedPropChanged = _inspectorCollapsedProp != newProps.inspectorCollapsed;
+  if (!inspectorCollapsedPropChanged) {
+    [self adoptNativeInspectorCollapsed];
+  }
+  BOOL effectiveInspectorCollapsedChanged = inspectorCollapsedPropChanged && _inspectorCollapsed != newProps.inspectorCollapsed;
   BOOL preferredWidthsChanged =
+    fabs(_inspectorWidth - newProps.inspectorWidth) >= 0.5 ||
+    _hasInspector != newProps.hasInspector ||
+    effectiveInspectorCollapsedChanged ||
     fabs(_sidebarWidth - newProps.sidebarWidth) >= 0.5 ||
     fabs(_listWidth - newProps.listWidth) >= 0.5 ||
     _hasList != newProps.hasList ||
@@ -1369,6 +1526,7 @@ static char RNSidebarSplitViewStartupKey;
     fabs(_sidebarMinWidth - newProps.sidebarMinWidth) >= 0.5 ||
     fabs(_contentMinWidth - newProps.contentMinWidth) >= 0.5 ||
     fabs(_listMinWidth - newProps.listMinWidth) >= 0.5 ||
+    fabs(_inspectorMinWidth - newProps.inspectorMinWidth) >= 0.5 ||
     fabs(_contentTitlebarHeight - newProps.contentTitlebarHeight) >= 0.5;
   NSString *nextContentTitlebarMaterialName = [NSString stringWithUTF8String:newProps.contentTitlebarMaterial.c_str()];
   if (nextContentTitlebarMaterialName.length == 0) {
@@ -1401,14 +1559,22 @@ static char RNSidebarSplitViewStartupKey;
   _listMinWidth = newProps.listMinWidth;
   _listWidth = newProps.listWidth;
   _hasList = newProps.hasList;
+  _inspectorMinWidth = newProps.inspectorMinWidth;
+  _inspectorWidth = newProps.inspectorWidth;
+  _hasInspector = newProps.hasInspector;
+  _inspectorCollapsedProp = newProps.inspectorCollapsed;
+  if (inspectorCollapsedPropChanged) {
+    _inspectorCollapsed = newProps.inspectorCollapsed;
+  }
   _sidebarCollapsedProp = newProps.sidebarCollapsed;
   if (collapsedPropChanged) {
     _sidebarCollapsed = newProps.sidebarCollapsed;
   }
   // Apply the winning prop before accessory/list mutations can trigger resize observers. A prop can match the
   // adopted effective state while overriding a newer, unobserved native toggle; that still needs final metrics.
-  shouldRelayout = shouldRelayout || _sidebarItem.collapsed != _sidebarCollapsed;
+  shouldRelayout = shouldRelayout || _sidebarItem.collapsed != _sidebarCollapsed || _inspectorItem.collapsed != _inspectorCollapsed;
   [self updateSidebarCollapsed];
+  [self updateInspectorCollapsed];
   if (preferredWidthsChanged) {
     _needsPreferredDividerPositions = YES;
   }
@@ -1512,6 +1678,15 @@ static char RNSidebarSplitViewStartupKey;
   [_sidebarReactView removeFromSuperview];
   [_contentReactView removeFromSuperview];
   [_listReactView removeFromSuperview];
+  [_inspectorReactView removeFromSuperview];
+  _inspectorReactView = nil;
+  _inspectorReactLayoutMetrics = EmptyLayoutMetrics;
+  _inspectorMinWidth = 220;
+  _inspectorWidth = 0;
+  _hasInspector = NO;
+  _inspectorCollapsed = NO;
+  _inspectorCollapsedProp = NO;
+  _lastInspectorWidth = -1;
   _sidebarReactView = nil;
   _contentReactView = nil;
   _listReactView = nil;
@@ -1546,7 +1721,9 @@ static char RNSidebarSplitViewStartupKey;
   [self removeSidebarTitlebarMaterial];
   [self applyAppearance];
   [self updateListItem];
+  [self updateInspectorItem];
   [self updateSidebarCollapsed];
+  [self updateInspectorCollapsed];
   [self updateSplitItemSizing];
 #else
   for (UIView *subview in _sidebarContainer.subviews) {

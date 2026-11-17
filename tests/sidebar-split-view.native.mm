@@ -13,8 +13,8 @@ namespace facebook::react {
 struct Props {using Shared=std::shared_ptr<const Props>;virtual ~Props()=default;};
 struct SidebarSplitViewProps:Props {
  std::string appearance="system",contentTitlebarMaterial="none",contentTitlebarOverlayColor,sidebarTitlebarOverlayColor;
- double sidebarWidth=180,sidebarMinWidth=180,contentMinWidth=320,listWidth=240,listMinWidth=240,contentTitlebarHeight=0,contentTitlebarOverlayOpacity=0,sidebarTitlebarOverlayOpacity=0;
- bool hasList=false,sidebarCollapsed=false;
+ double sidebarWidth=180,sidebarMinWidth=180,contentMinWidth=320,listWidth=240,listMinWidth=240,inspectorWidth=0,inspectorMinWidth=220,contentTitlebarHeight=0,contentTitlebarOverlayOpacity=0,sidebarTitlebarOverlayOpacity=0;
+ bool hasList=false,sidebarCollapsed=false,hasInspector=false,inspectorCollapsed=false;
 };
 struct EventEmitter {using Shared=std::shared_ptr<const EventEmitter>;virtual ~EventEmitter()=default;};
 struct ViewEventEmitter:EventEmitter {};
@@ -45,6 +45,10 @@ class SidebarSplitViewEventEmitter : public ViewEventEmitter {
     double contentX;
     double contentY;
     double height;
+    double inspectorHeight;
+    double inspectorWidth;
+    double inspectorX;
+    double inspectorY;
     bool isLayoutReady;
     bool isVertical;
     double listHeight;
@@ -57,6 +61,8 @@ class SidebarSplitViewEventEmitter : public ViewEventEmitter {
     double sidebarY;
     };
   void onSidebarCollapsedChange(OnSidebarCollapsedChange value) const;
+  struct OnInspectorCollapsedChange { bool collapsed; };
+  void onInspectorCollapsedChange(OnInspectorCollapsedChange value) const;
 
   void onSplitViewDidResize(OnSplitViewDidResize value) const;
 };
@@ -65,6 +71,8 @@ class SidebarSplitViewEventEmitter : public ViewEventEmitter {
 using namespace facebook::react;
 static std::vector<bool> changes;
 static std::vector<SidebarSplitViewEventEmitter::OnSplitViewDidResize> resizes;
+static std::vector<bool> inspectorChanges;
+void SidebarSplitViewEventEmitter::onInspectorCollapsedChange(OnInspectorCollapsedChange e)const{inspectorChanges.push_back(e.collapsed);}
 void SidebarSplitViewEventEmitter::onSidebarCollapsedChange(OnSidebarCollapsedChange e)const{changes.push_back(e.collapsed);}
 void SidebarSplitViewEventEmitter::onSplitViewDidResize(OnSplitViewDidResize e)const{resizes.push_back(e);}
 @protocol RCTSidebarSplitViewViewProtocol @end
@@ -239,6 +247,38 @@ int main(){@autoreleasepool{
    [placed layout];spin();
    assert(NSEqualPoints([placedContent convertRect:placedContent.bounds toView:placed].origin,contentOrigin));
    puts("PASS panes report their AppKit origins and stay there when Fabric applies current or stale origins");
+ }
+ {
+   // A trailing inspector is AppKit's inspector item: its pane is positioned from the metrics, the prop collapses it
+   // silently, and a native toggle is reported once.
+   resizes.clear();inspectorChanges.clear();
+   RNSidebarSplitViewComponent *iv=[[RNSidebarSplitViewComponent alloc]initWithFrame:NSMakeRect(0,0,1000,600)];
+   NSWindow *iw=[[NSWindow alloc]initWithContentRect:NSMakeRect(0,0,1000,600) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];iw.contentView=iv;
+   [iv updateEventEmitter:std::make_shared<SidebarSplitViewEventEmitter>()];
+   auto ip=std::make_shared<SidebarSplitViewProps>();ip->hasInspector=true;ip->inspectorWidth=260;
+   [iv updateProps:ip oldProps:iv->_props];
+   RCTViewComponentView *iSidebar=[RCTViewComponentView new],*iContent=[RCTViewComponentView new],*iPane=[RCTViewComponentView new];
+   [iv mountChildComponentView:iSidebar index:0];[iv mountChildComponentView:iContent index:1];[iv mountChildComponentView:iPane index:2];
+   [iv layout];spin();
+   NSSplitViewController *ic=[iv valueForKey:@"splitViewController"];
+   NSSplitViewItem *inspectorItem=ic.splitViewItems.lastObject;
+   assert(ic.splitViewItems.count==3 && inspectorItem.behavior==NSSplitViewItemBehaviorInspector && inspectorItem.canCollapse);
+   auto r=resizes.back();
+   printf("Inspector x=%.1f width=%.1f content x=%.1f width=%.1f\n",r.inspectorX,r.inspectorWidth,r.contentX,r.contentWidth);
+   assert(r.isLayoutReady && fabs(r.inspectorWidth-260)<0.5 && fabs(r.inspectorX+r.inspectorWidth-1000)<0.5 && r.contentX+r.contentWidth<=r.inspectorX+0.5);
+   assert(fabs(iPane.frame.size.width-260)<0.5 && !iPane.hidden);
+   auto collapsedProps=std::make_shared<SidebarSplitViewProps>(*ip);collapsedProps->inspectorCollapsed=true;
+   [iv updateProps:collapsedProps oldProps:ip];[iv layout];spin();
+   assert(inspectorItem.collapsed && resizes.back().inspectorWidth==0 && iPane.hidden && inspectorChanges.empty());
+   inspectorItem.collapsed=NO;spin();[iv layout];spin();
+   assert(inspectorChanges==std::vector<bool>{false} && resizes.back().inspectorWidth>0);
+   auto expandedEcho=std::make_shared<SidebarSplitViewProps>(*collapsedProps);expandedEcho->inspectorCollapsed=false;
+   [iv updateProps:expandedEcho oldProps:collapsedProps];[iv layout];spin();
+   assert(!inspectorItem.collapsed && inspectorChanges.size()==1);
+   auto without=std::make_shared<SidebarSplitViewProps>(*expandedEcho);without->hasInspector=false;
+   [iv unmountChildComponentView:iPane index:2];[iv updateProps:without oldProps:expandedEcho];[iv layout];spin();
+   assert(ic.splitViewItems.count==2 && resizes.back().inspectorWidth==0);
+   puts("PASS inspector item reports its metrics, collapses by prop silently and reports native toggles once");
  }
  puts("Full source AppKit component probe passed (generated event declarations; Fabric superclass shim)");
 }}
