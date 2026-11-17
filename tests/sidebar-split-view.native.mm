@@ -279,6 +279,15 @@ int main(){@autoreleasepool{
    [iv unmountChildComponentView:iPane index:2];[iv updateProps:without oldProps:expandedEcho];[iv layout];spin();
    assert(ic.splitViewItems.count==2 && resizes.back().inspectorWidth==0);
    puts("PASS inspector item reports its metrics, collapses by prop silently and reports native toggles once");
+   // Fabric can mount the children before the first props: the third child still ends up in the inspector pane.
+   RNSidebarSplitViewComponent *ov=[[RNSidebarSplitViewComponent alloc]initWithFrame:NSMakeRect(0,0,1000,600)];
+   NSWindow *ow=[[NSWindow alloc]initWithContentRect:NSMakeRect(0,0,1000,600) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];ow.contentView=ov;
+   [ov updateEventEmitter:std::make_shared<SidebarSplitViewEventEmitter>()];
+   RCTViewComponentView *oSidebar=[RCTViewComponentView new],*oContent=[RCTViewComponentView new],*oPane=[RCTViewComponentView new];
+   [ov mountChildComponentView:oSidebar index:0];[ov mountChildComponentView:oContent index:1];[ov mountChildComponentView:oPane index:2];
+   [ov updateProps:ip oldProps:ov->_props];[ov layout];spin();
+   assert(oPane.superview==[ov valueForKey:@"inspectorHost"] && fabs(oPane.frame.size.width-260)<0.5 && !oPane.hidden);
+   puts("PASS inspector mounted before its props lands in the inspector pane");
  }
  puts("Full source AppKit component probe passed (generated event declarations; Fabric superclass shim)");
 }}

@@ -1562,6 +1562,17 @@ static char RNSidebarSplitViewStartupKey;
   _inspectorMinWidth = newProps.inspectorMinWidth;
   _inspectorWidth = newProps.inspectorWidth;
   _hasInspector = newProps.hasInspector;
+  // Fabric can mount the children before the first props arrive, so a third child taken for the list
+  // is the inspector once the props say there is an inspector and no list.
+  if (_hasInspector && !_hasList && _listReactView && !_inspectorReactView) {
+    _inspectorReactView = _listReactView;
+    _listReactView = nil;
+    _listReactLayoutMetrics = EmptyLayoutMetrics;
+    _inspectorReactLayoutMetrics = EmptyLayoutMetrics;
+    _inspectorReactView.hidden = YES;
+    [_inspectorHost addSubview:_inspectorReactView];
+    shouldRelayout = YES;
+  }
   _inspectorCollapsedProp = newProps.inspectorCollapsed;
   if (inspectorCollapsedPropChanged) {
     _inspectorCollapsed = newProps.inspectorCollapsed;
