@@ -67,3 +67,11 @@ test("empty titlebar and toolbar symbols reject instead of falling back to label
     { toolbar: { items: [{ type: "button", id: "button", symbol: "" }] } },
   ]) expect(() => validateOptions({ macos } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
 });
+test("subtitles and toolbar progress items validate before native effects", () => {
+  for (const subtitle of ["main ↑1 ↓2", ""]) expect(() => validateOptions({ macos: { subtitle } }, "macos", false)).not.toThrow();
+  for (const subtitle of [null, 1, "a\0b"]) expect(() => validateOptions({ macos: { subtitle } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => validateOptions({ macos: { subtitle: "main" } }, "windows", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+  for (const item of [{}, { value: 0 }, { value: 1 }, { value: null }, { variant: "spinner", value: 0.5 }, { variant: "bar", width: 80 }]) expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "progress", id: "sync", ...item }] } } } as never, "macos", false)).not.toThrow();
+  for (const item of [{ value: -0.1 }, { value: 1.5 }, { value: NaN }, { value: "0.5" }, { variant: "circle" }, { width: 0 }]) expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "progress", id: "sync", ...item }] } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "progress", id: "sync", disabled: true }] } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+});

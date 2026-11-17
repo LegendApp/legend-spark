@@ -19,7 +19,7 @@ import { frame, buttonStyle, pickerStyle, tag, disabled as disabledModifier, acc
 import { View, Text } from "react-native";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { requireOptionalNativeModule } from "expo-modules-core";
-import { controlKinds, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
+import { controlKinds, macosButton, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
 import { UnavailableCheckbox } from "./checkbox-unavailable";
 import { selectionIndex } from "./select";
 import type { ButtonProps, CheckboxProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
@@ -32,7 +32,7 @@ export function getControlAvailability(control: ControlKind): Availability {
 }
 const fill = [frame({ maxWidth: Infinity, maxHeight: Infinity })];
 export function Button(props: ButtonProps) {
-  validateButton(props); const control = useControl(props, props.variant === "disclosure" ? unsupportedPlatform : getControlAvailability("button"));
+  validateButton(props); const control = useControl(props, macosButton(props) ? unsupportedPlatform : getControlAvailability("button"));
   const { children, onPress, variant = "default", style, testID, accessibilityLabel = children } = props;
   return <View ref={control.ref} style={[{ width: 160, height: 44 }, style]}>
     {control.failed ? <Text accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }} testID={testID}>{children}</Text> :

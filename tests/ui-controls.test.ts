@@ -164,3 +164,32 @@ test("web checkbox and disclosure use native input and expanded semantics", asyn
   input.onChange(); expect(onValueChange).toHaveBeenCalledWith(true);
   const button = rendered.root.findByType("button").props; expect(button["aria-expanded"]).toBe(true); expect(button["aria-label"]).toBe("Details");
 });
+test("button symbols and sizes reach AppKit, report missing symbols, and are unavailable where the OS lacks them", async () => {
+  const onError = vi.fn();
+  await mount(React.createElement(Button, { children: "Generate", symbol: "sparkles", size: "small", onError }));
+  const native = rendered.root.findByType("SparkButton").props;
+  expect(native).toMatchObject({ title: "Generate", symbol: "sparkles", controlSize: "small" });
+  await act(async () => native.onSymbolError({ nativeEvent: { name: "other", message: "stale" } }));
+  expect(onError).not.toHaveBeenCalled();
+  await act(async () => native.onSymbolError({ nativeEvent: { name: "sparkles", message: "SF Symbol 'sparkles' is not available on this system" } }));
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_NOT_FOUND" }));
+  await mount(React.createElement(Button, { children: "Save" }));
+  expect(rendered.root.findByType("SparkButton").props).toMatchObject({ symbol: "", controlSize: "regular" });
+  for (const props of [{ symbol: "" }, { symbol: 1 }, { symbol: "a\0b" }, { size: "large" }, { variant: "disclosure", expanded: false, symbol: "chevron.down" }]) {
+    await expect(mount(React.createElement(Button, { children: "Save", ...props } as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  }
+  for (const [os, Component, props] of [["windows", Button, { symbol: "sparkles" }], ["windows", Button, { size: "mini" }], ["android", AndroidButton, { symbol: "sparkles" }], ["android", AndroidButton, { size: "small" }]] as const) {
+    platform.OS = os; const failed = vi.fn();
+    await mount(React.createElement(Component, { children: "Generate", ...props, onError: failed }));
+    expect(failed).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
+  }
+  platform.OS = "windows"; const regular = vi.fn();
+  await mount(React.createElement(Button, { children: "Save", size: "regular", onError: regular }));
+  expect(regular).not.toHaveBeenCalled();
+  const webError = vi.fn();
+  await mount(React.createElement(WebButton, { children: "Generate", size: "mini" }));
+  expect(rendered.root.findByType("button").props.style.font).toBe("10px system-ui");
+  await mount(React.createElement(WebButton, { children: "Generate", symbol: "sparkles", onError: webError }));
+  expect(webError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
+  expect(rendered.root.findByType("button").props.disabled).toBe(true);
+});

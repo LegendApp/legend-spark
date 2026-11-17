@@ -191,11 +191,15 @@ static BOOL ApplyCommon(NSWindow *window, NSDictionary *options, RCTPromiseRejec
     window.backgroundColor = [NSColor colorWithSRGBRed:((rgba >> 24) & 255) / 255.0 green:((rgba >> 16) & 255) / 255.0 blue:((rgba >> 8) & 255) / 255.0 alpha:(rgba & 255) / 255.0];
     window.opaque = (rgba & 255) == 255;
   }
-  window.minSize = minimum; window.maxSize = maximum;
+  // Size limits are set only when given: reading minSize back from a window with a toolbar returns a larger value
+  // than was set, so writing it back on every update grew the window each time.
+  if (!options[@"minSize"] && !options[@"maxSize"]) return YES;
+  if (options[@"minSize"]) window.minSize = minimum;
+  if (options[@"maxSize"]) window.maxSize = maximum;
   NSRect frame = window.frame;
   frame.size.width = MIN(MAX(frame.size.width, minimum.width), maximum.width);
   frame.size.height = MIN(MAX(frame.size.height, minimum.height), maximum.height);
-  [window setFrame:frame display:YES];
+  if (!NSEqualRects(frame, window.frame)) [window setFrame:frame display:YES];
   return YES;
 }
 static BOOL SetBounds(NSWindow *window, NSDictionary *bounds, double durationMs, RCTPromiseResolveBlock resolve, RCTPromiseRejectBlock reject) {

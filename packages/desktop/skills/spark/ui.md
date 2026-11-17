@@ -1,17 +1,19 @@
 # UI components
 
-Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `/ui/sidebar`, `/ui/split-view`, `/ui/swipe`, `/ui/glass`, `/ui/symbol`, `/webview`, `/markdown`, `/html`.
+Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `/ui/sidebar`, `/ui/split-view`, `/ui/swipe`, `/ui/glass`, `/ui/symbol`, `/ui/progress`, `/webview`, `/markdown`, `/html`.
 
 ## Rules
 
 - Use ordinary React Native views and text for layout. Spark's UI exports are a small set of native controls, not a component library.
 - `Button`, `TextInput`, `Select` and `SegmentedControl` (from `/ui`, or `/ui/uniwind` for className styling) render native AppKit/WinUI controls and work on iOS/Android/web through Expo UI or React Native.
 - `Checkbox` (`value`/`onValueChange`, string label children) and `Button variant="disclosure"` (requires `expanded`) are macOS and web only; check `getControlAvailability('checkbox')`. On macOS, buttons and checkboxes size themselves; give no fixed width unless you want one.
+- `Button` takes `symbol` (an SF Symbol before the title; macOS only) and `size` (`regular`/`small`/`mini`; macOS, and web as smaller text). Elsewhere they report `E_UNSUPPORTED_PLATFORM` and render the disabled fallback; a symbol missing on the running macOS reports `E_NOT_FOUND`.
 - `SegmentedControl` takes `size` (`regular`/`small`) and `distribution` (`fit`/`fill`). `Sidebar` takes `listStyle="plain"` for lists inside content.
 - `TextInput` is single-line and either controlled (`value`) or uncontrolled (`defaultValue`), never both; switching needs a remount.
 - `Select`/`SegmentedControl` never auto-select the first option when `value` is missing. Values are unique strings.
 - Invalid props throw during render; runtime problems go to `onError` (default `console.error`). Spark never inserts error text into your UI.
-- Specialized macOS views (`TextInputSearch`, `Sidebar`, `SidebarSplitView`, swipe actions, `GlassView`, `SFSymbol`) render plain view content on other platforms and report through `onError`. Check their `get*Availability()` before advertising the feature.
+- Specialized macOS views (`TextInputSearch`, `Sidebar`, `SidebarSplitView`, swipe actions, `GlassView`, `SFSymbol`, `ProgressIndicator`) render plain view content on other platforms and report through `onError`. Check their `get*Availability()` before advertising the feature.
+- `ProgressIndicator` (`/ui/progress`, macOS) is `NSProgressIndicator`: `variant` `bar`/`spinner`, `size` `regular`/`small` (spinners also `mini`), `value` 0 to 1 (omit or `null` for indeterminate). Give a bar a width. For toolbar progress use a `progress` toolbar item instead.
 - `Sidebar`'s `selectedId` is controlled and `onSelectionChange` is required.
 - Layout follows `direction: 'rtl'` on macOS controls.
 - Mobile apps using `Button`/`Select` install optional peer `@expo/ui`. `@expo/ui@55.0.17`, matching Expo SDK 55.

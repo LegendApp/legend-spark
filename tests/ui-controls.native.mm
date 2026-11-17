@@ -26,7 +26,8 @@ struct NativeSegmentedControlProps : Props {
   NativeSegmentedControlDistribution distribution = NativeSegmentedControlDistribution::Fit;
 };
 enum class SparkButtonVariant { Default, Bordered, Borderless, Checkbox, Disclosure };
-struct SparkButtonProps : Props { std::string title, accessibilityLabel, testId; bool disabled = false, checked = false; int checkedRevision = 0; SparkButtonVariant variant = SparkButtonVariant::Default; };
+enum class SparkButtonControlSize { Regular, Small, Mini };
+struct SparkButtonProps : Props { std::string title, accessibilityLabel, testId, symbol; bool disabled = false, checked = false; int checkedRevision = 0; SparkButtonVariant variant = SparkButtonVariant::Default; SparkButtonControlSize controlSize = SparkButtonControlSize::Regular; };
 struct EventEmitter { using Shared = std::shared_ptr<const EventEmitter>; virtual ~EventEmitter() = default; };
 struct TextChange { std::string text; int eventCount; };
 static std::vector<TextChange> changes;
@@ -48,12 +49,22 @@ struct SFSymbolEventEmitter : EventEmitter {
   struct OnSymbolError { std::string name, message; };
   void onSymbolError(OnSymbolError event) const { ++missingSymbols; }
 };
-static int buttonPresses = 0; static std::vector<std::pair<double, double>> intrinsicSizes;
+static int buttonPresses = 0; static std::vector<std::pair<double, double>> intrinsicSizes; static std::vector<std::string> missingButtonSymbols;
 struct SparkButtonEventEmitter : EventEmitter {
-  struct OnButtonPress {}; struct OnIntrinsicSize { double height, width; };
+  struct OnButtonPress {}; struct OnIntrinsicSize { double height, width; }; struct OnSymbolError { std::string name, message; };
+  void onSymbolError(OnSymbolError event) const { missingButtonSymbols.push_back(event.name); }
   void onButtonPress(OnButtonPress) const { ++buttonPresses; }
   void onIntrinsicSize(OnIntrinsicSize event) const { intrinsicSizes.push_back({event.width, event.height}); }
 };
+enum class SparkProgressIndicatorVariant { Bar, Spinner };
+enum class SparkProgressIndicatorControlSize { Regular, Small, Mini };
+struct SparkProgressIndicatorProps : Props { std::string accessibilityLabel; SparkProgressIndicatorVariant variant = SparkProgressIndicatorVariant::Bar; SparkProgressIndicatorControlSize controlSize = SparkProgressIndicatorControlSize::Regular; double value = 0; bool indeterminate = true; };
+static std::vector<std::pair<double, double>> progressSizes;
+struct SparkProgressIndicatorEventEmitter : EventEmitter {
+  struct OnIntrinsicSize { double height, width; };
+  void onIntrinsicSize(OnIntrinsicSize event) const { progressSizes.push_back({event.width, event.height}); }
+};
+struct SparkProgressIndicatorComponentDescriptor {};
 struct SparkButtonComponentDescriptor {};
 struct TextInputSearchComponentDescriptor {};
 struct SFSymbolComponentDescriptor {};
@@ -95,6 +106,7 @@ static NSColor *RCTUIColorFromSharedColor(const SharedColor &value) { return val
 @interface RNTextInputSearch : RCTViewComponentView @end
 @interface RNSFSymbol : RCTViewComponentView @end
 @interface RNSparkButton : RCTViewComponentView @end
+@interface RNSparkProgressIndicator : RCTViewComponentView @end
 static void RCTTextInputSearchHandleCommand(id view, const NSString *name, const NSArray *args) {}
 // ACTUAL_IMPLEMENTATION
 static void Update(RNSparkTextInput *view, std::shared_ptr<SparkTextInputProps> props) { [view updateProps:props oldProps:view->_props]; }
@@ -187,6 +199,64 @@ int main() { @autoreleasepool {
   buttonProps = std::make_shared<SparkButtonProps>(*buttonProps); buttonProps->checked = false; buttonProps->checkedRevision = 2;
   [button updateProps:buttonProps oldProps:button->_props]; assert(disclosure.state == NSControlStateValueOff);
   [button prepareForRecycle]; NSButton *recycled = [button valueForKey:@"button"]; assert(recycled.bezelStyle == NSBezelStyleRounded && recycled.state == NSControlStateValueOff);
+  // Progress: a determinate bar holds its value; indeterminate animates; a spinner reports its native size per control size.
+  {
+    RNSparkProgressIndicator *progress = [RNSparkProgressIndicator new]; auto progressProps = std::make_shared<SparkProgressIndicatorProps>();
+    progressProps->indeterminate = false; progressProps->value = 0.4; progressProps->accessibilityLabel = "Fetching";
+    [progress updateProps:progressProps oldProps:nullptr];
+    NSProgressIndicator *indicator = [progress valueForKey:@"indicator"];
+    assert(indicator.style == NSProgressIndicatorStyleBar && !indicator.indeterminate && indicator.doubleValue == 0.4 && [indicator.accessibilityLabel isEqual:@"Fetching"]);
+    [progress updateEventEmitter:std::make_shared<SparkProgressIndicatorEventEmitter>()];
+    assert(progressSizes.size() == 1 && progressSizes[0].second > 0);
+    progressProps = std::make_shared<SparkProgressIndicatorProps>(*progressProps); progressProps->indeterminate = true;
+    [progress updateProps:progressProps oldProps:progress->_props]; assert(indicator.indeterminate);
+    std::vector<double> spinnerSizes;
+    for (auto size : {SparkProgressIndicatorControlSize::Regular, SparkProgressIndicatorControlSize::Small, SparkProgressIndicatorControlSize::Mini}) {
+      progressProps = std::make_shared<SparkProgressIndicatorProps>(*progressProps); progressProps->variant = SparkProgressIndicatorVariant::Spinner; progressProps->controlSize = size;
+      [progress updateProps:progressProps oldProps:progress->_props];
+      assert(indicator.style == NSProgressIndicatorStyleSpinning && progressSizes.back().first == progressSizes.back().second);
+      spinnerSizes.push_back(progressSizes.back().first);
+    }
+    assert(spinnerSizes[0] > spinnerSizes[1] && spinnerSizes[1] > spinnerSizes[2]);
+    // AppKit draws bars in two sizes only; React rejects `mini` for bars.
+    std::vector<double> barHeights;
+    for (auto size : {SparkProgressIndicatorControlSize::Regular, SparkProgressIndicatorControlSize::Small}) {
+      progressProps = std::make_shared<SparkProgressIndicatorProps>(*progressProps); progressProps->variant = SparkProgressIndicatorVariant::Bar; progressProps->controlSize = size;
+      [progress updateProps:progressProps oldProps:progress->_props];
+      barHeights.push_back(progressSizes.back().second);
+    }
+    assert(barHeights[0] > barHeights[1]);
+  }
+  // Symbol and control size: the image leads the title, smaller sizes shrink the control and its font, and a missing
+  // symbol is reported once (also when the emitter arrives after the props) while the title stays.
+  {
+    RNSparkButton *iconButton = [RNSparkButton new]; auto iconProps = std::make_shared<SparkButtonProps>(); iconProps->title = "Generate"; iconProps->symbol = "sparkles";
+    [iconButton updateProps:iconProps oldProps:nullptr];
+    NSButton *control = [iconButton valueForKey:@"button"];
+    assert(control.image && control.imagePosition == NSImageLeading && [control.title isEqual:@"Generate"] && control.controlSize == NSControlSizeRegular);
+    [iconButton updateEventEmitter:std::make_shared<SparkButtonEventEmitter>()];
+    NSSize regular = control.intrinsicContentSize;
+    for (auto size : {SparkButtonControlSize::Small, SparkButtonControlSize::Mini}) {
+      iconProps = std::make_shared<SparkButtonProps>(*iconProps); iconProps->controlSize = size;
+      [iconButton updateProps:iconProps oldProps:iconButton->_props];
+      assert(control.controlSize == (size == SparkButtonControlSize::Small ? NSControlSizeSmall : NSControlSizeMini));
+      assert(control.font.pointSize == [NSFont systemFontSizeForControlSize:control.controlSize] && control.intrinsicContentSize.height < regular.height);
+    }
+    iconProps = std::make_shared<SparkButtonProps>(*iconProps); iconProps->symbol = "";
+    [iconButton updateProps:iconProps oldProps:iconButton->_props]; assert(!control.image && control.imagePosition == NSNoImage);
+    RNSparkButton *missing = [RNSparkButton new]; auto missingProps = std::make_shared<SparkButtonProps>(); missingProps->title = "Go"; missingProps->symbol = "__spark_missing_symbol__";
+    [missing updateProps:missingProps oldProps:nullptr]; assert(missingButtonSymbols.empty());
+    [missing updateEventEmitter:std::make_shared<SparkButtonEventEmitter>()];
+    [missing updateProps:missingProps oldProps:missing->_props];
+    assert(missingButtonSymbols.size() == 1 && missingButtonSymbols[0] == "__spark_missing_symbol__");
+    // Coming back to a missing symbol after another one reports it again.
+    for (const char *name : {"plus", "__spark_missing_symbol__"}) {
+      missingProps = std::make_shared<SparkButtonProps>(*missingProps); missingProps->symbol = name;
+      [missing updateProps:missingProps oldProps:missing->_props];
+    }
+    assert(missingButtonSymbols.size() == 2);
+    assert([((NSButton *)[missing valueForKey:@"button"]).title isEqual:@"Go"]);
+  }
   // Segmented control size and distribution.
   RNNativeSegmentedControl *sized = [RNNativeSegmentedControl new];
   auto sizedProps = std::make_shared<NativeSegmentedControlProps>(); sizedProps->segmentsJson = R"([{"label":"A","value":"a"},{"label":"Longer","value":"b"}])"; sizedProps->value = "a";

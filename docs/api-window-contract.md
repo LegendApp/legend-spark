@@ -167,6 +167,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 |---|---|
 | Style masks | Translate ordinary bits to common booleans/title-bar options; keep native panel styles under creation-only `macos.panelStyle`. |
 | Represented URL | `macos.representedUri`, nullable for clearing. |
+| Subtitle | `macos.subtitle` (`NSWindow.subtitle`); an empty string removes it. |
 | Window level | `macos.level`; reject conflicting `alwaysOnTop` requests. |
 | Content layout guide, title visibility, material/blending/state/tint, traffic lights | `macos.titleBar` group. |
 | Toolbar style, items, titlebar controls | Typed `macos.toolbar` and `macos.titleBar.controls`. |
@@ -178,7 +179,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Startup timing | Diagnostics entry point, not window options. |
 | Display sleep prevention | `/system` power assertion; remove the duplicate window-manager convenience API. |
 
-`MacOSToolbarItem` is a discriminated union of button, menu, label, search and segmented items. Menu entries use the shared action/checkbox/separator/slider schema; this surface rejects submenus, shortcuts, semantic roles and image files. `addMacOSWindowListener` returns an acknowledged registration for typed title-bar, toolbar, search and menu events; slider actions carry a numeric value. Search focus may optionally replace its text, including an empty string. Segmented values may be empty strings; `null` represents no selection.
+`MacOSToolbarItem` is a discriminated union of button, menu, label, search, segmented and progress items. A progress item is an `NSProgressIndicator`: `variant` `bar` (default) or `spinner`, optional `width`, and `value` from 0 to 1 for determinate progress (omitted or `null` animates as indeterminate); a value change updates the existing item in place. A button's `disabled` holds through AppKit's toolbar validation. Menu entries use the shared action/checkbox/separator/slider schema; this surface rejects submenus, shortcuts, semantic roles and image files. `addMacOSWindowListener` returns an acknowledged registration for typed title-bar, toolbar, search and menu events; slider actions carry a numeric value. Search focus may optionally replace its text, including an empty string. Segmented values may be empty strings; `null` represents no selection.
 
 Use `/app` events `windowOpened` and `windowClosed` for application-wide registry changes across reused IDs. `usePrimaryWindowLifecycle` uses those events and initializes once per owning ID under React Strict Mode. Instance-specific listeners belong to `/windows`.
 

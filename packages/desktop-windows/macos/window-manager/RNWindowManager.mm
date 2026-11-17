@@ -632,6 +632,19 @@ static BOOL LegendDictionaryHasKey(NSDictionary *dictionary, NSString *key)
   return [dictionary isKindOfClass:NSDictionary.class] && dictionary[key] != nil;
 }
 
+// A number from 0 to 1 is determinate progress; anything else (null or absent) animates as indeterminate.
+static void LegendApplyProgressValue(NSProgressIndicator *indicator, id value)
+{
+  BOOL determinate = [value isKindOfClass:NSNumber.class];
+  indicator.indeterminate = !determinate;
+  if (determinate) {
+    indicator.doubleValue = [value doubleValue];
+    [indicator stopAnimation:nil];
+  } else {
+    [indicator startAnimation:nil];
+  }
+}
+
 static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window);
 
 static NSURL *LegendURLFromString(NSString *value)
@@ -687,6 +700,7 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   if (hasTitle || hasRepresentedURL) {
     LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, nil);
   }
+  if ([options[@"subtitle"] isKindOfClass:NSString.class]) window.subtitle = options[@"subtitle"];
 
   NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
   if (windowStyle[@"startupSplitView"] == NSNull.null && LegendFinishSidebarSplitViewStartup) {
@@ -1297,35 +1311,44 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
   }
   NSArray<NSDictionary *> *previousConfigs = self.toolbarItemConfigs[toolbar.identifier];
-  BOOL menuUpdate = previousConfigs != nil && previousConfigs.count == configs.count;
-  for (NSUInteger index = 0; menuUpdate && index < configs.count; index++) {
+  // Menu items of menu buttons and values of progress items change in place, keeping the item (and an open menu or a
+  // running animation); any other change replaces the changed items below.
+  BOOL inPlaceUpdate = previousConfigs != nil && previousConfigs.count == configs.count;
+  for (NSUInteger index = 0; inPlaceUpdate && index < configs.count; index++) {
     NSMutableDictionary *previous = [previousConfigs[index] mutableCopy];
     NSMutableDictionary *next = [configs[index] mutableCopy];
-    if ([next[@"type"] isEqual:@"menuButton"]) {
-      [previous removeObjectForKey:@"menuItems"];
-      [next removeObjectForKey:@"menuItems"];
+    NSString *inPlaceKey = [next[@"type"] isEqual:@"menuButton"] ? @"menuItems" : [next[@"type"] isEqual:@"progress"] ? @"value" : nil;
+    if (inPlaceKey) {
+      [previous removeObjectForKey:inPlaceKey];
+      [next removeObjectForKey:inPlaceKey];
     }
-    menuUpdate = [previous isEqualToDictionary:next];
+    inPlaceUpdate = [previous isEqualToDictionary:next];
   }
   self.toolbarItemConfigs[toolbar.identifier] = configs;
-  if (menuUpdate) {
+  if (inPlaceUpdate) {
     for (NSDictionary *config in configs) {
-      if (![config[@"type"] isEqual:@"menuButton"]) continue;
+      BOOL menu = [config[@"type"] isEqual:@"menuButton"], progress = [config[@"type"] isEqual:@"progress"];
+      if (!menu && !progress) continue;
       NSString *itemId = config[@"id"];
-      if (![itemId isKindOfClass:NSString.class] || itemId.length == 0) { menuUpdate = NO; break; }
+      if (![itemId isKindOfClass:NSString.class] || itemId.length == 0) { inPlaceUpdate = NO; break; }
       NSString *itemIdentifier = [@"legend.toolbar." stringByAppendingString:itemId];
       NSToolbarItem *item = nil;
       for (NSToolbarItem *candidate in toolbar.items) {
         if ([candidate.itemIdentifier isEqual:itemIdentifier]) { item = candidate; break; }
       }
+      if (progress) {
+        if (![item.view isKindOfClass:NSProgressIndicator.class]) { inPlaceUpdate = NO; break; }
+        LegendApplyProgressValue((NSProgressIndicator *)item.view, config[@"value"]);
+        continue;
+      }
       id control = item.view ?: item;
       NSDictionary *metadata = control ? objc_getAssociatedObject(control, &LegendToolbarControlMetadataKey) : nil;
-      if (!metadata) { menuUpdate = NO; break; }
+      if (!metadata) { inPlaceUpdate = NO; break; }
       NSMutableDictionary *nextMetadata = [metadata mutableCopy];
       nextMetadata[@"menuItems"] = config[@"menuItems"] ?: @[];
       objc_setAssociatedObject(control, &LegendToolbarControlMetadataKey, nextMetadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (menuUpdate) return;
+    if (inPlaceUpdate) return;
   }
   // Moving an item takes its control out of the window, which ends editing in a focused text field (ignored while
   // movingToolbarItem is set), so focus and selection are restored afterwards.
@@ -1555,6 +1578,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       @"value": [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"",
       @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
       @"instanceId": config[@"instanceId"] ?: @"",
+      @"enabled": @(toolbarItem.enabled),
     };
     if (isMenuButton) {
       // The fallback name identifies the item; it is never what the control displays, so an
@@ -1605,6 +1629,30 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
     NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
     toolbarItem.view = textField;
+    toolbarItem.label = label;
+    toolbarItem.paletteLabel = label;
+    toolbarItem.toolTip = label;
+    return toolbarItem;
+  }
+
+  if ([type isEqualToString:@"progress"]) {
+    NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+    NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+    BOOL spinner = [config[@"variant"] isEqual:@"spinner"];
+    NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
+    NSProgressIndicator *indicator = [NSProgressIndicator new];
+    indicator.style = spinner ? NSProgressIndicatorStyleSpinning : NSProgressIndicatorStyleBar;
+    indicator.controlSize = spinner ? NSControlSizeSmall : NSControlSizeRegular;
+    indicator.displayedWhenStopped = YES;
+    indicator.minValue = 0;
+    indicator.maxValue = 1;
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    [indicator.widthAnchor constraintEqualToConstant:widthNumber ? widthNumber.doubleValue : spinner ? 16 : 120].active = YES;
+    indicator.accessibilityLabel = label;
+    LegendApplyProgressValue(indicator, config[@"value"]);
+
+    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+    toolbarItem.view = indicator;
     toolbarItem.label = label;
     toolbarItem.paletteLabel = label;
     toolbarItem.toolTip = label;
@@ -1821,6 +1869,13 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
   [self sendWindowEventWithName:@"onToolbarItemSelected"
                            body:@{@"identifier": identifier, @"itemId": itemId, @"action": @{ @"type": @"action", @"itemId": value }, @"instanceId": representedObject[@"instanceId"] ?: @""}];
+}
+
+// AppKit validation enables any item whose target answers its action, so the item's `enabled` option is the answer.
+- (BOOL)validateToolbarItem:(NSToolbarItem *)item
+{
+  NSDictionary *metadata = objc_getAssociatedObject(item, &LegendToolbarControlMetadataKey);
+  return ![metadata isKindOfClass:NSDictionary.class] || ![metadata[@"enabled"] isEqual:@NO];
 }
 
 - (void)toolbarSearchButtonPressed:(id)sender
