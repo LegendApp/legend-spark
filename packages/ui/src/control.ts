@@ -34,6 +34,12 @@ export const unsupportedPlatform: Availability = { available: false, reason: "un
 export function validateButton(props: ButtonProps) {
   if (typeof props.children !== "string" || !props.children.length || (props.onPress !== undefined && typeof props.onPress !== "function") || (props.variant !== undefined && !["default", "bordered", "borderless", "disclosure"].includes(props.variant))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid button options");
   if ((props.variant === "disclosure") !== (props.expanded !== undefined) || (props.expanded !== undefined && typeof props.expanded !== "boolean")) throw new SparkError("E_INVALID_ARGUMENT", "Disclosure buttons require a boolean expanded; other buttons do not take it");
+  if (props.symbol !== undefined && (typeof props.symbol !== "string" || !props.symbol.length || props.symbol.includes("\0") || props.variant === "disclosure")) throw new SparkError("E_INVALID_ARGUMENT", "A button symbol is a nonempty SF Symbol name, and disclosure buttons take none");
+  if (props.size !== undefined && !["regular", "small", "mini"].includes(props.size)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid button size");
+}
+/** Button options only AppKit (and, for `size`, the web) can honor. */
+export function macosButton(props: ButtonProps) {
+  return props.variant === "disclosure" || props.symbol !== undefined || (props.size !== undefined && props.size !== "regular");
 }
 export function validateCheckbox(props: CheckboxProps) {
   if (typeof props.value !== "boolean" || typeof props.onValueChange !== "function" || (props.children !== undefined && (typeof props.children !== "string" || !props.children.length))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid checkbox options");

@@ -18,7 +18,7 @@ import { View, Text } from "react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { selectionIndex } from "./select";
-import { controlKinds, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
+import { controlKinds, macosButton, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
 import { UnavailableCheckbox } from "./checkbox-unavailable";
 import type { ButtonProps, CheckboxProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
 export type { ButtonProps, CheckboxProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
@@ -29,7 +29,7 @@ export function getControlAvailability(control: ControlKind): Availability {
   return control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
 }
 export function Button(props: ButtonProps) {
-  validateButton(props); const control = useControl(props, props.variant === "disclosure" ? unsupportedPlatform : getControlAvailability("button"));
+  validateButton(props); const control = useControl(props, macosButton(props) ? unsupportedPlatform : getControlAvailability("button"));
   const { children, onPress, variant = "default", style, testID, accessibilityLabel = children } = props;
   return <View ref={control.ref} style={[{ width: 160, height: 48 }, style]} testID={testID} accessibilityLabel={accessibilityLabel}>
     {control.failed ? <Text accessibilityState={{ disabled: true }}>{children}</Text> :

@@ -6,7 +6,7 @@ import NativeSelect from "./native-select/NativeSelectNativeComponent";
 import WindowsSelect from "./SparkSelectNativeComponent";
 import NativeSegmentedControl from "./native-select/NativeSegmentedControlNativeComponent";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
-import { unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateSegmented } from "./control";
+import { macosButton, unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateSegmented } from "./control";
 import { getControlAvailability } from "./availability";
 import { selectionIndex } from "./select";
 import type { ButtonProps, CheckboxProps, TextInputProps, SelectProps, SegmentedControlProps } from "./types";
@@ -27,13 +27,18 @@ function useIntrinsicSize(control: ReturnType<typeof useControl>) {
 }
 export function Button(props: ButtonProps) {
   validateButton(props);
-  const { children, variant = "default", expanded, onPress, accessibilityLabel = children, style, testID } = props;
+  const { children, variant = "default", expanded, symbol, size = "regular", onPress, accessibilityLabel = children, style, testID } = props;
   const disclosure = variant === "disclosure";
-  const control = useControl(props, disclosure && Platform.OS === "windows" ? unsupportedPlatform : getControlAvailability("button"));
+  const control = useControl(props, Platform.OS === "windows" && macosButton(props) ? unsupportedPlatform : getControlAvailability("button"));
+  function symbolError(event: NativeSyntheticEvent<{ name: string; message: string }>) {
+    if (!control.mounted()) return;
+    if (typeof event?.nativeEvent?.name !== "string" || typeof event?.nativeEvent?.message !== "string") { control.error(new SparkError("E_INVALID_DATA", "Invalid symbol error")); return; }
+    if (event.nativeEvent.name === symbol) control.error(new SparkError("E_NOT_FOUND", event.nativeEvent.message));
+  }
   const intrinsic = useIntrinsicSize(control);
   const [revision, revise] = useState(0);
   if (control.failed) return <View ref={control.ref} style={[{ width: 160, height: 36 }, style]} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true, expanded }}><Text>{children}</Text></View>;
-  return <NativeButton ref={control.ref} title={children} disabled={control.disabled} variant={variant} checked={expanded ?? false} checkedRevision={revision} accessibilityLabel={accessibilityLabel}
+  return <NativeButton ref={control.ref} title={children} disabled={control.disabled} variant={variant} checked={expanded ?? false} checkedRevision={revision} accessibilityLabel={accessibilityLabel} symbol={symbol ?? ""} controlSize={size} onSymbolError={symbolError}
     onButtonPress={() => { if (!control.active()) return; if (disclosure) revise(value => value + 1); onPress?.(); }} onIntrinsicSize={intrinsic.measured} onUnavailable={control.unavailable} testID={testID} style={[intrinsic.frame, style]} />;
 }
 export function Checkbox(props: CheckboxProps) {

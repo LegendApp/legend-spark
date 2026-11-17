@@ -10,6 +10,10 @@ export interface NativeProps extends ViewProps {
   /** Checkbox value or disclosure expansion; re-applied whenever checkedRevision changes. */
   checked?: WithDefault<boolean, false>;
   checkedRevision?: Int32;
+  /** SF Symbol name shown before the title; empty for none. */
+  symbol?: string;
+  controlSize?: WithDefault<"regular" | "small" | "mini", "regular">;
+  onSymbolError?: DirectEventHandler<Readonly<{ name: string; message: string }>>;
   onButtonPress?: DirectEventHandler<Readonly<{}>>;
   onIntrinsicSize?: DirectEventHandler<Readonly<{ width: Double; height: Double }>>;
 }

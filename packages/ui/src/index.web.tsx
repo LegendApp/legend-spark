@@ -2,7 +2,7 @@ import { selectionIndex } from "./select";
 import type { CSSProperties } from "react";
 import { View } from "react-native";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
-import { controlKinds, useControl, useTextValue, validateButton, validateCheckbox, validateSegmented } from "./control";
+import { controlKinds, unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateSegmented } from "./control";
 import type { ButtonProps, CheckboxProps, TextInputProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
 export type { ButtonProps, CheckboxProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export function getControlAvailability(control: ControlKind): Availability {
@@ -12,11 +12,12 @@ export function getControlAvailability(control: ControlKind): Availability {
 const nativeStyle: CSSProperties = { width: "100%", height: "100%", boxSizing: "border-box", font: "14px system-ui" };
 const borderlessStyle: CSSProperties = { ...nativeStyle, border: "none", background: "transparent" };
 export function Button(props: ButtonProps) {
-  validateButton(props); const control = useControl(props);
-  const { children, onPress, variant = "default", expanded, accessibilityLabel = children, style, testID } = props;
+  validateButton(props); const control = useControl(props, props.symbol !== undefined ? unsupportedPlatform : undefined);
+  const { children, onPress, variant = "default", expanded, size = "regular", accessibilityLabel = children, style, testID } = props;
+  const font = size === "regular" ? nativeStyle.font : size === "small" ? "12px system-ui" : "10px system-ui";
   return <View ref={control.ref} style={[{ width: 160, height: 36 }, style]} testID={testID}>
-    <button type="button" disabled={control.disabled} onClick={() => { if (control.active()) onPress?.(); }} aria-label={accessibilityLabel} aria-expanded={expanded}
-      style={variant === "borderless" ? borderlessStyle : nativeStyle}>{variant === "disclosure" ? (expanded ? "\u25B4" : "\u25BE") : children}</button>
+    <button type="button" disabled={control.disabled || control.failed} onClick={() => { if (control.active()) onPress?.(); }} aria-label={accessibilityLabel} aria-expanded={expanded}
+      style={{ ...(variant === "borderless" ? borderlessStyle : nativeStyle), font }}>{variant === "disclosure" ? (expanded ? "\u25B4" : "\u25BE") : children}</button>
   </View>;
 }
 export function Checkbox(props: CheckboxProps) {

@@ -24,6 +24,12 @@ On macOS, `Button` and `Checkbox` take their AppKit intrinsic size (from the lab
 
 `Button`'s `variant="disclosure"` is AppKit's disclosure button (a chevron in a rounded button, no visible title). It requires a boolean `expanded`, and its text children become its accessible name; toggle `expanded` in `onPress`. A press that the parent does not apply leaves the chevron as rendered. `expanded` with any other variant throws. Disclosure buttons are macOS and web only; Windows, iOS and Android render the disabled fallback and report `E_UNSUPPORTED_PLATFORM`.
 
+`Button`'s `symbol` shows an SF Symbol before its title, and `size` (`regular` default, `small`, `mini`) is the AppKit control size, which also sets the matching system font size. A symbol name missing on the running macOS reports `E_NOT_FOUND` through `onError` and the button keeps its title. Both are macOS options: `size` also applies on web (smaller text), while Windows, iOS and Android render the disabled fallback and report `E_UNSUPPORTED_PLATFORM` for a symbol or a size other than `regular`, and web does for a symbol. Disclosure buttons take no symbol.
+
+```tsx
+<Button symbol="sparkles" size="small" onPress={generate}>Generate</Button>
+```
+
 `Checkbox` is a controlled checkbox: `value`, `onValueChange(next)` and optional string `children` as its label (without a label, `accessibilityLabel` is required). It is an AppKit checkbox (`NSButton` switch) on macOS and an HTML checkbox on web; Windows, iOS and Android render the disabled fallback and report `E_UNSUPPORTED_PLATFORM`.
 
 ```tsx
@@ -42,6 +48,8 @@ Select and SegmentedControl use the same `SelectOption` array and controlled `va
 | SegmentedControl | Segmented control | Unsupported | Segmented picker | Inline choices | Button group |
 | Checkbox | Checkbox (`NSButton` switch) | Unsupported | Unsupported | Unsupported | HTML checkbox |
 | Button `disclosure` | Disclosure button | Unsupported | Unsupported | Unsupported | `aria-expanded` button |
+| Button `symbol` | SF Symbol image | Unsupported | Unsupported | Unsupported | Unsupported |
+| Button `size` small/mini | Control size | Unsupported | Unsupported | Unsupported | Smaller text |
 
 SegmentedControl `size` (`regular` default, `small`) and `distribution` (`fit` default: segments sized to their labels; `fill`: equal segments across the control's width) apply on macOS and web. iOS and Android pickers have one size and fill their frame, so they keep those defaults.
 

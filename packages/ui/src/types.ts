@@ -21,6 +21,10 @@ export interface ButtonProps extends ControlProps {
   variant?: "default" | "bordered" | "borderless" | "disclosure";
   /** Controlled expansion of a `disclosure` button; toggle it in `onPress`. Only valid with that variant. */
   expanded?: boolean;
+  /** macOS SF Symbol shown before the title (not with `disclosure`). A name missing on this system reports `E_NOT_FOUND`; other platforms report `E_UNSUPPORTED_PLATFORM`. */
+  symbol?: string;
+  /** AppKit control size; `regular` (default) everywhere, `small` and `mini` on macOS and web. */
+  size?: "regular" | "small" | "mini";
 }
 /** A controlled native checkbox. `children` is its label; without one, set `accessibilityLabel`. */
 export interface CheckboxProps extends ControlProps {

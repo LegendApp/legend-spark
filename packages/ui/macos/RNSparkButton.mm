@@ -9,6 +9,8 @@ using namespace facebook::react;
   NSButton *_button;
   SparkButtonVariant _variant;
   NSSize _reportedSize;
+  NSString *_symbol;
+  NSString *_reportedMissingSymbol;
 }
 - (instancetype)init {
   if (self = [super init]) {
@@ -40,6 +42,7 @@ using namespace facebook::react;
   _button.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
   _button.frame = self.bounds;
   _reportedSize = NSZeroSize;
+  _symbol = nil;
   [self addSubview:_button];
 }
 - (void)pressed:(id)sender {
@@ -58,9 +61,30 @@ using namespace facebook::react;
   event.height = size.height;
   emitter->onIntrinsicSize(event);
 }
+// A missing symbol is reported once per name, also when the emitter arrives after the props.
+- (void)reportMissingSymbol {
+  auto emitter = std::static_pointer_cast<const SparkButtonEventEmitter>(_eventEmitter);
+  if (!emitter || _symbol.length == 0 || _button.image || [_reportedMissingSymbol isEqual:_symbol]) return;
+  _reportedMissingSymbol = _symbol;
+  SparkButtonEventEmitter::OnSymbolError event;
+  event.name = _symbol.UTF8String;
+  event.message = [NSString stringWithFormat:@"SF Symbol '%@' is not available on this system", _symbol].UTF8String;
+  emitter->onSymbolError(event);
+}
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps {
   const auto &value = *std::static_pointer_cast<const SparkButtonProps>(props);
   if (value.variant != _variant) { _variant = value.variant; [self replaceButton]; }
+  NSControlSize controlSize = value.controlSize == SparkButtonControlSize::Mini ? NSControlSizeMini : value.controlSize == SparkButtonControlSize::Small ? NSControlSizeSmall : NSControlSizeRegular;
+  if (_button.controlSize != controlSize) {
+    _button.controlSize = controlSize;
+    _button.font = [NSFont systemFontOfSize:[NSFont systemFontSizeForControlSize:controlSize]];
+  }
+  NSString *symbol = [NSString stringWithUTF8String:value.symbol.c_str()];
+  if (![symbol isEqual:_symbol]) {
+    _symbol = symbol;
+    _button.image = symbol.length ? [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil] : nil;
+    _button.imagePosition = _button.image ? NSImageLeading : NSNoImage;
+  }
   NSString *title = [NSString stringWithUTF8String:value.title.c_str()];
   // A disclosure button draws only its chevron; its title names it for accessibility.
   _button.title = _variant == SparkButtonVariant::Disclosure ? @"" : title;
@@ -72,10 +96,12 @@ using namespace facebook::react;
   _button.accessibilityLabel = label.length ? label : title;
   _button.accessibilityIdentifier = [NSString stringWithUTF8String:value.testId.c_str()];
   [super updateProps:props oldProps:oldProps];
+  [self reportMissingSymbol];
   [self reportIntrinsicSize];
 }
 - (void)updateEventEmitter:(EventEmitter::Shared const &)eventEmitter {
   [super updateEventEmitter:eventEmitter];
+  [self reportMissingSymbol];
   [self reportIntrinsicSize];
 }
 - (void)layoutSubviews { [super layoutSubviews]; _button.frame = self.bounds; }
@@ -88,6 +114,7 @@ using namespace facebook::react;
   [super prepareForRecycle];
   if (self.window.firstResponder == _button) [self.window makeFirstResponder:nil];
   _variant = SparkButtonVariant::Default;
+  _reportedMissingSymbol = nil;
   [self replaceButton];
 }
 + (ComponentDescriptorProvider)componentDescriptorProvider { return concreteComponentDescriptorProvider<SparkButtonComponentDescriptor>(); }
