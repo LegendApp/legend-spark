@@ -161,6 +161,7 @@ static id RNSparkTableJSON(const std::string &json, Class expected) {
   _props = std::make_shared<const SparkTableProps>();
   [self applyColumns:@[]];
   [self applyRows:@[]];
+  [_tableView scrollPoint:NSZeroPoint];
 }
 + (ComponentDescriptorProvider)componentDescriptorProvider { return concreteComponentDescriptorProvider<SparkTableComponentDescriptor>(); }
 @end

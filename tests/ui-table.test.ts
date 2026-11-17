@@ -35,12 +35,14 @@ test("the table sends columns, rows and the parent's selection, and snaps back a
   expect(onDoubleClick.mock.calls).toEqual([[{ id: "b" }]]);
 });
 
-test("selectedIds turns on multiple selection; a selection of unknown rows is an E_INVALID_DATA error", async () => {
+test("selectedIds turns on multiple selection; rows a newer render removed are dropped, and malformed events are E_INVALID_DATA", async () => {
   const onSelectionChange = vi.fn(), onError = vi.fn();
   await mount(React.createElement(Table, { columns, rows, selectedIds: ["a", "b"], onSelectionChange, onError, headerVisible: false }));
   expect(native()).toMatchObject({ selectedIdsJson: '["a","b"]', allowsMultipleSelection: true, headerVisible: false });
-  await act(async () => native().onTableSelectionChange(selection("x", ["x"])));
-  expect(onSelectionChange).not.toHaveBeenCalled();
+  await act(async () => native().onTableSelectionChange(selection("x", ["a", "x"])));
+  expect(onSelectionChange).toHaveBeenCalledWith({ id: "a", ids: ["a"] });
+  expect(onError).not.toHaveBeenCalled();
+  await act(async () => native().onTableSelectionChange({ nativeEvent: { id: "a", idsJson: "[1]" } }));
   expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
 });
 

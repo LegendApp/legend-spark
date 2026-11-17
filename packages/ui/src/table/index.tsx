@@ -88,10 +88,13 @@ export function Table(props: TableProps) {
   function selectionChanged(event: NativeSyntheticEvent<{ id: string; idsJson: string }>) {
     if (!control.active()) return;
     let ids: string[];
-    try { ids = JSON.parse(event.nativeEvent.idsJson); if (!Array.isArray(ids) || ids.some(id => !rows.some(row => row.id === id))) throw new Error("Unknown row"); }
+    try { ids = JSON.parse(event.nativeEvent.idsJson); if (!Array.isArray(ids) || ids.some(id => typeof id !== "string")) throw new Error("Expected row IDs"); }
     catch (cause) { control.error(new SparkError("E_INVALID_DATA", "Invalid table selection", { cause })); return; }
+    // A click can land on rows a newer render already removed; report only the rows still present.
+    const present = new Set(rows.map(row => row.id));
+    ids = ids.filter(id => present.has(id));
     revise(value => value + 1);
-    onSelectionChange({ id: event.nativeEvent.id || (ids[0] ?? null), ids });
+    onSelectionChange({ id: present.has(event.nativeEvent.id) ? event.nativeEvent.id : ids[0] ?? null, ids });
   }
   if (control.failed) return <View {...rest} ref={control.ref} style={style} accessibilityRole="list">
     {rows.map(row => <Text key={row.id} accessibilityState={{ selected: selection.includes(row.id) }}>{columns.map(column => row.values[column.id] ?? "").join("  ")}</Text>)}
