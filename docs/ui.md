@@ -30,7 +30,7 @@ On macOS, `Button` and `Checkbox` take their AppKit intrinsic size (from the lab
 <Button symbol="sparkles" size="small" onPress={generate}>Generate</Button>
 ```
 
-`Checkbox` is a controlled checkbox: `value`, `onValueChange(next)` and optional string `children` as its label (without a label, `accessibilityLabel` is required). It is an AppKit checkbox (`NSButton` switch) on macOS and an HTML checkbox on web; Windows, iOS and Android render the disabled fallback and report `E_UNSUPPORTED_PLATFORM`.
+`Checkbox` is a controlled checkbox: `value`, `onValueChange(next)` and optional string `children` as its label (without a label, `accessibilityLabel` is required). It is an AppKit checkbox (`NSButton` switch) on macOS, a WinUI `CheckBox` on Windows (160x36 default frame, like Windows buttons) and an HTML checkbox on web; iOS and Android render the disabled fallback and report `E_UNSUPPORTED_PLATFORM`.
 
 `RadioGroup` is a controlled group of radio buttons, one per option: `options`, `value` and `onValueChange(next)` as for Select, plus `orientation` (`vertical` default, `horizontal`) and `size` (`regular` default, `small`, `mini`). On macOS it is AppKit radio buttons (`NSButton`) in a stack with the radio-group accessibility role, sized to its buttons unless a style sets a width or height; a click the parent does not accept snaps back. Web uses HTML radio inputs; Windows, iOS and Android render the options as disabled text and report `E_UNSUPPORTED_PLATFORM`.
 
@@ -49,7 +49,7 @@ Select and SegmentedControl use the same `SelectOption` array and controlled `va
 | TextInput | AppKit | WinUI | RN TextInput | RN TextInput | HTML input |
 | Select | Popup | ComboBox | Menu picker | Inline choices | HTML select |
 | SegmentedControl | Segmented control | Unsupported | Segmented picker | Inline choices | Button group |
-| Checkbox | Checkbox (`NSButton` switch) | Unsupported | Unsupported | Unsupported | HTML checkbox |
+| Checkbox | Checkbox (`NSButton` switch) | WinUI `CheckBox` | Unsupported | Unsupported | HTML checkbox |
 | RadioGroup | Radio buttons (`NSButton` radio) | Unsupported | Unsupported | Unsupported | HTML radio inputs |
 | Button `disclosure` | Disclosure button | Unsupported | Unsupported | Unsupported | `aria-expanded` button |
 | Button `symbol` | SF Symbol image | Unsupported | Unsupported | Unsupported | Unsupported |
@@ -149,7 +149,7 @@ import { Table } from '@legendapp/spark/ui/table';
 />
 ```
 
-`Sheet` under `/ui/sheet` is a document-modal AppKit sheet on the window the component renders in, hosting its React children (a New Branch or Create PR form, say). Render it anywhere in the window. `visible` is controlled; the content mounts while visible and the sheet takes the content's React layout size, so give the content a width and height (or content that sizes it). Escape and ⌘. call `onCancel`; the sheet never closes itself, so set `visible` to false there and in your form's buttons. Spark controls work inside it; React `Pressable`s have the same pointer-movement limit as in a popover. For a single text field, `showPrompt` (an alert with a text field) is lighter. Other platforms render visible content inline and report `E_UNSUPPORTED_PLATFORM`; check `getSheetAvailability()`.
+`Sheet` under `/ui/sheet` is a document-modal AppKit sheet on the window the component renders in, hosting its React children (a New Branch or Create PR form, say). Render it anywhere in the window. `visible` is controlled; the content mounts while visible and the sheet takes the content's React layout size, so give the content a width and height (or content that sizes it). Escape and ⌘. call `onCancel`; the sheet never closes itself, so set `visible` to false there and in your form's buttons. The content stays mounted through the close animation and unmounts once the sheet has closed. Closing the window ends its sheet. Spark controls work inside it; React `Pressable`s have the same pointer-movement limit as in a popover. For a single text field, `showPrompt` (an alert with a text field) is lighter. Other platforms render visible content inline and report `E_UNSUPPORTED_PLATFORM`; check `getSheetAvailability()`.
 
 ```tsx
 import { Sheet } from '@legendapp/spark/ui/sheet';

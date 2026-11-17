@@ -21,13 +21,16 @@ using namespace facebook::react;
 @end
 
 // The React child moves into a document-modal sheet on this view's window. The content keeps its own touch handler,
-// since the surface's handler only sees its own window.
+// since the surface's handler only sees its own window. endSheet: returns after the close animation, and only then
+// does onDismiss tell React it may unmount the content. Closing the parent window ends the sheet, which would
+// otherwise keep the closed window alive.
 @implementation RNSparkSheet {
   RNSparkSheetWindow *_sheet;
   RNSparkSheetContentView *_contentView;
   RCTSurfaceTouchHandler *_touchHandler;
   NSView *_content;
-  NSWindow *_parent;
+  __weak NSWindow *_parent;
+  id _parentObserver;
   BOOL _visible;
   NSSize _contentSize;
 }
@@ -58,25 +61,34 @@ using namespace facebook::react;
   auto emitter = std::static_pointer_cast<const SparkSheetEventEmitter>(_eventEmitter);
   if (_visible && emitter) emitter->onCancel({});
 }
+- (void)endSheet {
+  if (_parentObserver) { [NSNotificationCenter.defaultCenter removeObserver:_parentObserver]; _parentObserver = nil; }
+  NSWindow *parent = _parent;
+  _parent = nil;
+  [parent endSheet:_sheet];
+}
 - (void)updatePresentation {
   BOOL show = _visible && _contentSize.width > 0 && _contentSize.height > 0 && self.window != nil;
-  if (!show) {
-    if (_parent) { [_parent endSheet:_sheet]; _parent = nil; }
-    return;
-  }
+  if (!show) { [self endSheet]; return; }
   if (!NSEqualSizes(_sheet.contentView.frame.size, _contentSize)) [_sheet setContentSize:_contentSize];
-  if (_parent == self.window) return;
-  if (_parent) [_parent endSheet:_sheet];
+  if (_parent && _parent == self.window) return;
+  [self endSheet];
   _parent = self.window;
+  __weak RNSparkSheet *weakSelf = self;
+  _parentObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification object:_parent queue:nil
+    usingBlock:^(NSNotification *) { [weakSelf endSheet]; }];
   [_parent beginSheet:_sheet completionHandler:nil];
 }
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps {
   const auto &next = *std::static_pointer_cast<const SparkSheetProps>(props);
+  const BOOL wasVisible = _visible;
   _visible = next.visible;
   _contentSize = NSMakeSize(MAX(0, next.contentWidth), MAX(0, next.contentHeight));
   _contentView.accessibilityLabel = next.accessibilityLabel.empty() ? nil : [NSString stringWithUTF8String:next.accessibilityLabel.c_str()];
   [super updateProps:props oldProps:oldProps];
   [self updatePresentation];
+  auto emitter = std::static_pointer_cast<const SparkSheetEventEmitter>(_eventEmitter);
+  if (wasVisible && !_visible && emitter) emitter->onDismiss({});
 }
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];

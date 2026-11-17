@@ -19,14 +19,20 @@ export function Sheet({ visible, children, onCancel, ref, onError, style, ...pro
   callback(onCancel, "onCancel");
   const control = useControl({ ref, onError }, getSheetAvailability());
   const [size, setSize] = useState<{ width: number; height: number }>();
-  if (!visible && size) setSize(undefined);
+  // The content stays mounted until the sheet has finished closing, so it does not animate away blank.
+  const [contentMounted, setContentMounted] = useState(visible);
+  if (visible && !contentMounted) setContentMounted(true);
+  function dismissed() {
+    if (!control.mounted() || visible) return;
+    setContentMounted(false); setSize(undefined);
+  }
   function measured(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
     setSize(previous => previous?.width === width && previous.height === height ? previous : { width, height });
   }
   if (control.failed) return visible ? <View {...props} ref={control.ref} style={style} accessibilityViewIsModal>{children}</View> : null;
   return <NativeSheet {...props} ref={control.ref} style={[{ position: "absolute", width: 0, height: 0 }, style]} visible={visible} contentWidth={size?.width ?? 0} contentHeight={size?.height ?? 0}
-    onCancel={() => { if (control.mounted()) onCancel?.(); }}>
-    {visible ? <View collapsable={false} style={{ position: "absolute", left: 0, top: 0 }} onLayout={measured}>{children}</View> : null}
+    onCancel={() => { if (control.mounted()) onCancel?.(); }} onDismiss={dismissed}>
+    {contentMounted ? <View collapsable={false} style={{ position: "absolute", left: 0, top: 0 }} onLayout={measured}>{children}</View> : null}
   </NativeSheet>;
 }

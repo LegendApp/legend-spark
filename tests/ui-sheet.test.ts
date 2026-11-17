@@ -29,8 +29,19 @@ test("the sheet mounts its content while visible and shows it at the content's l
   expect(native()).toMatchObject({ visible: true, contentWidth: 360, contentHeight: 180 });
   await act(async () => native().onCancel());
   expect(onCancel).toHaveBeenCalledTimes(1);
+  // Hidden: the content stays mounted through the close animation, until native reports onDismiss.
   await act(async () => rendered.update(React.createElement(Sheet, { visible: false, onCancel }, form)));
+  expect(native().visible).toBe(false);
+  expect(native().children).toBeTruthy();
+  await act(async () => native().onDismiss());
   expect(native()).toMatchObject({ visible: false, contentWidth: 0, contentHeight: 0 });
+  expect(native().children).toBeFalsy();
+  // A dismissal that arrives after the sheet is shown again keeps the content.
+  await act(async () => rendered.update(React.createElement(Sheet, { visible: true, onCancel }, form)));
+  await act(async () => rendered.update(React.createElement(Sheet, { visible: false, onCancel }, form)));
+  await act(async () => rendered.update(React.createElement(Sheet, { visible: true, onCancel }, form)));
+  await act(async () => native().onDismiss());
+  expect(native().children).toBeTruthy();
 });
 
 test("invalid sheet options throw, and other platforms render visible content inline and report E_UNSUPPORTED_PLATFORM", async () => {
