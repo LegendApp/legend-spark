@@ -21,13 +21,16 @@ using namespace facebook::react;
 @end
 
 // The React child moves into a document-modal sheet on this view's window. The content keeps its own touch handler,
-// since the surface's handler only sees its own window.
+// since the surface's handler only sees its own window. endSheet: returns after the close animation, and only then
+// does onDismiss tell React it may unmount the content. Closing the parent window ends the sheet, which would
+// otherwise keep the closed window alive.
 @implementation RNSparkSheet {
   RNSparkSheetWindow *_sheet;
   RNSparkSheetContentView *_contentView;
   RCTSurfaceTouchHandler *_touchHandler;
   NSView *_content;
-  NSWindow *_parent;
+  __weak NSWindow *_parent;
+  id _parentObserver;
   BOOL _visible;
   NSSize _contentSize;
 }
@@ -49,6 +52,7 @@ using namespace facebook::react;
 - (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index {
   _content = childComponentView;
   [_contentView addSubview:childComponentView];
+  [self dismissIfHidden];
 }
 - (void)unmountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index {
   if (childComponentView == _content) _content = nil;
@@ -58,16 +62,28 @@ using namespace facebook::react;
   auto emitter = std::static_pointer_cast<const SparkSheetEventEmitter>(_eventEmitter);
   if (_visible && emitter) emitter->onCancel({});
 }
+// Sent whenever the view is hidden but still holds content, not only on a visible → hidden change: Fabric can skip
+// the commit that showed it.
+- (void)dismissIfHidden {
+  auto emitter = std::static_pointer_cast<const SparkSheetEventEmitter>(_eventEmitter);
+  if (!_visible && _content && emitter) emitter->onDismiss({});
+}
+- (void)endSheet {
+  if (_parentObserver) { [NSNotificationCenter.defaultCenter removeObserver:_parentObserver]; _parentObserver = nil; }
+  NSWindow *parent = _parent;
+  _parent = nil;
+  [parent endSheet:_sheet];
+}
 - (void)updatePresentation {
   BOOL show = _visible && _contentSize.width > 0 && _contentSize.height > 0 && self.window != nil;
-  if (!show) {
-    if (_parent) { [_parent endSheet:_sheet]; _parent = nil; }
-    return;
-  }
+  if (!show) { [self endSheet]; return; }
   if (!NSEqualSizes(_sheet.contentView.frame.size, _contentSize)) [_sheet setContentSize:_contentSize];
-  if (_parent == self.window) return;
-  if (_parent) [_parent endSheet:_sheet];
+  if (_parent && _parent == self.window) return;
+  [self endSheet];
   _parent = self.window;
+  __weak RNSparkSheet *weakSelf = self;
+  _parentObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification object:_parent queue:nil
+    usingBlock:^(NSNotification *) { [weakSelf endSheet]; }];
   [_parent beginSheet:_sheet completionHandler:nil];
 }
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps {
@@ -77,6 +93,7 @@ using namespace facebook::react;
   _contentView.accessibilityLabel = next.accessibilityLabel.empty() ? nil : [NSString stringWithUTF8String:next.accessibilityLabel.c_str()];
   [super updateProps:props oldProps:oldProps];
   [self updatePresentation];
+  [self dismissIfHidden];
 }
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];

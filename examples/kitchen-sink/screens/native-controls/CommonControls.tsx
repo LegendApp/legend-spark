@@ -1,4 +1,4 @@
-import { Button, Checkbox, RadioGroup, SegmentedControl } from "@legendapp/spark/ui";
+import { Button, Checkbox, RadioGroup, SegmentedControl, TextInput } from "@legendapp/spark/ui";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { Panel, Status } from "../../Panel";
@@ -13,6 +13,8 @@ export function CommonControls() {
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState("changes");
   const [reviewKind, setReviewKind] = useState("comment");
+  const [summary, setSummary] = useState("");
+  const [body, setBody] = useState("");
   return <Panel title="Buttons, checkboxes, radios and segments">
     <Status testID="native-controls-common-status">Presses: {presses} · Amend: {String(amend)} · Sign off: {String(signOff)} · Expanded: {String(expanded)} · Mode: {mode} · Review: {reviewKind}</Status>
     <View className="flex-row flex-wrap items-center gap-3">
@@ -33,6 +35,11 @@ export function CommonControls() {
     <RadioGroup testID="native-controls-common-radio" accessibilityLabel="Review" orientation="horizontal" options={reviewKinds} value={reviewKind} onValueChange={setReviewKind} />
     <RadioGroup testID="native-controls-common-radio-vertical" accessibilityLabel="Mode (small, vertical)" size="small" options={modes} value={mode} onValueChange={setMode} />
     <SegmentedControl testID="native-controls-common-segmented-small" accessibilityLabel="Mode (small, fit)" size="small" options={modes} value={mode} onValueChange={setMode} />
+    <Status testID="native-controls-common-text-status">Summary: {summary || "(empty)"} · Body lines: {body ? body.split("\n").length : 0}</Status>
+    <View className="flex-row flex-wrap items-start gap-3">
+      <TextInput testID="native-controls-common-summary" accessibilityLabel="Summary" placeholder="Commit summary" value={summary} onChangeText={setSummary} />
+      <TextInput testID="native-controls-common-body" accessibilityLabel="Description" placeholder="Description (Return adds a line)" multiline value={body} onChangeText={setBody} style={{ width: 320, height: 80 }} />
+    </View>
     <SegmentedControl testID="native-controls-common-segmented-fill" accessibilityLabel="Mode (fill)" distribution="fill" style={{ width: 420 }} options={modes} value={mode} onValueChange={setMode} />
   </Panel>;
 }

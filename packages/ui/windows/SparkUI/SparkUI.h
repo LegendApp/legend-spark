@@ -16,10 +16,20 @@ namespace React = Microsoft::ReactNative;
 namespace Composition = Microsoft::ReactNative::Composition;
 namespace Xaml = Microsoft::UI::Xaml;
 namespace Json = Windows::Data::Json;
+// WinUI TextBox breaks lines with \r; Spark text uses \n.
+inline std::string NewlineText(std::string const &text) {
+  std::string lines; lines.reserve(text.size());
+  for (size_t i = 0; i < text.size(); ++i) {
+    if (text[i] != '\r') { lines += text[i]; continue; }
+    lines += '\n';
+    if (i + 1 < text.size() && text[i + 1] == '\n') ++i;
+  }
+  return lines;
+}
 struct Props : implements<Props, React::IComponentProps> {
   React::ViewProps view{nullptr};
   std::string title, defaultText, text, placeholder, itemsJson = "[]", value, variant = "default";
-  bool disabled = false, controlled = false, multiline = false;
+  bool disabled = false, controlled = false, multiline = false, checked = false;
   int32_t eventCount = 0;
   void SetProp(uint32_t, hstring const &name, React::IJSValueReader const &reader) noexcept {
     if (name == L"title") React::ReadValue(reader, title);
@@ -33,6 +43,7 @@ struct Props : implements<Props, React::IComponentProps> {
     else if (name == L"value") React::ReadValue(reader, value);
     else if (name == L"variant") React::ReadValue(reader, variant);
     else if (name == L"disabled") React::ReadValue(reader, disabled);
+    else if (name == L"checked") React::ReadValue(reader, checked);
   }
 };
 struct Control : implements<Control, Windows::Foundation::IInspectable> {
@@ -58,6 +69,7 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
   std::vector<std::string> values;
   bool initialized = false, updating = false;
   int32_t eventCount = 0;
+  float width = 0, height = 0;
   void Emit(hstring const &name, std::string const &key = "", std::string const &value = "") {
     const auto count = eventCount;
     if (emitter) emitter.DispatchEvent(name, [key, value, name, count](React::IJSValueWriter const &writer) {
@@ -66,6 +78,18 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
       if (name == L"textChange") { writer.WritePropertyName(L"eventCount"); writer.WriteInt64(count); }
       writer.WriteObjectEnd();
     });
+  }
+  // A Checkbox is SparkButton's checkbox variant; the variant arrives with the first props, so the button is replaced then.
+  Xaml::Controls::Control MakeButton(bool checkbox) {
+    Xaml::Controls::Primitives::ButtonBase button{nullptr};
+    if (checkbox) button = Xaml::Controls::CheckBox(); else button = Xaml::Controls::Button();
+    button.Click([weak = get_weak()](auto const &, auto const &) { if (auto self = weak.get()) self->Emit(L"buttonPress"); });
+    return button;
+  }
+  void Place() {
+    control.HorizontalAlignment(Xaml::HorizontalAlignment::Stretch);
+    control.VerticalAlignment(Xaml::VerticalAlignment::Stretch);
+    if (width > 0 || height > 0) { control.Width(width); control.Height(height); }
   }
   void Create(Composition::ContentIslandComponentView const &view, std::string type) {
     kind = std::move(type); component = make_weak(view);
@@ -76,13 +100,11 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
       const auto weak = get_weak();
       windowThemeChanged = view.ThemeChanged(auto_revoke, [weak](auto const &, auto const &) { if (auto self = weak.get()) self->ApplyTheme(); });
       if (kind == "Button") {
-        Xaml::Controls::Button button;
-        button.Click([weak](auto const &, auto const &) { if (auto self = weak.get()) self->Emit(L"buttonPress"); });
-        control = button;
+        control = MakeButton(false);
       } else if (kind == "TextInput") {
         Xaml::Controls::TextBox input;
         input.TextChanged([weak](auto const &sender, auto const &) {
-          if (auto self = weak.get(); self && !self->updating && self->control.IsEnabled()) { ++self->eventCount; self->Emit(L"textChange", "text", to_string(sender.template as<Xaml::Controls::TextBox>().Text())); }
+          if (auto self = weak.get(); self && !self->updating && self->control.IsEnabled()) { ++self->eventCount; self->Emit(L"textChange", "text", NewlineText(to_string(sender.template as<Xaml::Controls::TextBox>().Text()))); }
         });
         control = input;
       } else {
@@ -95,8 +117,7 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
         });
         control = select;
       }
-      control.HorizontalAlignment(Xaml::HorizontalAlignment::Stretch);
-      control.VerticalAlignment(Xaml::VerticalAlignment::Stretch);
+      Place();
       context = React::ReactContext(view.ReactContext());
       ApplyTheme();
       themeSubscription = context.Notifications().Subscribe(ThemeChanged(), context.UIDispatcher(), [weak](auto const &, auto const &) {
@@ -115,18 +136,22 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
     if (!control || !failure.empty()) return;
     try {
       updating = true;
+      if (kind == "Button" && (props.variant == "checkbox") != static_cast<bool>(control.try_as<Xaml::Controls::CheckBox>())) {
+        control = MakeButton(props.variant == "checkbox"); Place(); island.Content(control); ApplyTheme();
+      }
       control.IsEnabled(!props.disabled);
       Xaml::Automation::AutomationProperties::SetAutomationId(control, props.view.TestId());
       Xaml::Automation::AutomationProperties::SetName(control, props.view.AccessibilityLabel().empty() && kind == "Button" ? to_hstring(props.title) : props.view.AccessibilityLabel());
       if (kind == "Button") {
-        auto button = control.as<Xaml::Controls::Button>();
-        button.Content(box_value(to_hstring(props.title)));
-        // WinUI owns hover, pressed, keyboard, disabled, and accessibility states.
-        button.BorderThickness(props.variant == "borderless" ? Xaml::Thickness{0, 0, 0, 0} : Xaml::Thickness{1, 1, 1, 1});
+        control.as<Xaml::Controls::ContentControl>().Content(box_value(to_hstring(props.title)));
+        // WinUI owns hover, pressed, keyboard, disabled, and accessibility states. The checkbox state is controlled:
+        // a click toggles it, and every update (including the press acknowledgment) restores the value.
+        if (auto box = control.try_as<Xaml::Controls::CheckBox>()) box.IsChecked(props.checked);
+        else control.BorderThickness(props.variant == "borderless" ? Xaml::Thickness{0, 0, 0, 0} : Xaml::Thickness{1, 1, 1, 1});
       } else if (kind == "TextInput") {
         auto input = control.as<Xaml::Controls::TextBox>();
         if (!initialized) input.Text(to_hstring(props.defaultText));
-        if (props.controlled && props.eventCount >= eventCount && input.Text() != to_hstring(props.text)) input.Text(to_hstring(props.text));
+        if (props.controlled && props.eventCount >= eventCount && NewlineText(to_string(input.Text())) != props.text) input.Text(to_hstring(props.text));
         input.PlaceholderText(to_hstring(props.placeholder));
         input.AcceptsReturn(props.multiline);
         input.TextWrapping(props.multiline ? Xaml::TextWrapping::Wrap : Xaml::TextWrapping::NoWrap);
@@ -163,7 +188,7 @@ inline void RegisterControls(React::IReactPackageBuilder const &package) {
           auto old = get_self<Props>(previous);
           props->title = old->title; props->defaultText = old->defaultText; props->itemsJson = old->itemsJson;
           props->text = old->text; props->placeholder = old->placeholder; props->multiline = old->multiline; props->controlled = old->controlled; props->eventCount = old->eventCount;
-          props->value = old->value; props->variant = old->variant; props->disabled = old->disabled;
+          props->value = old->value; props->variant = old->variant; props->disabled = old->disabled; props->checked = old->checked;
         }
         props->view = view; return props.as<React::IComponentProps>();
       });
@@ -174,6 +199,7 @@ inline void RegisterControls(React::IReactPackageBuilder const &package) {
         view.LayoutMetricsChanged([weak](auto const &, React::LayoutMetricsChangedArgs const &args) {
           if (auto self = weak.get(); self && self->control) {
             auto frame = args.NewLayoutMetrics().Frame;
+            self->width = frame.Width; self->height = frame.Height;
             self->control.Width(frame.Width); self->control.Height(frame.Height);
           }
         });

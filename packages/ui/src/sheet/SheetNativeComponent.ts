@@ -8,6 +8,8 @@ export interface NativeProps extends ViewProps {
   contentHeight?: CodegenTypes.Double;
   /** Escape or ⌘. in the sheet. */
   onCancel?: CodegenTypes.DirectEventHandler<Readonly<{}>>;
+  /** Sent while `visible` is false and content is still mounted (after the close animation if the sheet was open); the content may unmount. */
+  onDismiss?: CodegenTypes.DirectEventHandler<Readonly<{}>>;
 }
 
 export default codegenNativeComponent<NativeProps>("SparkSheet") as HostComponent<NativeProps>;

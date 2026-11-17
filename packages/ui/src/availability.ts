@@ -6,6 +6,6 @@ export function getControlAvailability(control: ControlKind): Availability {
   const names: Record<ControlKind, string> = { button: "SparkButton", "text-input": "SparkTextInput", select: Platform.OS === "windows" ? "SparkSelect" : "NativeSelect", "segmented-control": "NativeSegmentedControl", checkbox: "SparkButton", "radio-group": "SparkRadioGroup" };
   if (!controlKinds.includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return unsupportedPlatform;
-  if (Platform.OS === "windows" && (control === "segmented-control" || control === "checkbox" || control === "radio-group")) return unsupportedPlatform;
+  if (Platform.OS === "windows" && (control === "segmented-control" || control === "radio-group")) return unsupportedPlatform;
   return UIManager.hasViewManagerConfig(names[control]) ? { available: true } : { available: false, reason: "missing-module" };
 }

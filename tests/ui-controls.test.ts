@@ -154,11 +154,12 @@ test("checkboxes are controlled native switch buttons with validated labels", as
   await expect(mount(React.createElement(Checkbox, { children: "Amend", value: "yes", onValueChange } as never))).rejects.toThrow("Invalid checkbox options");
   await mount(React.createElement(Checkbox, { value: true, accessibilityLabel: "Select row", onValueChange }));
   expect(rendered.root.findByType("SparkButton").props.title).toBe("");
-  for (const [os, Component] of [["windows", Checkbox], ["android", AndroidCheckbox]] as const) {
-    platform.OS = os; const onError = vi.fn();
-    await mount(React.createElement(Component, { children: "Amend", value: true, onValueChange, onError }));
-    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" })); expect(rendered.root.findAllByType("SparkButton")).toHaveLength(0);
-  }
+  platform.OS = "windows"; const windowsError = vi.fn();
+  await mount(React.createElement(Checkbox, { children: "Amend", value: true, onValueChange, onError: windowsError }));
+  expect(rendered.root.findByType("SparkButton").props).toMatchObject({ variant: "checkbox", title: "Amend", checked: true }); expect(windowsError).not.toHaveBeenCalled();
+  platform.OS = "android"; const onError = vi.fn();
+  await mount(React.createElement(AndroidCheckbox, { children: "Amend", value: true, onValueChange, onError }));
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" })); expect(rendered.root.findAllByType("SparkButton")).toHaveLength(0);
 });
 test("segmented control size and distribution reach AppKit and web, and unknown values reject", async () => {
   await mount(React.createElement(SegmentedControl, { options, value: "one", onValueChange: vi.fn() }));
