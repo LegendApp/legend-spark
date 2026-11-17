@@ -19,10 +19,10 @@ test("progress is determinate for a value from 0 to 1 and indeterminate without 
   await mount(React.createElement(ProgressIndicator, { value: 0.4, accessibilityLabel: "Fetching" }));
   expect(native()).toMatchObject({ variant: "bar", controlSize: "regular", value: 0.4, indeterminate: false, accessibilityLabel: "Fetching" });
   for (const value of [undefined, null]) {
-    await act(async () => rendered.update(React.createElement(ProgressIndicator, { value, variant: "spinner", size: "small" })));
-    expect(native()).toMatchObject({ variant: "spinner", controlSize: "small", indeterminate: true });
+    await act(async () => rendered.update(React.createElement(ProgressIndicator, { value, variant: "spinner", size: "mini" })));
+    expect(native()).toMatchObject({ variant: "spinner", controlSize: "mini", indeterminate: true });
   }
-  for (const props of [{ value: -0.1 }, { value: 1.01 }, { value: NaN }, { value: "0.5" }, { variant: "circle" }, { size: "large" }]) {
+  for (const props of [{ value: -0.1 }, { value: 1.01 }, { value: NaN }, { value: "0.5" }, { variant: "circle" }, { size: "large" }, { size: "mini" }]) {
     await expect(mount(React.createElement(ProgressIndicator, props as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
   }
 });

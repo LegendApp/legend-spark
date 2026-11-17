@@ -218,6 +218,14 @@ int main() { @autoreleasepool {
       spinnerSizes.push_back(progressSizes.back().first);
     }
     assert(spinnerSizes[0] > spinnerSizes[1] && spinnerSizes[1] > spinnerSizes[2]);
+    // AppKit draws bars in two sizes only; React rejects `mini` for bars.
+    std::vector<double> barHeights;
+    for (auto size : {SparkProgressIndicatorControlSize::Regular, SparkProgressIndicatorControlSize::Small}) {
+      progressProps = std::make_shared<SparkProgressIndicatorProps>(*progressProps); progressProps->variant = SparkProgressIndicatorVariant::Bar; progressProps->controlSize = size;
+      [progress updateProps:progressProps oldProps:progress->_props];
+      barHeights.push_back(progressSizes.back().second);
+    }
+    assert(barHeights[0] > barHeights[1]);
   }
   // Symbol and control size: the image leads the title, smaller sizes shrink the control and its font, and a missing
   // symbol is reported once (also when the emitter arrives after the props) while the title stays.
@@ -241,6 +249,12 @@ int main() { @autoreleasepool {
     [missing updateEventEmitter:std::make_shared<SparkButtonEventEmitter>()];
     [missing updateProps:missingProps oldProps:missing->_props];
     assert(missingButtonSymbols.size() == 1 && missingButtonSymbols[0] == "__spark_missing_symbol__");
+    // Coming back to a missing symbol after another one reports it again.
+    for (const char *name : {"plus", "__spark_missing_symbol__"}) {
+      missingProps = std::make_shared<SparkButtonProps>(*missingProps); missingProps->symbol = name;
+      [missing updateProps:missingProps oldProps:missing->_props];
+    }
+    assert(missingButtonSymbols.size() == 2);
     assert([((NSButton *)[missing valueForKey:@"button"]).title isEqual:@"Go"]);
   }
   // Segmented control size and distribution.

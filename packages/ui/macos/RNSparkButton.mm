@@ -82,6 +82,7 @@ using namespace facebook::react;
   NSString *symbol = [NSString stringWithUTF8String:value.symbol.c_str()];
   if (![symbol isEqual:_symbol]) {
     _symbol = symbol;
+    _reportedMissingSymbol = nil;
     _button.image = symbol.length ? [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil] : nil;
     _button.imagePosition = _button.image ? NSImageLeading : NSNoImage;
   }

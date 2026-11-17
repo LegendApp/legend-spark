@@ -9,13 +9,13 @@ export interface ProgressIndicatorProps extends Omit<SpecializedViewProps, "chil
   variant?: "bar" | "spinner";
   /** Determinate progress from 0 to 1. Omitted or `null` animates as indeterminate. */
   value?: number | null;
-  /** AppKit control size: `regular` (default), `small` or `mini`. */
+  /** AppKit control size: `regular` (default) or `small`; spinners also take `mini`. */
   size?: "regular" | "small" | "mini";
 }
 export function getProgressIndicatorAvailability() { return macosViewAvailability("SparkProgressIndicator"); }
 /** AppKit's NSProgressIndicator. A spinner takes its native size; a bar takes its native height and the style's width. */
 export function ProgressIndicator({ variant = "bar", value, size = "regular", ref, onError, style, ...props }: ProgressIndicatorProps) {
-  if (!["bar", "spinner"].includes(variant) || !["regular", "small", "mini"].includes(size)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid progress indicator options");
+  if (!["bar", "spinner"].includes(variant) || !["regular", "small", "mini"].includes(size) || (variant === "bar" && size === "mini")) throw new SparkError("E_INVALID_ARGUMENT", "Invalid progress indicator options");
   if (value !== undefined && value !== null) finite(value, "progress value", 0, 1);
   const control = useControl({ ref, onError }, getProgressIndicatorAvailability());
   const [intrinsic, setIntrinsic] = useState<{ width: number; height: number }>();

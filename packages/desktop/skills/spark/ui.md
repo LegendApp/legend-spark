@@ -13,7 +13,7 @@ Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `
 - `Select`/`SegmentedControl` never auto-select the first option when `value` is missing. Values are unique strings.
 - Invalid props throw during render; runtime problems go to `onError` (default `console.error`). Spark never inserts error text into your UI.
 - Specialized macOS views (`TextInputSearch`, `Sidebar`, `SidebarSplitView`, swipe actions, `GlassView`, `SFSymbol`, `ProgressIndicator`) render plain view content on other platforms and report through `onError`. Check their `get*Availability()` before advertising the feature.
-- `ProgressIndicator` (`/ui/progress`, macOS) is `NSProgressIndicator`: `variant` `bar`/`spinner`, `size` `regular`/`small`/`mini`, `value` 0 to 1 (omit or `null` for indeterminate). Give a bar a width. For toolbar progress use a `progress` toolbar item instead.
+- `ProgressIndicator` (`/ui/progress`, macOS) is `NSProgressIndicator`: `variant` `bar`/`spinner`, `size` `regular`/`small` (spinners also `mini`), `value` 0 to 1 (omit or `null` for indeterminate). Give a bar a width. For toolbar progress use a `progress` toolbar item instead.
 - `Sidebar`'s `selectedId` is controlled and `onSelectionChange` is required.
 - Layout follows `direction: 'rtl'` on macOS controls.
 - Mobile apps using `Button`/`Select` install optional peer `@expo/ui`. `@expo/ui@55.0.17`, matching Expo SDK 55.
