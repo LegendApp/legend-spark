@@ -51,3 +51,18 @@ test("operation errors report without losing the view; host failures preserve ch
   expect(rendered.root.findByType("View").children).toEqual(["Child"]);
   expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNAVAILABLE" }));
 });
+test.each(["macos", "windows"])("%s reports a native drag start and ignores disabled and unmounted events", async os => {
+  platform.OS = os;
+  const onDragStart = vi.fn();
+  await mount({ source: { text: "drag me" }, onDragStart });
+  const start = rendered.root.findByType("DesktopDragView").props.onDragStart;
+  expect(onDragStart).not.toHaveBeenCalled();
+  start(event({}));
+  expect(onDragStart).toHaveBeenCalledTimes(1);
+  expect(onDragStart).toHaveBeenCalledWith();
+  await act(async () => rendered.update(React.createElement(StrictMode, null, React.createElement(DragDropView, { onDragStart, disabled: true }))));
+  rendered.root.findByType("DesktopDragView").props.onDragStart(event({}));
+  await act(async () => { rendered.unmount(); rendered = undefined; });
+  start(event({}));
+  expect(onDragStart).toHaveBeenCalledTimes(1);
+});

@@ -106,7 +106,12 @@ struct DragView : implements<DragView, Windows::Foundation::IInspectable> {
         }
         data.SetStorageItems(items);
       }
-      if (mounted && !disabled && root == session) resultOperation = co_await operation.StartAsync(session->manager, point);
+      if (mounted && !disabled && root == session) {
+        auto drag = operation.StartAsync(session->manager, point);
+        auto status = drag.Status();
+        if (status == Windows::Foundation::AsyncStatus::Started || status == Windows::Foundation::AsyncStatus::Completed) Emit(L"dragStart");
+        resultOperation = co_await drag;
+      }
     } catch (hresult_error const &error) { if (error.code() != E_ABORT && error.code() != HRESULT_FROM_WIN32(ERROR_CANCELLED)) Fail(error); }
     if (auto strong = view.get()) strong.ReleasePointerCapture(pointer);
     if (operation) { try { operation.Close(); } catch (...) {} operation = nullptr; }

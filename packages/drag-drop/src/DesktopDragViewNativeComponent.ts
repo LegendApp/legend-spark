@@ -11,6 +11,7 @@ export interface NativeProps extends ViewProps {
   onDragEnter?: DirectEventHandler<Payload>;
   onDragOver?: DirectEventHandler<Payload>;
   onDragLeave?: DirectEventHandler<Payload>;
+  onDragStart?: DirectEventHandler<Payload>;
   onDragEnd?: DirectEventHandler<Payload>;
 }
 export default codegenNativeComponent<NativeProps>("DesktopDragView") as HostComponent<NativeProps>;
