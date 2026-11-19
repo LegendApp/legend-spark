@@ -25,6 +25,7 @@ export interface TableRow {
   values: Readonly<Record<string, string>>;
 }
 export interface TableSelectionEvent { id: string | null; ids: string[] }
+export interface TableColumnResizeEvent { id: string; width: number }
 export interface TableBaseProps extends Omit<SpecializedViewProps, "children"> {
   columns: readonly TableColumn[];
   rows: readonly TableRow[];
@@ -35,6 +36,7 @@ export interface TableBaseProps extends Omit<SpecializedViewProps, "children"> {
   /** Row height in points; defaults to the system's row size. */
   rowHeight?: number;
   onSelectionChange: (event: TableSelectionEvent) => void;
+  onColumnResize?: (event: TableColumnResizeEvent) => void;
   onDoubleClick?: (event: { id: string }) => void;
   children?: never;
 }
@@ -71,12 +73,13 @@ function validate(columns: readonly TableColumn[], rows: readonly TableRow[]) {
 }
 /** AppKit's NSTableView with a header and text columns. Only visible rows have cells, so long tables stay cheap. */
 export function Table(props: TableProps) {
-  const { columns, rows, selectedId, selectedIds, headerVisible = true, alternatingRows = false, rowHeight, onSelectionChange, onDoubleClick, ref, onError, style, ...rest } = props;
+  const { columns, rows, selectedId, selectedIds, headerVisible = true, alternatingRows = false, rowHeight, onSelectionChange, onColumnResize, onDoubleClick, ref, onError, style, ...rest } = props;
   validate(columns, rows);
   if (typeof headerVisible !== "boolean" || typeof alternatingRows !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "headerVisible and alternatingRows must be boolean");
   if (rowHeight !== undefined) finite(rowHeight, "row height", 1, 1000);
   if (typeof onSelectionChange !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onSelectionChange");
   callback(onDoubleClick, "double-click");
+  callback(onColumnResize, "column resize");
   const multiple = selectedIds !== undefined;
   if (multiple === (selectedId !== undefined)) throw new SparkError("E_INVALID_ARGUMENT", "Pass exactly one of selectedId and selectedIds");
   const selection = multiple ? selectedIds : selectedId === null ? [] : [selectedId];
@@ -96,10 +99,20 @@ export function Table(props: TableProps) {
     revise(value => value + 1);
     onSelectionChange({ id: present.has(event.nativeEvent.id) ? event.nativeEvent.id : ids[0] ?? null, ids });
   }
+  function columnResized(event: NativeSyntheticEvent<TableColumnResizeEvent>) {
+    if (!control.active() || !onColumnResize) return;
+    const { id, width } = event.nativeEvent ?? {};
+    if (typeof id !== "string" || typeof width !== "number" || !Number.isFinite(width) || width <= 0) {
+      control.error(new SparkError("E_INVALID_DATA", "Invalid table column resize"));
+      return;
+    }
+    if (columns.some(column => column.id === id)) onColumnResize({ id, width });
+  }
   if (control.failed) return <View {...rest} ref={control.ref} style={style} accessibilityRole="list">
     {rows.map(row => <Text key={row.id} accessibilityState={{ selected: selection.includes(row.id) }}>{columns.map(column => row.values[column.id] ?? "").join("  ")}</Text>)}
   </View>;
   return <NativeTable {...rest} ref={control.ref} style={style} columnsJson={columnsJson} rowsJson={rowsJson} selectedIdsJson={JSON.stringify(selection)} selectionRevision={revision}
     allowsMultipleSelection={multiple} headerVisible={headerVisible} alternatingRows={alternatingRows} rowHeight={rowHeight ?? 0}
+    reportsColumnResize={onColumnResize !== undefined} onTableColumnResize={onColumnResize ? columnResized : undefined}
     onTableSelectionChange={selectionChanged} onTableDoubleClick={event => { if (control.active() && rows.some(row => row.id === event.nativeEvent.id)) onDoubleClick?.({ id: event.nativeEvent.id }); }} />;
 }

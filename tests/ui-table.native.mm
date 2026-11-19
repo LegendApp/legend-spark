@@ -9,15 +9,18 @@ namespace facebook::react {
 struct Props { using Shared = std::shared_ptr<const Props>; virtual ~Props() = default; };
 struct SparkTableProps : Props {
   std::string columnsJson, rowsJson, selectedIdsJson, accessibilityLabel;
-  int selectionRevision = 0; bool allowsMultipleSelection = false, headerVisible = true, alternatingRows = false; double rowHeight = 0;
+  int selectionRevision = 0; bool allowsMultipleSelection = false, headerVisible = true, alternatingRows = false, reportsColumnResize = false; double rowHeight = 0;
 };
 struct EventEmitter { using Shared = std::shared_ptr<const EventEmitter>; virtual ~EventEmitter() = default; };
 static std::vector<std::pair<std::string, std::string>> selections;
 static std::vector<std::string> doubleClicks;
+static std::vector<std::pair<std::string, double>> columnResizes;
 struct SparkTableEventEmitter : EventEmitter {
   struct OnTableSelectionChange { std::string id, idsJson; };
+  struct OnTableColumnResize { std::string id; double width; };
   struct OnTableDoubleClick { std::string id; };
   void onTableSelectionChange(OnTableSelectionChange event) const { selections.push_back({ event.id, event.idsJson }); }
+  void onTableColumnResize(OnTableColumnResize event) const { columnResizes.emplace_back(event.id, event.width); }
   void onTableDoubleClick(OnTableDoubleClick event) const { doubleClicks.push_back(event.id); }
 };
 enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
@@ -63,7 +66,7 @@ int main() { @autoreleasepool {
   view.frame = NSMakeRect(0, 0, 600, 400);
   [window.contentView addSubview:view];
   Next(view, ^(SparkTableProps &p) {
-    p.columnsJson = R"([{"id":"subject","title":"Subject","minWidth":120},{"id":"author","title":"Author","width":120,"secondary":true},{"id":"date","title":"Date","width":100,"alignment":"trailing","monospacedDigits":true}])";
+    p.columnsJson = R"([{"id":"subject","title":"Subject","minWidth":120},{"id":"author","title":"Author","width":120,"maxWidth":180,"secondary":true},{"id":"date","title":"Date","width":100,"alignment":"trailing","monospacedDigits":true}])";
     p.rowsJson = Rows(10000); p.selectedIdsJson = R"(["c2"])";
   });
   [view updateLayoutMetrics:LayoutMetrics{} oldLayoutMetrics:LayoutMetrics{}];
@@ -76,6 +79,17 @@ int main() { @autoreleasepool {
   // Columns with a width keep it; the flexible Subject column takes the rest of the 600 pt table.
   [table sizeToFit];
   assert(table.tableColumns[1].width == 120 && table.tableColumns[2].width == 100 && table.tableColumns[0].width > 300);
+  Next(view, ^(SparkTableProps &p) { p.reportsColumnResize = true; });
+  static NSInteger resizedColumn = -1;
+  class_replaceMethod(NSTableHeaderView.class, @selector(resizedColumn), imp_implementationWithBlock(^NSInteger(id) { return resizedColumn; }), "q@:");
+  table.tableColumns[1].width = 140;
+  assert(columnResizes.empty());
+  resizedColumn = 1;
+  table.tableColumns[1].width = 250;
+  assert((columnResizes == std::vector<std::pair<std::string, double>>{{"author", 180}}));
+  table.tableColumns[0].width = 300;
+  assert(columnResizes.size() == 1);
+  resizedColumn = -1;
   // 10,000 rows, but cells exist only for the visible ones.
   assert(table.numberOfRows == 10000 && [Cell(table, 0, 0) isEqual:@"Commit 0"] && [Cell(table, 0, 1) isEqual:@""]);
   NSTableCellView *date = [table viewAtColumn:2 row:3 makeIfNecessary:YES];

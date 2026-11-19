@@ -35,6 +35,7 @@ static id RNSparkTableJSON(const std::string &json, Class expected) {
     _tableView.style = NSTableViewStyleFullWidth;
     _tableView.columnAutoresizingStyle = NSTableViewUniformColumnAutoresizingStyle;
     _tableView.allowsColumnReordering = NO;
+    _tableView.allowsColumnResizing = YES;
     _tableView.allowsEmptySelection = YES;
     _tableView.dataSource = self;
     _tableView.delegate = self;
@@ -149,6 +150,17 @@ static id RNSparkTableJSON(const std::string &json, Class expected) {
   NSData *data = [NSJSONSerialization dataWithJSONObject:ids options:0 error:nil];
   const auto emitter = std::static_pointer_cast<const SparkTableEventEmitter>(_eventEmitter);
   if (emitter) emitter->onTableSelectionChange({ .id = rowId.UTF8String, .idsJson = std::string((const char *)data.bytes, data.length) });
+}
+- (void)tableViewColumnDidResize:(NSNotification *)notification {
+  const auto &props = *std::static_pointer_cast<const SparkTableProps>(_props);
+  if (!props.reportsColumnResize || !_tableView.headerView) return;
+  NSInteger index = _tableView.headerView.resizedColumn;
+  NSArray<NSTableColumn *> *columns = _tableView.tableColumns;
+  if (index < 0 || index >= (NSInteger)columns.count) return;
+  NSTableColumn *column = notification.userInfo[@"NSTableColumn"];
+  if (column != columns[index]) return;
+  const auto emitter = std::static_pointer_cast<const SparkTableEventEmitter>(_eventEmitter);
+  if (emitter) emitter->onTableColumnResize({ .id = column.identifier.UTF8String, .width = column.width });
 }
 - (void)rowDoubleClicked:(id)sender {
   NSInteger row = _tableView.clickedRow;

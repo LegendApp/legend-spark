@@ -583,6 +583,9 @@
     "SidebarSplitViewProps",
     "SidebarSplitViewResizeEvent",
     "SidebarSplitViewTitlebarMaterial",
+    "SplitView",
+    "SplitViewPane",
+    "SplitViewProps",
     "SplitViewTitleBarOptions",
     "SplitViewTitleBarOverlay",
     "getSplitViewAvailability"
@@ -603,6 +606,7 @@
     "Table",
     "TableBaseProps",
     "TableColumn",
+    "TableColumnResizeEvent",
     "TableProps",
     "TableRow",
     "TableSelectionEvent",
