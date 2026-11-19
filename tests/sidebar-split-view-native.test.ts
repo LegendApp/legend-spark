@@ -12,7 +12,7 @@ test.skipIf(process.platform !== "darwin")("native split views preserve collapse
       .split("\n").filter(line => !line.startsWith("#import")).join("\n");
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     writeFileSync(input, readFileSync(path.join(root, "tests/sidebar-split-view.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));
-    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreImage", input, "-o", output]);
+    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreImage", "-I", path.join(root, "packages/ui/macos/appkit-split-view"), input, "-o", output]);
     expect(execFileSync(output, { encoding: "utf8", timeout: 15000 })).toContain("Full source AppKit component probe passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 25000);

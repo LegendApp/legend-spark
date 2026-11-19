@@ -1,6 +1,7 @@
 import { defineScreens, lazyScreen } from "../../shell/registry";
 import { CommonControls } from "./CommonControls";
 import { Glass } from "./Glass";
+import { PaneSplitViewDemo } from "./PaneSplitViewDemo";
 import { PopoverDemo } from "./PopoverDemo";
 import { Search } from "./Search";
 import { SheetDemo } from "./SheetDemo";
@@ -22,6 +23,7 @@ export default defineScreens("native-controls", [
   { id: "table", title: "Table", titles: { ar: "الجدول" }, summary: "An NSTableView with a header, columns, 5,000 rows, single or multiple selection and double-click.", summaries: { ar: "‏NSTableView بعنوان وأعمدة و5000 صف، مع تحديد مفرد أو متعدد ونقر مزدوج." }, component: TableDemo },
   { id: "sheet", title: "Sheet", titles: { ar: "الورقة" }, summary: "A sheet on the window hosting a React form, with a placeholder and a multiline text input.", summaries: { ar: "ورقة على النافذة تستضيف نموذج React، مع نص بديل وحقل نص متعدد الأسطر." }, component: SheetDemo },
   { id: "split-view", title: "Split view", titles: { ar: "العرض المقسّم" }, summary: "A native sidebar split view with React sidebar and content panes.", summaries: { ar: "عرض مقسّم أصلي بشريط جانبي، فيه جزءا الشريط الجانبي والمحتوى من React." }, component: SplitView },
+  { id: "pane-split-view", title: "Nested split panes", titles: { ar: "أجزاء مقسّمة متداخلة" }, summary: "Drag three columns and a nested vertical split inside the sidebar’s detail pane.", summaries: { ar: "اسحب الفواصل بين ثلاثة أعمدة وتقسيم عمودي متداخل داخل جزء تفاصيل الشريط الجانبي." }, component: PaneSplitViewDemo },
   { id: "glass", title: "Glass", titles: { ar: "الزجاج" }, summary: "A native glass effect view.", summaries: { ar: "عرض أصلي بتأثير الزجاج." }, component: Glass },
   { id: "symbol", title: "SF Symbols", titles: { ar: "رموز SF" }, summary: "SF Symbols at several sizes, scales and colors.", summaries: { ar: "رموز SF بعدة أحجام ومقاييس وألوان." }, component: SFSymbols },
   { id: "search", title: "Search field", titles: { ar: "حقل البحث" }, summary: "Native search fields with change events and programmatic focus.", summaries: { ar: "حقول بحث أصلية مع أحداث التغيير والتركيز البرمجي." }, component: Search },

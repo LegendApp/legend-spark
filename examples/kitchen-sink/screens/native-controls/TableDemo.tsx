@@ -1,5 +1,5 @@
 import { Checkbox } from "@legendapp/spark/ui";
-import { Table, type TableRow } from "@legendapp/spark/ui/table";
+import { Table, type TableColumnResizeEvent, type TableRow } from "@legendapp/spark/ui/table";
 import { useMemo, useState } from "react";
 import { Panel, Status, errorText } from "../../Panel";
 
@@ -16,9 +16,9 @@ export function TableDemo() {
   const [selected, setSelected] = useState<string[]>(["c0"]);
   const [status, setStatus] = useState("5,000 rows; only visible rows have cells");
   const select = ({ ids }: { ids: string[] }) => { setSelected(ids); setStatus(`Selected: ${ids.join(", ") || "none"}`); };
-  const common = { testID: "native-controls-table", accessibilityLabel: "Commits", columns, rows, alternatingRows: true, onSelectionChange: select, onDoubleClick: ({ id }: { id: string }) => setStatus(`Double-clicked: ${id}`), onError: (error: unknown) => setStatus(errorText(error)), style: { height: 320, alignSelf: "stretch" } } as const;
+  const common = { testID: "native-controls-table", accessibilityLabel: "Commits", columns, rows, alternatingRows: true, onSelectionChange: select, onColumnResize: ({ id, width }: TableColumnResizeEvent) => setStatus(`Resized ${id}: ${Math.round(width)} pt`), onDoubleClick: ({ id }: { id: string }) => setStatus(`Double-clicked: ${id}`), onError: (error: unknown) => setStatus(errorText(error)), style: { height: 320, alignSelf: "stretch" } } as const;
   return <Panel title="Table">
-    <Status testID="native-controls-table-status">{status}</Status>
+    <Status testID={status.startsWith("Resized ") ? "native-controls-table-resize-status" : "native-controls-table-status"}>{status}</Status>
     <Checkbox testID="native-controls-table-multiple" value={multiple} onValueChange={value => { setMultiple(value); setSelected(selected.slice(0, 1)); }}>Multiple selection (⌘/⇧-click)</Checkbox>
     {multiple ? <Table {...common} selectedIds={selected} /> : <Table {...common} selectedId={selected[0] ?? null} />}
   </Panel>;

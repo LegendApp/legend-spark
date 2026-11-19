@@ -39,6 +39,7 @@
       "componentProvider": {
         "SparkButton": "RNSparkButton",
         "SparkTextInput": "RNSparkTextInput",
+        "SparkSplitView": "RNSparkSplitViewComponent",
         "SidebarSplitView": "RNSidebarSplitViewComponent",
         "Sidebar": "RNSidebar",
         "SidebarItem": "RNSidebarItem",

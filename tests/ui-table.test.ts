@@ -60,3 +60,14 @@ test("invalid table options throw, and other platforms render the rows as text a
   expect(rendered.root.findAllByType("SparkTable")).toHaveLength(0);
   expect(rendered.root.findAllByType("Text").map((node: any) => node.props.children)).toEqual(["First  Nov 1", "Second  "]);
 });
+
+test("column resize reports the current column in points and drops a removed column", async () => {
+  const onColumnResize = vi.fn(), onError = vi.fn();
+  await mount(React.createElement(Table, { columns, rows, selectedId: null, onSelectionChange: vi.fn(), onColumnResize, onError }));
+  expect(native().reportsColumnResize).toBe(true);
+  native().onTableColumnResize({ nativeEvent: { id: "date", width: 143.5 } });
+  native().onTableColumnResize({ nativeEvent: { id: "removed", width: 120 } });
+  native().onTableColumnResize({ nativeEvent: { id: "date", width: -1 } });
+  expect(onColumnResize.mock.calls).toEqual([[{ id: "date", width: 143.5 }]]);
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+});

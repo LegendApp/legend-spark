@@ -13,7 +13,9 @@ export interface NativeProps extends ViewProps {
   headerVisible?: CodegenTypes.WithDefault<boolean, true>;
   alternatingRows?: CodegenTypes.WithDefault<boolean, false>;
   rowHeight?: CodegenTypes.Double;
+  reportsColumnResize?: boolean;
   onTableSelectionChange?: CodegenTypes.DirectEventHandler<Readonly<{ id: string; idsJson: string }>>;
+  onTableColumnResize?: CodegenTypes.DirectEventHandler<Readonly<{ id: string; width: CodegenTypes.Double }>>;
   onTableDoubleClick?: CodegenTypes.DirectEventHandler<Readonly<{ id: string }>>;
 }
 

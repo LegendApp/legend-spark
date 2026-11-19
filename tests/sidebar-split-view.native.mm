@@ -5,6 +5,7 @@
 #import <CoreImage/CoreImage.h>
 #import <objc/runtime.h>
 #import <TargetConditionals.h>
+#import "RNSparkSplitViewUpdates.h"
 #include <cassert>
 #include <memory>
 #include <string>
@@ -288,6 +289,47 @@ int main(){@autoreleasepool{
    [ov updateProps:ip oldProps:ov->_props];[ov layout];spin();
    assert(oPane.superview==[ov valueForKey:@"inspectorHost"] && fabs(oPane.frame.size.width-260)<0.5 && !oPane.hidden);
    puts("PASS inspector mounted before its props lands in the inspector pane");
+ }
+ {
+   RNSidebarSplitViewComponent *outer = [[RNSidebarSplitViewComponent alloc] initWithFrame:NSMakeRect(0, 0, 1200, 600)];
+   NSWindow *nestedWindow = [[NSWindow alloc] initWithContentRect:outer.frame styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+   nestedWindow.contentView = outer;
+   auto outerProps = std::make_shared<SidebarSplitViewProps>();
+   [outer updateProps:outerProps oldProps:outer->_props];
+   RNSidebarSplitViewComponent *inner = [RNSidebarSplitViewComponent new];
+   [outer mountChildComponentView:inner index:1];
+   auto initial = std::make_shared<SidebarSplitViewProps>();
+   initial->sidebarWidth = 0;
+   [inner updateProps:initial oldProps:inner->_props];
+   [inner updateEventEmitter:std::make_shared<SidebarSplitViewEventEmitter>()];
+   [outer layout]; [inner layout]; spin();
+
+   NSSplitViewController *innerController = [inner valueForKey:@"splitViewController"];
+   [innerController.splitView setPosition:250 ofDividerAtIndex:0];
+   [inner layout]; spin();
+   auto measured = resizes.back();
+   assert(measured.sidebarWidth > 0);
+   auto echo = std::make_shared<SidebarSplitViewProps>(*initial);
+   echo->sidebarWidth = measured.sidebarWidth;
+   size_t beforeEcho = resizes.size();
+   [inner updateProps:echo oldProps:initial];
+   spin();
+   assert(resizes.size() == beforeEcho && "a measured width echoed through props must not reseed the divider");
+
+   auto explicitWidth = std::make_shared<SidebarSplitViewProps>(*echo);
+   explicitWidth->sidebarWidth = 290;
+   __block BOOL appliedInTrackingLoop = NO;
+   __block BOOL ranTrackingLoop = NO;
+   [[NSRunLoop currentRunLoop] performInModes:@[NSEventTrackingRunLoopMode] block:^{
+     [inner updateProps:explicitWidth oldProps:echo];
+     ranTrackingLoop = YES;
+     appliedInTrackingLoop = [[inner valueForKey:@"sidebarWidth"] doubleValue] == explicitWidth->sidebarWidth;
+   }];
+   [[NSRunLoop currentRunLoop] runMode:NSEventTrackingRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+   assert(ranTrackingLoop && !appliedInTrackingLoop && "a distinct width update must wait for the divider drag");
+   spin();
+   assert([[inner valueForKey:@"sidebarWidth"] doubleValue] == explicitWidth->sidebarWidth && "the pending width applies after tracking");
+   puts("PASS nested split resize echo and deferred width update");
  }
  puts("Full source AppKit component probe passed (generated event declarations; Fabric superclass shim)");
 }}

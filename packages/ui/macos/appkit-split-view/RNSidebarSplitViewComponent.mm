@@ -7,6 +7,7 @@
 #import <react/renderer/components/RNSparkUISpec/RCTComponentViewHelpers.h>
 
 #if TARGET_OS_OSX
+#import "RNSparkSplitViewUpdates.h"
 #import <CoreImage/CoreImage.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
@@ -76,6 +77,11 @@ static NSColor *RNSidebarSplitViewColorFromHexString(NSString *value)
 static CGFloat RNSidebarSplitViewClampedUnitValue(CGFloat value)
 {
   return MIN(MAX(0, value), 1);
+}
+
+static BOOL RNSidebarSplitViewWidthChanged(CGFloat previous, CGFloat next, CGFloat measured)
+{
+  return fabs(previous - next) >= 0.5 && fabs(measured - next) >= 0.5;
 }
 
 static NSVisualEffectMaterial RNSidebarSplitViewMaterialForName(NSString *value)
@@ -526,6 +532,7 @@ static char RNSidebarSplitViewStartupKey;
   BOOL _needsPreferredDividerPositions;
   // Our own layout pass resizes subviews several times; only its final state is published.
   BOOL _layingOutSplitView;
+  BOOL _splitViewPropsScheduled;
   CGFloat _lastSidebarWidth;
   CGFloat _lastContentWidth;
   CGFloat _lastListWidth;
@@ -1489,9 +1496,26 @@ static char RNSidebarSplitViewStartupKey;
 
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
 {
-  const auto &newProps = *std::static_pointer_cast<SidebarSplitViewProps const>(props);
+  [super updateProps:props oldProps:oldProps];
 
 #if TARGET_OS_OSX
+  if (_splitViewPropsScheduled) return;
+  RNSidebarSplitViewNativeSplitView *split = (RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView;
+  if (split.trackingDivider || [NSRunLoop.currentRunLoop.currentMode isEqualToString:NSEventTrackingRunLoopMode]) {
+    _splitViewPropsScheduled = YES;
+    __weak RNSidebarSplitViewComponent *weakSelf = self;
+    RNSparkScheduleSplitViewUpdate(^{ [weakSelf applySplitViewProps]; });
+    return;
+  }
+  [self applySplitViewProps];
+#endif
+}
+
+#if TARGET_OS_OSX
+- (void)applySplitViewProps
+{
+  _splitViewPropsScheduled = NO;
+  const auto &newProps = *std::static_pointer_cast<SidebarSplitViewProps const>(_props);
   // Collapse and accessory mutations can synchronously resize AppKit before list membership and sizing settle.
   // Publish only after this prop transaction has completed, preserving any enclosing layout's guard.
   BOOL wasLayingOutSplitView = _layingOutSplitView;
@@ -1514,11 +1538,11 @@ static char RNSidebarSplitViewStartupKey;
   }
   BOOL effectiveInspectorCollapsedChanged = inspectorCollapsedPropChanged && _inspectorCollapsed != newProps.inspectorCollapsed;
   BOOL preferredWidthsChanged =
-    fabs(_inspectorWidth - newProps.inspectorWidth) >= 0.5 ||
+    RNSidebarSplitViewWidthChanged(_inspectorWidth, newProps.inspectorWidth, [self inspectorPaneBounds].size.width) ||
     _hasInspector != newProps.hasInspector ||
     effectiveInspectorCollapsedChanged ||
-    fabs(_sidebarWidth - newProps.sidebarWidth) >= 0.5 ||
-    fabs(_listWidth - newProps.listWidth) >= 0.5 ||
+    RNSidebarSplitViewWidthChanged(_sidebarWidth, newProps.sidebarWidth, [self sidebarPaneBounds].size.width) ||
+    RNSidebarSplitViewWidthChanged(_listWidth, newProps.listWidth, _hasList ? _listContainer.bounds.size.width : 0) ||
     _hasList != newProps.hasList ||
     effectiveCollapsedChanged;
   BOOL shouldRelayout =
@@ -1605,18 +1629,13 @@ static char RNSidebarSplitViewStartupKey;
     _appearanceName = nextAppearanceName;
     [self applyAppearance];
   }
-#endif
-
-  [super updateProps:props oldProps:oldProps];
-
-#if TARGET_OS_OSX
   _layingOutSplitView = wasLayingOutSplitView;
   if (shouldRelayout || shouldRecreateContentTitlebarMaterial || shouldRecreateSidebarTitlebarMaterial) {
     [self invalidatePublishedLayout];
     [self layoutSplitView];
   }
-#endif
 }
+#endif
 
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
            oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
