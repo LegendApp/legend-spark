@@ -537,5 +537,20 @@ packaged references. Unavailable AppKit symbols reject instead of falling back t
 labels. Platform-specific values still override shared settings, and valid
 inactive-target configuration remains accepted.
 
+### Native dependencies and controls
+
+- Install and native preparation check exact library versions against the SHA-pinned patch registry and use bundled recipes offline. Run `spark doctor` and follow its `Fix:` commands for unsupported versions. If an app owns desktop compatibility for a library, `package.json` can set `spark.patches.<library>` to `false`. Doctor stays read-only and rejects invalid receipts and downgrades (`c14c68bc`, `8864a5de`).
+- Both `react-native-nitro-zxing` 0.3.0 and 0.3.1 have recipes. If moving to 0.3.1, review any app patch pinned to 0.3.0 and rebuild the native runtime (`612f0ebe`).
+- `SFSymbol` accepts dynamic `PlatformColor` tints without crashing. Check system colors in both appearances (`15d1fbdb`).
+- Use `Checkbox` for controlled toggles, `Button variant="disclosure"` with `expanded` for disclosure and `SegmentedControl` `size` or `distribution` to adjust segments. Recheck macOS button and checkbox layouts that relied on the old default frame. Set `style.width` or `style.height` where the frame must stay fixed. Use `Sidebar listStyle="plain"` for content lists (#550).
+- `macos.subtitle` adds a subtitle and a `progress` toolbar item displays a bar or spinner. `Button` accepts `symbol` and `size`; `@legendapp/spark/ui/progress` provides `ProgressIndicator`. Check disabled toolbar actions and window size after repeated toolbar updates. Use `regular` or `small` for a progress bar (#553).
+- Use Sidebar row `children` or `SidebarItem parentId` for a tree, `group` for nonselectable headings, `collapsedIds` and `onExpandedChange` for collapsible sections, and `count` for trailing totals. Existing single selection can keep `selectedId` and read `id`; use `selectedIds` and the callback's `ids` for multiple selection. `onDoubleClick` reports the row ID (#554).
+- Import `Popover` from `@legendapp/spark/ui/popover` and `RadioGroup` from `@legendapp/spark/ui`. Update controlled popover visibility in `onClose` after native dismissal. Set `macos.tabbing` with a shared `identifier` to group windows, and recheck collapsing toolbar search beside other items (#555).
+- Use a `popup` toolbar item for a choice with a displayed value, and `TextInput` `placeholder` and `multiline` for empty hints and wrapped inputs. Import `Table` and `Sheet` from `@legendapp/spark/ui/table` and `@legendapp/spark/ui/sheet`. Set Sheet `visible` to `false` in `onCancel` to close it. Use `SidebarSplitView inspector` for a trailing pane (#556).
+- Test Checkbox and multiline input on Windows. Controlled multiline values use `\n`; normalize any app code that expected WinUI's `\r`. Verify Sheet content stays visible through dismissal and is released after the native `onDismiss` or parent window close (#557).
+- Test clicks on controls inside `DragDropView` and use `onDragStart` for native session initiation. `dragPreview="snapshot"` captures the source on macOS; `"default"` uses the system image, as Windows does for either setting (#558, `37386cfc`).
+- Navigator open overrides now keep nested registered window defaults. For example, overriding only `macos.titleBar.tintColor` keeps the other registered title-bar options. Pass `undefined` explicitly to clear an inherited value for one open. Arrays replace the registered array (#558).
+- Use `@legendapp/spark/ui/split-view` for nested resizable panes and Table `onColumnResize` to persist a user's column width. Exercise nested `SidebarSplitView` resizing, especially if `onResize` feeds dimensions back into the component (#559).
+
 The SecureStore original-import adapter remains held for verification and is not
 included in 0.0.4.

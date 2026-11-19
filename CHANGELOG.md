@@ -15,6 +15,19 @@ macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 - ci: Run source/package gates and the packed creator smoke on macOS only (#544).
 - dialogs: Keep original `expo-document-picker` imports working on macOS with Expo-shaped assets and cache copies; unsupported MIME filters and options reject (#546).
 - validation: Reject unsupported runtime options, invalid package metadata and unavailable AppKit symbols instead of silently dropping or substituting them. Keep the standalone creator self-contained (#548).
+- patches: Check native dependencies against a versioned, SHA-pinned patch registry with an offline fallback and repair commands. Keep `spark doctor` read-only while rejecting invalid receipts and downgrades (`c14c68bc`, `8864a5de`).
+- macos: Keep dynamic `PlatformColor` tints on `SFSymbol` without crashing (`15d1fbdb`).
+- ui: Add Checkbox, disclosure buttons, intrinsic button sizing, segment sizing and plain Sidebar lists. Fix leading segmented toolbar placement (#550).
+- patches: Add a `react-native-nitro-zxing@0.3.1` patch with NitroModules headers for static builds, and retain the 0.3.0 recipe (`612f0ebe`).
+- windows: Preserve disabled toolbar buttons and stop unrelated updates from growing windows. Add subtitles and toolbar progress (#553).
+- ui: Add Button symbols and control sizes plus a standalone `ProgressIndicator` (#553).
+- ui: Add Sidebar group rows, collapsible trees, counts, double-click and multiple selection (#554).
+- ui: Add Popover and RadioGroup. Add native macOS window tabbing and fix collapsing toolbar search overlap (#555).
+- ui: Add toolbar popups, multiline TextInput with placeholders, Table, Sheet and a trailing `SidebarSplitView` inspector (#556).
+- ui: Add WinUI Checkbox, normalize Windows multiline input to `\n` and keep Sheet content mounted through its native `onDismiss` (#557).
+- drag-drop: Preserve child clicks, report native session starts with `onDragStart` and add `dragPreview="snapshot"` on macOS (#558, `37386cfc`).
+- windows: Deep-merge Navigator window options so partial overrides keep registered defaults (#558).
+- ui: Add nestable `SplitView` at `@legendapp/spark/ui/split-view` and Table `onColumnResize`. Fix a nested `SidebarSplitView` resize crash (#559).
 - Not included: the SecureStore original-import adapter remains held for verification.
 
 ## 0.0.3
