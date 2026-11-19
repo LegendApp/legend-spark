@@ -11,6 +11,7 @@ export interface DragDropViewProps extends ViewProps, DragOptions {
   onDragEnter?: (event: DropEvent) => void;
   onDragOver?: (event: DragOverEvent) => void;
   onDragLeave?: () => void;
+  onDragStart?: () => void;
   onDragEnd?: (event: DragEndEvent) => void;
   onError?: (error: SparkError) => void;
 }
@@ -19,11 +20,11 @@ export function getDragDropAvailability(): Availability {
   return UIManager.hasViewManagerConfig("DesktopDragView") ? { available: true } : { available: false, reason: "missing-module" };
 }
 type Event = NativeSyntheticEvent<{ json: string }>;
-export function DragDropView({ source, sourceOperations, acceptedOperations, acceptedTypes, disabled = false, onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onError = console.error, ...props }: DragDropViewProps) {
+export function DragDropView({ source, sourceOperations, acceptedOperations, acceptedTypes, disabled = false, onDrop, onDragEnter, onDragOver, onDragLeave, onDragStart, onDragEnd, onError = console.error, ...props }: DragDropViewProps) {
   const optionsJson = dragOptions({ sourceOperations, acceptedOperations, acceptedTypes });
   const sourceJson = source === undefined ? "" : JSON.stringify(dragSource(source, Platform.OS));
   if (typeof disabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected disabled to be a boolean");
-  for (const handler of [onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onError]) if (handler !== undefined && typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a drag event callback");
+  for (const handler of [onDrop, onDragEnter, onDragOver, onDragLeave, onDragStart, onDragEnd, onError]) if (handler !== undefined && typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a drag event callback");
   const availability = getDragDropAvailability();
   const [failed, setFailed] = useState(false);
   const mounted = useRef(false), reported = useRef<string | undefined>(undefined);
@@ -56,5 +57,6 @@ export function DragDropView({ source, sourceOperations, acceptedOperations, acc
     onDragEnter={event => receive(event, json => dragDrop(json, Platform.OS), onDragEnter)}
     onDragOver={onDragOver ? event => receive(event, dragPosition, onDragOver) : undefined}
     onDragLeave={() => { if (mounted.current && !disabled && !failed) onDragLeave?.(); }}
+    onDragStart={onDragStart ? () => { if (mounted.current && !disabled && !failed) onDragStart(); } : undefined}
     onDragEnd={event => receive(event, dragEnd, onDragEnd)} />;
 }

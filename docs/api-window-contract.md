@@ -194,6 +194,7 @@ Retain `createWindowsNavigator` with these semantics:
 - `id` in registration; callers cannot override identity in `open`.
 - `open(name, { props, options })` infers props from that named component.
 - `options` excludes identity, registered component and props; native component names stay internal to registration.
+- On each open, option objects merge recursively with the registered defaults, including `macos`, `titleBar` and `toolbar`. Arrays such as toolbar items replace the registered array. Omitted keys inherit the registered value. An explicit `undefined` omits that key and its registered value from this open, including entire option groups. Required fields in the merged options still undergo validation. Registration defaults apply again on subsequent opens.
 - `close(name)` returns the same `CloseResult` as imperative close.
 - `getId(name)`, `prefetch(name)`, and `show(name)` remain simple conveniences.
 - Distinguish named singleton windows from any future multi-instance navigator explicitly.

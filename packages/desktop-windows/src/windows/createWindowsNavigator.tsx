@@ -21,6 +21,18 @@ const registrations = new Set<string>();
 function component(value: unknown): value is ComponentType<any> {
   return typeof value === "function" || (!!value && typeof value === "object" && [Symbol.for("react.memo"), Symbol.for("react.forward_ref"), Symbol.for("react.lazy")].includes((value as any).$$typeof));
 }
+function isOptionGroup(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+function mergeOptions(defaults: Record<string, unknown>, overrides: Record<string, unknown>): Record<string, unknown> {
+  const entries = Object.entries(overrides).map(([key, override]) => {
+    const registered = defaults[key];
+    return [key, isOptionGroup(registered) && isOptionGroup(override) ? mergeOptions(registered, override) : override];
+  });
+  return { ...defaults, ...Object.fromEntries(entries) };
+}
 export function createWindowsNavigator<T extends WindowsConfig>(config: T): WindowsNavigator<T> {
   object(config, "navigator configuration");
   const ids = new Set<string>();
@@ -29,7 +41,7 @@ export function createWindowsNavigator<T extends WindowsConfig>(config: T): Wind
     if (entry.id === "main" || ids.has(entry.id) || registrations.has(entry.id)) throw new SparkError("E_ALREADY_EXISTS", "Window ID is already registered or reserved");
     ids.add(entry.id);
     if ((entry.component !== undefined) === (entry.loadComponent !== undefined) || (entry.component !== undefined && !component(entry.component)) || (entry.loadComponent !== undefined && typeof entry.loadComponent !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Register exactly one component or loadComponent");
-    if (entry.options) {
+    if (entry.options !== undefined) {
       object(entry.options, "registration options");
       for (const key of ["id", "component", "props"]) if (key in entry.options) throw new SparkError("E_INVALID_ARGUMENT", "Navigator identity and props cannot be overridden in options");
       validateOptions({ ...entry.options, id: entry.id, component: "registration" } as WindowOpenOptions, Platform.OS, true);
@@ -63,8 +75,8 @@ export function createWindowsNavigator<T extends WindowsConfig>(config: T): Wind
     async open(name, ...args) {
       const registration = get(name), request = args[0] ?? {};
       object(request, "open request"); keys(request, ["props", "options"]);
-      if (request.options) { object(request.options, "open options"); for (const key of ["id", "component", "props"]) if (key in request.options) throw new SparkError("E_INVALID_ARGUMENT", "Navigator identity and props cannot be overridden in options"); }
-      const options = { ...registration.options, ...request.options, id: registration.id, component: registration.moduleName, props: request.props } as WindowOpenOptions;
+      if (request.options !== undefined) { object(request.options, "open options"); for (const key of ["id", "component", "props"]) if (key in request.options) throw new SparkError("E_INVALID_ARGUMENT", "Navigator identity and props cannot be overridden in options"); }
+      const options = { ...mergeOptions(registration.options, request.options ?? {}), id: registration.id, component: registration.moduleName, props: request.props } as WindowOpenOptions;
       validateOptions(options, Platform.OS, true);
       const snapshot = JSON.parse(JSON.stringify(options));
       // Always load before native creation. Failed loaders remain retryable and leave no native shell.
