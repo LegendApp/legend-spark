@@ -27,3 +27,71 @@ test("identifier overrides reject before component loading or native window crea
   expect(openWindow).not.toHaveBeenCalled();
   expect(navigator.getId("editor")).toBe("editor-override");
 });
+
+test("navigator chrome overrides preserve registered window settings across opens", async () => {
+  const navigator = createWindowsNavigator({
+    player: {
+      id: "nested-player",
+      component: () => null,
+      options: {
+        title: "Player",
+        macos: {
+          restoreOnLaunch: true,
+          titleBar: { transparent: true, titleVisibility: "hidden", controls: [{ id: "previous" }] },
+          toolbar: { visible: true, items: [{ type: "button", id: "play" }] },
+          tabbing: { mode: "preferred", identifier: "player" },
+        },
+      },
+    },
+  });
+
+  await navigator.open("player", { options: { macos: {
+    titleBar: { separator: "none", controls: [] },
+    toolbar: { style: "unifiedCompact", items: [{ type: "button", id: "pause" }] },
+    tabbing: { mode: "disallowed" },
+  } } });
+  expect(openWindow).toHaveBeenLastCalledWith(expect.objectContaining({
+    title: "Player",
+    macos: {
+      restoreOnLaunch: true,
+      titleBar: { transparent: true, titleVisibility: "hidden", separator: "none", controls: [] },
+      toolbar: { visible: true, style: "unifiedCompact", items: [{ type: "button", id: "pause" }] },
+      tabbing: { mode: "disallowed", identifier: "player" },
+    },
+  }));
+  await navigator.close("player");
+  await navigator.open("player");
+  expect(openWindow).toHaveBeenLastCalledWith(expect.objectContaining({
+    macos: {
+      restoreOnLaunch: true,
+      titleBar: { transparent: true, titleVisibility: "hidden", controls: [{ id: "previous" }] },
+      toolbar: { visible: true, items: [{ type: "button", id: "play" }] },
+      tabbing: { mode: "preferred", identifier: "player" },
+    },
+  }));
+});
+
+test("navigator explicit undefined clears only the specified defaults for that open", async () => {
+  const navigator = createWindowsNavigator({
+    player: {
+      id: "clear-player",
+      component: () => null,
+      options: {
+        title: "Player",
+        macos: { restoreOnLaunch: true, titleBar: { transparent: true, titleVisibility: "hidden" }, toolbar: { visible: true } },
+      },
+    },
+  });
+  await navigator.open("player", { options: { title: undefined, macos: {
+    titleBar: { titleVisibility: undefined },
+    toolbar: undefined,
+  } } });
+  const [first] = openWindow.mock.lastCall!;
+  expect(first).not.toHaveProperty("title");
+  expect(first).toHaveProperty("macos", { restoreOnLaunch: true, titleBar: { transparent: true } });
+
+  await navigator.open("player", { options: { macos: undefined } });
+  const [second] = openWindow.mock.lastCall!;
+  expect(second).toHaveProperty("title", "Player");
+  expect(second).not.toHaveProperty("macos");
+});
