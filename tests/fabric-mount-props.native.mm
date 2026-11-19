@@ -53,6 +53,7 @@ struct DesktopDragViewEventEmitter : EventEmitter {
   void onDragOver(Event event) const {}
   void onDragLeave(Event event) const {}
   void onDrop(Event event) const {}
+  void onDragStart(Event event) const {}
   void onDragEnd(Event event) const {}
 };
 struct SidebarSplitViewComponentDescriptor {};
