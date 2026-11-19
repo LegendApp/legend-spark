@@ -329,6 +329,12 @@ int main(){@autoreleasepool{
    assert(ranTrackingLoop && !appliedInTrackingLoop && "a distinct width update must wait for the divider drag");
    spin();
    assert([[inner valueForKey:@"sidebarWidth"] doubleValue] == explicitWidth->sidebarWidth && "the pending width applies after tracking");
+   auto laterWidth = std::make_shared<SidebarSplitViewProps>(*explicitWidth);
+   laterWidth->sidebarWidth = 310;
+   [inner updateProps:laterWidth oldProps:explicitWidth];
+   assert([[inner valueForKey:@"sidebarWidth"] doubleValue] == explicitWidth->sidebarWidth && "a mounted width update must leave the Fabric transaction before applying");
+   spin();
+   assert([[inner valueForKey:@"sidebarWidth"] doubleValue] == laterWidth->sidebarWidth);
    puts("PASS nested split resize echo and deferred width update");
  }
  puts("Full source AppKit component probe passed (generated event declarations; Fabric superclass shim)");
