@@ -74,10 +74,21 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
       <ActionButton onPress={() => act(() => windows.openWindow({ id: "modal", parentId: "main", modal: true, title: "Modal window", component: "main", size: { width: 450, height: 300 }, kind: "window", props: { windowId: "modal", windowProps: {} } }))}>Modal window</ActionButton>
     </View>
     <Text style={styles.heading} className="text-foreground">Drag and drop</Text>
-    <DragDropView onDrop={event => { setOver(false); reportDrag({ type: "drop", ...event }); }} onDragEnter={() => setOver(true)} onDragLeave={() => setOver(false)} style={styles.drop} className={over ? "border-border bg-highlight" : "border-border"}>
+    <DragDropView testID="infra-desktop-checks-drag-target" onDrop={event => { setOver(false); reportDrag({ type: "drop", ...event }); }} onDragEnter={() => setOver(true)} onDragLeave={() => setOver(false)} style={styles.drop} className={over ? "border-border bg-highlight" : "border-border"}>
       <Text className="text-muted">Drop files, URLs or text here</Text>
     </DragDropView>
-    <DragDropView source={dragSource} onDragEnd={event => reportDrag(event.accepted ? "Drag accepted by the destination." : "Drag ended without being accepted.")} style={styles.drop} className="border-border"><Text className="text-muted">Drag this text into another app</Text></DragDropView>
+    <DragDropView
+      testID="infra-desktop-checks-drag-source"
+      source={dragSource}
+      dragPreview="snapshot"
+      onDragStart={() => reportDrag("Drag started.")}
+      onDragEnd={event => reportDrag(event.accepted ? "Drag accepted by the destination." : "Drag ended without being accepted.")}
+      style={styles.drop}
+      className="border-border bg-highlight"
+    >
+      <Text className="text-foreground">Drag this row</Text>
+      <Text className="text-muted">{Platform.OS === "macos" ? "The preview shows a snapshot of this row." : "The preview uses the system default."}</Text>
+    </DragDropView>
     <EventResults entries={dragEvents} empty="Drop something here or drag the sample text to see the result." testID="drag-events" />
     <Text style={styles.heading} className="text-foreground">Global shortcut and processes</Text>
     <View style={styles.row}>

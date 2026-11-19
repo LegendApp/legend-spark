@@ -106,11 +106,25 @@ static NSArray *PasteboardTypes(NSArray *types) {
     [writers addObject:custom];
   }
   if (!writers.count) return NO;
+  NSImage *snapshot = nil;
+  NSRect sourceRect = NSZeroRect;
+  if ([_options[@"dragPreview"] isEqual:@"snapshot"]) {
+    sourceRect = NSIntersectionRect(self.bounds, self.visibleRect);
+    NSBitmapImageRep *bitmap = NSIsEmptyRect(sourceRect) ? nil : [self bitmapImageRepForCachingDisplayInRect:sourceRect];
+    if (bitmap) {
+      [self cacheDisplayInRect:sourceRect toBitmapImageRep:bitmap];
+      snapshot = [[NSImage alloc] initWithSize:sourceRect.size];
+      [snapshot addRepresentation:bitmap];
+    }
+  }
+  NSRect frame = snapshot ? sourceRect : NSMakeRect(0, 0, 32, 32);
+  NSImage *image = snapshot ?: [NSImage imageWithSystemSymbolName:@"doc" accessibilityDescription:@"Dragged item"];
   NSMutableArray *items = [NSMutableArray new];
   for (id<NSPasteboardWriting> writer in writers) {
     NSDraggingItem *item = [[NSDraggingItem alloc] initWithPasteboardWriter:writer];
-    NSImage *image = [NSImage imageWithSystemSymbolName:@"doc" accessibilityDescription:@"Dragged item"];
-    [item setDraggingFrame:NSMakeRect(0, 0, 32, 32) contents:image]; [items addObject:item];
+    // One snapshot represents the whole source, even when it has multiple pasteboard writers.
+    if (!snapshot || items.count == 0) [item setDraggingFrame:frame contents:image];
+    [items addObject:item];
   }
   _dragSession = [self beginDraggingSessionWithItems:items event:event source:self];
   return _dragSession != nil;

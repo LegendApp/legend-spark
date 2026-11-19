@@ -44,6 +44,8 @@ if (!result.canceled) console.log(await readText(result.paths[0]!));
 
 One `DragDropView` is both source and destination. Built-in payloads: `files` (absolute paths), `text`, `urls`; custom data uses lowercase MIME names you opt into with `acceptedTypes`. Source-enabled views own the mouse gesture, so use a dedicated drag handle instead of wrapping interactive controls. A drop's `accepted: true` is OS negotiation, not proof your app persisted anything; a `move` means you delete the source yourself. File promises are not implemented.
 
+Set `dragPreview="snapshot"` on a source to show its visible contents on macOS. Windows uses its standard system preview.
+
 ```tsx
 import { DragDropView } from '@legendapp/spark/drag-drop';
 import { Text } from 'react-native';

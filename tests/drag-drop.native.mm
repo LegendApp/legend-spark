@@ -47,12 +47,23 @@ using namespace facebook::react;
 @interface ProbeSource : RNDesktopDragView
 @property (nonatomic) NSInteger attempts;
 @property (nonatomic, strong) NSDraggingSession *session;
+@property (nonatomic, copy) NSArray<NSDraggingItem *> *items;
 @end
 @implementation ProbeSource
 - (NSDraggingSession *)beginDraggingSessionWithItems:(NSArray<NSDraggingItem *> *)items event:(NSEvent *)event source:(id<NSDraggingSource>)source {
   self.attempts++;
+  self.items = items;
   self.session = (NSDraggingSession *)[NSObject new];
   return self.session;
+}
+@end
+
+@interface PreviewTile : NSView
+@end
+@implementation PreviewTile
+- (void)drawRect:(NSRect)dirtyRect {
+  [[NSColor colorWithSRGBRed:1 green:0 blue:0 alpha:1] setFill];
+  NSRectFill(NSIntersectionRect(self.bounds, dirtyRect));
 }
 @end
 
@@ -87,11 +98,35 @@ int main() {
     Check(view.attempts == 0 && emitter->sourceEvents.empty(), "A subthreshold movement started a drag");
     [gesture mouseDragged:Mouse(window, NSEventTypeLeftMouseDragged, NSMakePoint(down.x + 8, down.y))];
     Check(view.attempts == 1 && emitter->sourceEvents.empty(), "The threshold should request a session without emitting a drag start yet");
+    Check(NSEqualRects(view.items.firstObject.draggingFrame, NSMakeRect(0, 0, 32, 32)), "The default drag lost its icon frame");
+    NSImage *icon = view.items.firstObject.imageComponents.firstObject.contents;
+    Check(icon.isTemplate, "The default drag lost its document symbol");
     [gesture mouseDragged:Mouse(window, NSEventTypeLeftMouseDragged, NSMakePoint(down.x + 20, down.y))];
     Check(view.attempts == 1, "A drag requested multiple sessions");
     [view draggingSession:view.session willBeginAtPoint:NSZeroPoint];
     [view draggingSession:view.session endedAtPoint:NSZeroPoint operation:NSDragOperationCopy];
     Check(emitter->sourceEvents == std::vector<std::string>{"start", "end"}, "The source events did not follow the session lifecycle");
+    PreviewTile *tile = [[PreviewTile alloc] initWithFrame:NSMakeRect(100, 60, 40, 40)];
+    [view addSubview:tile];
+    auto snapshotProps = std::make_shared<DesktopDragViewProps>();
+    snapshotProps->sourceJson = R"({"text":"drag me","urls":["https://example.com"]})";
+    snapshotProps->optionsJson = R"({"dragPreview":"snapshot"})";
+    [view updateProps:snapshotProps oldProps:props];
+    NSEvent *drag = Mouse(window, NSEventTypeLeftMouseDragged, NSMakePoint(down.x + 8, down.y));
+    Check([view beginDragFromMouseEvent:drag], "Snapshot mode prevented the session");
+    Check(view.items.count == 2, "Snapshot mode discarded pasteboard writers");
+    Check(NSEqualRects(view.items.firstObject.draggingFrame, view.bounds), "The preview did not use the source frame");
+    NSImage *preview = view.items.firstObject.imageComponents.firstObject.contents;
+    NSBitmapImageRep *bitmap = (NSBitmapImageRep *)preview.representations.firstObject;
+    Check([bitmap isKindOfClass:NSBitmapImageRep.class], "The drag image was not a bitmap snapshot");
+    NSColor *pixel = [bitmap colorAtX:bitmap.pixelsWide / 2 y:bitmap.pixelsHigh / 2];
+    Check(pixel.redComponent > 0.9 && pixel.greenComponent < 0.1 && pixel.alphaComponent > 0.9, "The snapshot did not include the source's child");
+    Check(view.items.lastObject.imageComponents.count == 0, "The second writer added another preview");
+    [view draggingSession:view.session endedAtPoint:NSZeroPoint operation:NSDragOperationNone];
+
+    view.frame = NSZeroRect;
+    Check([view beginDragFromMouseEvent:drag], "A source with empty bounds could not fall back");
+    Check(NSEqualRects(view.items.firstObject.draggingFrame, NSMakeRect(0, 0, 32, 32)), "An empty snapshot did not fall back to the icon");
     puts("Drag source passed");
   }
 }

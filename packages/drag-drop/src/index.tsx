@@ -20,8 +20,8 @@ export function getDragDropAvailability(): Availability {
   return UIManager.hasViewManagerConfig("DesktopDragView") ? { available: true } : { available: false, reason: "missing-module" };
 }
 type Event = NativeSyntheticEvent<{ json: string }>;
-export function DragDropView({ source, sourceOperations, acceptedOperations, acceptedTypes, disabled = false, onDrop, onDragEnter, onDragOver, onDragLeave, onDragStart, onDragEnd, onError = console.error, ...props }: DragDropViewProps) {
-  const optionsJson = dragOptions({ sourceOperations, acceptedOperations, acceptedTypes });
+export function DragDropView({ source, sourceOperations, acceptedOperations, acceptedTypes, dragPreview, disabled = false, onDrop, onDragEnter, onDragOver, onDragLeave, onDragStart, onDragEnd, onError = console.error, ...props }: DragDropViewProps) {
+  const optionsJson = dragOptions({ sourceOperations, acceptedOperations, acceptedTypes, dragPreview }, Platform.OS);
   const sourceJson = source === undefined ? "" : JSON.stringify(dragSource(source, Platform.OS));
   if (typeof disabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected disabled to be a boolean");
   for (const handler of [onDrop, onDragEnter, onDragOver, onDragLeave, onDragStart, onDragEnd, onError]) if (handler !== undefined && typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a drag event callback");

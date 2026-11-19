@@ -8,6 +8,8 @@ export interface DragOverEvent { x: number; y: number; operation: DragOperation 
 export interface DropEvent extends DragPayload, DragOverEvent {}
 export type DragEndEvent = { accepted: true; operation: DragOperation } | { accepted: false; operation: "none" };
 export interface DragOptions {
+  /** Defaults to the platform preview. Snapshot captures the visible source on macOS and uses the default on Windows. */
+  dragPreview?: "default" | "snapshot";
   sourceOperations?: readonly DragOperation[];
   acceptedOperations?: readonly DragOperation[];
   /** Built-ins: files, text, urls. Custom types use MIME names. Default: built-ins. */
@@ -48,17 +50,24 @@ export function dragSource(source: DragPayload | undefined, platform: string, in
 }
 export function dragConfiguration(source: DragPayload | undefined, options: DragOptions, platform: string): string {
   dragSource(source, platform);
-  return dragOptions(options);
+  return dragOptions(options, platform);
 }
-export function dragOptions(options: DragOptions): string {
+export function dragOptions(options: DragOptions, platform: string): string {
   if (!record(options)) invalid("Expected drag options");
-  for (const key of Object.keys(options)) if (!["sourceOperations", "acceptedOperations", "acceptedTypes"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown drag option: ${key}`);
+  for (const key of Object.keys(options)) if (!["sourceOperations", "acceptedOperations", "acceptedTypes", "dragPreview"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown drag option: ${key}`);
   for (const values of [options.sourceOperations, options.acceptedOperations]) {
     if (values !== undefined && (!strings(values) || values.some(value => !operations.includes(value)) || new Set(values).size !== values.length)) invalid("Drag operations must be unique copy, move or link values");
   }
   const types = options.acceptedTypes ?? builtins;
   if (!strings(types) || new Set(types).size !== types.length || types.some(type => !builtins.includes(type) && !customType(type))) invalid("Invalid or duplicate accepted drag type");
-  return JSON.stringify({ sourceOperations: options.sourceOperations ?? ["copy"], acceptedOperations: options.acceptedOperations ?? ["copy"], acceptedTypes: types });
+  const { dragPreview } = options;
+  if (dragPreview !== undefined && dragPreview !== "default" && dragPreview !== "snapshot") invalid("Drag preview must be default or snapshot");
+  return JSON.stringify({
+    sourceOperations: options.sourceOperations ?? ["copy"],
+    acceptedOperations: options.acceptedOperations ?? ["copy"],
+    acceptedTypes: types,
+    dragPreview: platform === "macos" && dragPreview === "snapshot" ? dragPreview : undefined,
+  });
 }
 function position(value: unknown): value is DragOverEvent {
   return record(value) && typeof value.x === "number" && Number.isFinite(value.x) && typeof value.y === "number" && Number.isFinite(value.y) && operations.includes(value.operation as string);

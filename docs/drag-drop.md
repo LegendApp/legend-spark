@@ -17,6 +17,7 @@ import { DragDropView } from '@legendapp/spark/drag-drop';
 <DragDropView
   source={{ data: { 'application/x-my-item': JSON.stringify({ id: '42' }) } }}
   sourceOperations={['copy', 'move']}
+  dragPreview="snapshot"
   onDragStart={beginDrag}
   onDragEnd={({ accepted, operation }) => finishDrag(accepted, operation)}
   onError={reportError}
@@ -28,6 +29,8 @@ import { DragDropView } from '@legendapp/spark/drag-drop';
 Payload representations can coexist: `files` contains absolute native paths (local file URLs in a source are normalized), `text` is a string, `urls` contains absolute URLs, and `data` maps custom lowercase MIME names to UTF-8 strings. Applications own custom JSON schemas, validation, and domain models such as music tracks. `text/plain`, `text/uri-list`, and `application/x-spark-drag` are reserved; use the built-in fields for text and URLs. Windows sources support a single URL; requesting several rejects `E_UNSUPPORTED_OPTION` instead of silently exporting only the first to other applications.
 
 Sources must contain at least one representation. `sourceOperations` defaults to `['copy']`. Destinations default to built-in accepted types (`files`, `text`, `urls`) and `['copy']`; custom types require explicit opt-in. The first mutually supported target operation wins. Empty accepted operations/types reject all drops, and `disabled` disables both directions. Accepted types decide whether a drop is eligible; payloads can include coexisting built-in representations. Custom data is limited to the requested custom types.
+
+Set `dragPreview="snapshot"` on a source to show its visible content, including its children, when the drag starts on macOS. One snapshot represents the source even when the payload supplies multiple drag items. `dragPreview="default"` or omitting the prop uses the document icon on macOS. If the source has no visible area or AppKit cannot create the snapshot, macOS uses the document icon. Windows uses its standard system preview for either value.
 
 A drag source preserves clicks on its children. On macOS and Windows, `onDragStart` fires with no arguments when the native drag starts after pointer movement crosses the drag threshold. A press, a click, or movement below the threshold leaves the callback idle.
 
