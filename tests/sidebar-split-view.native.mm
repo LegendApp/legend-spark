@@ -335,6 +335,13 @@ int main(){@autoreleasepool{
    assert([[inner valueForKey:@"sidebarWidth"] doubleValue] == explicitWidth->sidebarWidth && "a mounted width update must leave the Fabric transaction before applying");
    spin();
    assert([[inner valueForKey:@"sidebarWidth"] doubleValue] == laterWidth->sidebarWidth);
+   auto pendingInspector = std::make_shared<SidebarSplitViewProps>(*laterWidth);
+   pendingInspector->hasInspector = true;
+   pendingInspector->inspectorWidth = 240;
+   [inner updateProps:pendingInspector oldProps:laterWidth];
+   [inner prepareForRecycle];
+   spin();
+   assert(innerController.splitViewItems.count == 2 && "recycling must discard pending native pane props");
    puts("PASS nested split resize echo and deferred width update");
  }
  puts("Full source AppKit component probe passed (generated event declarations; Fabric superclass shim)");

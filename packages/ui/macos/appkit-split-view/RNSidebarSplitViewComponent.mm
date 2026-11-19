@@ -1501,14 +1501,14 @@ static char RNSidebarSplitViewStartupKey;
 #if TARGET_OS_OSX
   if (_splitViewPropsScheduled) return;
   const auto &next = *std::static_pointer_cast<const SidebarSplitViewProps>(props);
-  BOOL widthChanged = self.window && (fabs(_sidebarWidth - next.sidebarWidth) >= 0.5
+  BOOL widthChanged = oldProps && self.window && (fabs(_sidebarWidth - next.sidebarWidth) >= 0.5
     || fabs(_listWidth - next.listWidth) >= 0.5 || fabs(_inspectorWidth - next.inspectorWidth) >= 0.5);
   RNSidebarSplitViewNativeSplitView *split = (RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView;
   // Moving a divider installs AppKit constraints. Wait for Fabric's mount and any mouse tracking to finish.
   if (widthChanged || split.trackingDivider || [NSRunLoop.currentRunLoop.currentMode isEqualToString:NSEventTrackingRunLoopMode]) {
     _splitViewPropsScheduled = YES;
     __weak RNSidebarSplitViewComponent *weakSelf = self;
-    RNSparkScheduleSplitViewUpdate(^{ [weakSelf applySplitViewProps]; });
+    RNSparkScheduleSplitViewUpdate(^{ [weakSelf flushSplitViewProps]; });
     return;
   }
   [self applySplitViewProps];
@@ -1516,6 +1516,11 @@ static char RNSidebarSplitViewStartupKey;
 }
 
 #if TARGET_OS_OSX
+- (void)flushSplitViewProps
+{
+  if (_splitViewPropsScheduled) [self applySplitViewProps];
+}
+
 - (void)applySplitViewProps
 {
   _splitViewPropsScheduled = NO;
@@ -1738,6 +1743,7 @@ static char RNSidebarSplitViewStartupKey;
   _sidebarCollapsedProp = NO;
   _needsPreferredDividerPositions = YES;
   _layingOutSplitView = NO;
+  _splitViewPropsScheduled = NO;
   _lastSidebarWidth = -1;
   _lastContentWidth = -1;
   _lastListWidth = -1;
