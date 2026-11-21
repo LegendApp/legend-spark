@@ -27,7 +27,7 @@ vi.mock("@legendapp/list/react-native", () => ({
   }),
 }));
 import {
-  SettingsImageChoiceRow, SettingsPage, SettingsSection, SettingsSwitchRow, SettingsWindow, VirtualizedSettingsWindow,
+  SettingsImageChoiceRow, SettingsPage, SettingsSection, SettingsSegmentedRow, SettingsSwitchRow, SettingsWindow, VirtualizedSettingsWindow,
   createSettingsWindowOptions,
 } from "../packages/desktop/ui-settings";
 
@@ -193,6 +193,14 @@ test("sections divide non-null children and keep custom content full width", asy
   expect(rendered.root.findAllByType("View").filter((node: any) => node.props.style?.[1]?.backgroundColor === "separatorColor")).toHaveLength(1);
   expect(rendered.root.findByType("Switch").props).toMatchObject({ accessibilityLabel: "Wrap", accessibilityHint: "Long lines Editor only", disabled: true });
   expect(rendered.root.findByType("CustomEditor").parent).toBe(rendered.root.findByType("CustomPreview").parent);
+});
+
+test("segmented rows leave sizing to the native control", async () => {
+  const options = ["Compact", "Comfortable", "Spacious", "Extra spacious"].map(label => ({ label, value: label }));
+  await mount(React.createElement(SettingsSegmentedRow, { label: "Line spacing", options, value: "Compact", onValueChange: vi.fn() }));
+  const { props } = rendered.root.findByType("SegmentedControl");
+  expect(props.options).toEqual(options);
+  expect(props.style).toBeUndefined();
 });
 
 test("image choices expose radios and handle arrows without adding tab stops", async () => {

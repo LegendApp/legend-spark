@@ -22,6 +22,8 @@ const intervals = [
 const densities = [
   { label: "Compact", value: "compact" },
   { label: "Comfortable", value: "comfortable" },
+  { label: "Spacious", value: "spacious" },
+  { label: "Extra spacious", value: "extra-spacious" },
 ];
 
 export function SettingsDemo() {

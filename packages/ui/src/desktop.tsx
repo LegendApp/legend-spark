@@ -16,8 +16,7 @@ export { Switch } from "./switch";
 export type { SwitchProps, ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { getControlAvailability } from "./availability";
 
-// AppKit buttons report their intrinsic size, which sizes the view unless a style sets width or height.
-// WinUI buttons do not, so they keep a fixed default frame.
+// AppKit controls can report their intrinsic size. Explicit styles take precedence.
 function useIntrinsicSize(control: ReturnType<typeof useControl>) {
   const [size, setSize] = useState<{ width: number; height: number }>();
   function measured(event: NativeSyntheticEvent<{ width: number; height: number }>) {
@@ -68,11 +67,13 @@ export function TextInput(props: TextInputProps) {
   if (control.failed) return <View ref={control.ref} style={[size, style]} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}><Text>{value.controlled ? value.text : value.defaultText}</Text></View>;
   return <NativeTextInput ref={control.ref} text={value.text} defaultText={value.defaultText} controlled={value.controlled} eventCount={value.eventCount} disabled={control.disabled} placeholder={placeholder} multiline={multiline} onTextChange={changed} onUnavailable={control.unavailable} accessibilityLabel={accessibilityLabel} testID={testID} style={[size, style]} />;
 }
-function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }) {
+function Selection({ segmented, size = "regular", distribution = "fit", ...props }: SelectProps & Pick<SegmentedControlProps, "size" | "distribution"> & { segmented: boolean }) {
   selectionIndex(props.options, props.value);
   if (typeof props.onValueChange !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onValueChange");
   const { variant = "default" } = props;
   const control = useControl(props, variant === "borderless" && Platform.OS !== "macos" ? unsupportedPlatform : getControlAvailability(segmented ? "segmented-control" : "select"));
+  const intrinsic = useIntrinsicSize(control);
+  const fit = segmented && Platform.OS === "macos" && distribution === "fit";
   const [selectionRevision, revise] = useState(0);
   const { options, value, onValueChange, accessibilityLabel, accessibilityHint, style, testID } = props;
   function changed(event: NativeSyntheticEvent<{ value: string }>) {
@@ -81,9 +82,9 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
     if (!options.some(option => option.value === next)) { control.error(new SparkError("E_INVALID_DATA", "Native selection is not an option")); return; }
     revise(revision => revision + 1); onValueChange(next);
   }
-  const common = { ref: control.ref, value, accessibilityLabel, accessibilityHint, testID, style: [{ width: 240, height: 36 }, style], selectionRevision };
+  const common = { ref: control.ref, value, accessibilityLabel, accessibilityHint, testID, style: [fit && intrinsic.frame ? intrinsic.frame : { width: 240, height: 36 }, style], selectionRevision };
   if (control.failed) return <View ref={control.ref} style={common.style} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityHint={accessibilityHint} accessibilityState={{ disabled: true }}><Text>{options.find(option => option.value === value)!.label}</Text></View>;
-  if (segmented) return <NativeSegmentedControl {...common} segmentsJson={JSON.stringify(options)} enabled={!control.disabled} controlSize={(props as SegmentedControlProps).size ?? "regular"} distribution={(props as SegmentedControlProps).distribution ?? "fit"} onValueChange={changed} />;
+  if (segmented) return <NativeSegmentedControl {...common} segmentsJson={JSON.stringify(options)} enabled={!control.disabled} controlSize={size} distribution={distribution} onIntrinsicSize={fit ? intrinsic.measured : undefined} onValueChange={changed} />;
   if (Platform.OS === "windows") return <WindowsSelect {...common} itemsJson={JSON.stringify(options)} disabled={control.disabled} onSelectionChange={changed} onUnavailable={control.unavailable} />;
   return <NativeSelect {...common} borderless={variant === "borderless"} itemsJson={JSON.stringify(options)} enabled={!control.disabled} onValueChange={changed} />;
 }

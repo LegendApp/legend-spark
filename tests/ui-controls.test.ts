@@ -167,9 +167,13 @@ test("checkboxes are controlled native switch buttons with validated labels", as
 });
 test("segmented control size and distribution reach AppKit and web, and unknown values reject", async () => {
   await mount(React.createElement(SegmentedControl, { options, value: "one", onValueChange: vi.fn() }));
-  expect(rendered.root.findByType("NativeSegmentedControl").props).toMatchObject({ controlSize: "regular", distribution: "fit" });
+  const native = () => rendered.root.findByType("NativeSegmentedControl").props;
+  expect(native()).toMatchObject({ controlSize: "regular", distribution: "fit" });
+  await act(async () => native().onIntrinsicSize({ nativeEvent: { width: 304, height: 24 } }));
+  expect(style(native())).toEqual({ width: 304, height: 24 });
   await act(async () => rendered.update(React.createElement(SegmentedControl, { options, value: "one", onValueChange: vi.fn(), size: "small", distribution: "fill" })));
-  expect(rendered.root.findByType("NativeSegmentedControl").props).toMatchObject({ controlSize: "small", distribution: "fill" });
+  expect(native()).toMatchObject({ controlSize: "small", distribution: "fill" });
+  expect(style(native())).toEqual({ width: 240, height: 36 });
   await expect(mount(React.createElement(SegmentedControl, { options, value: "one", onValueChange: vi.fn(), size: "large" } as never))).rejects.toThrow("Invalid segmented control options");
   await mount(React.createElement(WebSegmentedControl, { options, value: "one", onValueChange: vi.fn(), size: "small", distribution: "fill" }));
   expect(rendered.root.findAllByType("button").map((button: any) => [button.props.style.flex, button.props.style.font])).toEqual([[1, "12px system-ui"], [1, "12px system-ui"]]);

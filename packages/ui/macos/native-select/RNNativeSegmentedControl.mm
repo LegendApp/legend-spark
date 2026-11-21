@@ -19,6 +19,7 @@ using namespace facebook::react;
   NSString *_value;
   NSArray<NSString *> *_labels;
   BOOL _isUpdatingSelection;
+  NSSize _reportedSize;
 #else
   UIView *_segmentedControl;
 #endif
@@ -107,6 +108,20 @@ using namespace facebook::react;
   }
 }
 
+- (void)reportIntrinsicSize
+{
+  if (_labels.count == 0 || _segmentedControl.segmentDistribution != NSSegmentDistributionFit) return;
+  auto emitter = std::static_pointer_cast<const NativeSegmentedControlEventEmitter>(_eventEmitter);
+  NSSize size = _segmentedControl.intrinsicContentSize;
+  size = NSMakeSize(ceil(size.width), ceil(size.height));
+  if (!emitter || NSEqualSizes(size, _reportedSize)) return;
+  _reportedSize = size;
+  NativeSegmentedControlEventEmitter::OnIntrinsicSize event;
+  event.width = size.width;
+  event.height = size.height;
+  emitter->onIntrinsicSize(event);
+}
+
 - (void)selectValue:(NSString *)value
 {
   _isUpdatingSelection = YES;
@@ -171,6 +186,17 @@ using namespace facebook::react;
   _segmentedControl.accessibilityIdentifier = [NSString stringWithUTF8String:newProps.testId.c_str()];
 #endif
   [super updateProps:props oldProps:oldProps];
+#if TARGET_OS_OSX
+  [self reportIntrinsicSize];
+#endif
+}
+
+- (void)updateEventEmitter:(EventEmitter::Shared const &)eventEmitter
+{
+  [super updateEventEmitter:eventEmitter];
+#if TARGET_OS_OSX
+  [self reportIntrinsicSize];
+#endif
 }
 
 - (void)prepareForRecycle
@@ -182,6 +208,7 @@ using namespace facebook::react;
   _segmentsJson = @"";
   _value = @"";
   _isUpdatingSelection = NO;
+  _reportedSize = NSZeroSize;
   _segmentedControl.segmentCount = 0;
   _segmentedControl.enabled = YES;
   _segmentedControl.accessibilityHelp = nil;
