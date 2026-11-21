@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-drag-drop",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "license": "MIT",
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
@@ -34,7 +34,7 @@
     ]
   },
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.4"
+    "@legendapp/spark-desktop-app": "0.0.5"
   },
   "private": true
 }

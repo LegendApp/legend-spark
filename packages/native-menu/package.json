@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-native-menu",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "main": "src/index",
   "react-native": "src/index",
   "codegenConfig": {
@@ -35,6 +35,6 @@
   },
   "private": true,
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.4"
+    "@legendapp/spark-desktop-app": "0.0.5"
   }
 }
