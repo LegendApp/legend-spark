@@ -436,6 +436,8 @@ async function prepareMacOS(root: string, chosen: { included: NativePackage[]; e
   const missing = needsProject ? [] : missingNativeFrameworks(root);
   if (needsPreparation || missing.length) rmSync(preparedFile, { force: true });
   if (needsProject) {
+    const template = path.join(import.meta.dirname, "expo-desktop-template-bare-minimum-55.83.10.tgz");
+    if (!existsSync(template)) throw new Error("Spark's bundled macOS prebuild template is missing. Reinstall Spark and retry.");
     console.log(`Preparing native project (preserving CocoaPods cache): ${force ? "forced build" : !hasNativeProject ? "native project missing" : preparationChanges(prepared, preparation).join("; ") || "native project provenance missing"}.`);
     const manifest = readFileSync(path.join(root, "package.json"), "utf8");
     const appJson = path.join(root, "app.json");
@@ -449,7 +451,7 @@ async function prepareMacOS(root: string, chosen: { included: NativePackage[]; e
           "--platform",
           "macos",
           "--template",
-          "expo-desktop-template-bare-minimum@55.83.10",
+          template,
           "--no-install",
           // Template renaming is not idempotent (HelloWorld becomes
           // LegendHelloWorld, then LegendLegendHelloWorld). Native projects

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- macos: Use the local computer name in Expo Constants to avoid blocking hostname resolution during startup.
+- ui: Size macOS settings segmented controls to fit their labels.
+- cli: Bundle the macOS prebuild template so project generation works without npm registry access.
+
 ## 0.0.5
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
