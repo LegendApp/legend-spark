@@ -7,7 +7,7 @@ import path from "node:path";
 import { build } from "./build.ts";
 import { credentials, notaryAuth, type Runner, type SigningCredentials } from "./credentials.ts";
 import { run } from "./commands.ts";
-import { appEntitlements, distributionEntitlements, signApp, validateApp } from "./signing.ts";
+import { releaseAppExpectation, signApp, validateApp } from "./signing.ts";
 import { digest, readJson, stateFile, writeJson } from "./project.ts";
 
 export function artifactHash(file: string): string {
@@ -60,12 +60,9 @@ async function packageUnlocked(root: string, options: { force?: boolean; submiss
   const result = await deps.build(root, options.runner ? "go" : "release", options.force);
   const config = readAppConfig(root).expo;
   if (config.extra?.spark?.updates && !result.runtime.modules["@legendapp/spark-updates"]) throw new Error("Updates are configured but the module was pruned. Import @legendapp/spark/updates from the app entry.");
-  const entitlements = distributionEntitlements(appEntitlements(root, result.runtime.modules));
-  if (!config.macos?.bundleIdentifier || !config.version) throw new Error("Packaging requires macos.bundleIdentifier and version");
-  const byPath = config.extra?.spark?.signing?.macos?.entitlementsByPath ?? {};
   const info = JSON.parse(await execute(root, ["plutil", "-convert", "json", "-o", "-", path.join(result.app, "Contents/Info.plist")], { capture: true }));
-  const expected = { arch: result.runtime.arch, runner: options.runner, bundleId: config.macos.bundleIdentifier, version: config.version, buildVersion: info.CFBundleVersion, entitlements, byPath };
-  if (!expected.bundleId || !expected.version || !expected.buildVersion) throw new Error("Bundle identifier and release version metadata must be configured before packaging.");
+  const expected = releaseAppExpectation(root, result.runtime, config, info.CFBundleVersion);
+  const { entitlements, byPath } = expected;
   const inputHash = artifactHash(result.app);
   const key = digest(JSON.stringify({ recipe: 1, inputHash, identity: identity.hash, entitlements, byPath }));
   const folder = stateFile(root, `packaging/${key}`);
@@ -80,6 +77,7 @@ async function packageUnlocked(root: string, options: { force?: boolean; submiss
     if (!existsSync(app) || artifactHash(app) !== state.stagedHash || !existsSync(upload) || createHash("sha256").update(readFileSync(upload)).digest("hex") !== state.archiveHash) {
       throw new Error(`The staged notarization artifacts changed. Preserve ${statePath} for submission recovery; rebuild from clean inputs before retrying.`);
     }
+    await validateApp(root, app, identity, expected, false, execute);
   } else {
     rmSync(app, { recursive: true, force: true });
     cpSync(result.app, app, { recursive: true, verbatimSymlinks: true });

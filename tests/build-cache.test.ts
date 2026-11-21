@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -54,7 +55,10 @@ beforeEach(() => {
     } else if (argv[0] === "xcodebuild") {
       const derived = argv[argv.indexOf("-derivedDataPath") + 1]!;
       const configuration = argv[argv.indexOf("-configuration") + 1]!;
-      write(path.join(derived, "Build/Products", configuration, "Fixture.app/Contents/Resources/main.jsbundle"), "built bundle");
+      const contents = path.join(derived, "Build/Products", configuration, "Fixture.app/Contents");
+      write(path.join(contents, "Resources/main.jsbundle"), "built bundle");
+      write(path.join(contents, "MacOS/Fixture"), "executable");
+      write(path.join(contents, "Info.plist"), "{}");
     }
     return "";
   });
@@ -78,8 +82,11 @@ test.each(["dev", "preview", "release"] as const)("%s builds select the renamed 
       expect(argv[argv.indexOf("-scheme") + 1]).toBe("RenamedFixture-macOS");
       const derived = argv[argv.indexOf("-derivedDataPath") + 1]!;
       const configuration = argv[argv.indexOf("-configuration") + 1]!;
-      const resources = path.join(derived, "Build/Products", configuration, "RenamedFixture.app/Contents/Resources");
+      const contents = path.join(derived, "Build/Products", configuration, "RenamedFixture.app/Contents");
+      const resources = path.join(contents, "Resources");
       write(path.join(resources, "main.jsbundle"), "renamed bundle");
+      write(path.join(contents, "MacOS/RenamedFixture"), "executable");
+      write(path.join(contents, "Info.plist"), "{}");
       symlinkSync("main.jsbundle", path.join(resources, "bundle-link"));
     }
     return result;
@@ -175,6 +182,33 @@ test("legacy receipts with a stale product rebuild once instead of bypassing pro
   expect(readJson(receiptFile).product).toBe("Fixture.app");
   expect(await build(root, "dev")).toEqual(rebuilt);
   expect(commandCount("xcodebuild")).toBe(2);
+});
+
+test("a reader sees the previous complete app until signing the replacement succeeds", async () => {
+  const first = await build(root, "dev");
+  const bundle = "Contents/Resources/main.jsbundle";
+  const readPublishedBundle = () => execFileSync("/bin/cat", [path.join(first.app, bundle)], { encoding: "utf8" });
+  const run = commands.run.getMockImplementation()!;
+  let failSigning = true;
+  commands.run.mockImplementation(async (...args) => {
+    const result = await run(...args);
+    const argv = args[1];
+    if (argv[0] === "codesign") {
+      const staged = argv.at(-1)!;
+      write(path.join(staged, bundle), "replacement");
+      expect(readPublishedBundle()).toBe("built bundle");
+      if (failSigning) throw new Error("signing failed");
+    }
+    return result;
+  });
+
+  await expect(build(root, "dev", true)).rejects.toThrow("signing failed");
+  expect(readPublishedBundle()).toBe("built bundle");
+
+  failSigning = false;
+  expect((await build(root, "dev", true)).app).toBe(first.app);
+  expect(readPublishedBundle()).toBe("replacement");
+  expect(existsSync(path.dirname(first.app) + ".staging")).toBe(false);
 });
 
 test("dev -> release -> dev reuses the dev app despite release preparation and missing build intermediates", async () => {

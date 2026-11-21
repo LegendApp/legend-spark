@@ -23,7 +23,8 @@ import {
   closeSync,
 } from "node:fs";
 import path from "node:path";
-import { registerRuntime } from "./local.ts";
+import { readRuntime, registerRuntime } from "./local.ts";
+import { publishDirectory } from "./publish-directory.ts";
 import { binary, doctor, run } from "./commands.ts";
 import {
   prepareConfig,
@@ -260,12 +261,13 @@ async function buildUnlocked(
   const resultFile = stateFile(root, `${mode}-build.json`);
   const { preparation, nativeConfig, nativeRoot, workspace } = await prepareMacOS(root, chosen, force);
   const existing = existsSync(resultFile) ? readJson(resultFile) : undefined;
+  const publishedRuntime = existing && readRuntime(existing.app);
   if (!force && existing) {
     if (
       existing.runtime.fingerprint === runtime.fingerprint &&
       existing.preparation?.fingerprint === preparation.fingerprint &&
       existing.product === path.basename(existing.app) &&
-      existsSync(existing.app)
+      publishedRuntime?.fingerprint === runtime.fingerprint
     ) {
       console.log(`Reusing ${existing.app}`);
       return existing;
@@ -274,7 +276,7 @@ async function buildUnlocked(
   const reasons = force ? ["forced build"] : !existing ? ["no cached app"] : [
     ...preparationChanges(existing.preparation, preparation),
     ...(existing.runtime.fingerprint !== runtime.fingerprint ? ["runtime inputs changed"] : []),
-    ...(!existsSync(existing.app) ? ["cached app missing"] : []),
+    ...(publishedRuntime?.fingerprint !== existing.runtime.fingerprint ? ["published app does not match its receipt"] : []),
     ...(existing.product !== path.basename(existing.app) ? ["cached app product is unverified"] : []),
   ];
   console.log(`Building ${mode} runtime: ${reasons.join("; ")}.`);
@@ -315,15 +317,6 @@ async function buildUnlocked(
   const product = `${name}.app`;
   if (!existsSync(path.join(products, product))) throw new Error(`Build completed without ${product}.`);
   const destination = stateFile(root, `products/macos-${runtime.arch}/${mode}/${product}`);
-  rmSync(path.dirname(destination), { recursive: true, force: true });
-  mkdirSync(path.dirname(destination), { recursive: true });
-  cpSync(path.join(products, product), destination, { recursive: true, verbatimSymlinks: true });
-  if (
-    mode === "release" &&
-    !existsSync(path.join(destination, "Contents/Resources/main.jsbundle"))
-  )
-    throw new Error("Standalone build is missing its JavaScript bundle.");
-  if (mode === "release") checkReleaseTestDriver(destination, nativeConfig.macos?.testDriverInRelease === true);
   const result = {
     app: destination,
     // Older receipts may record a stale bundle selected from DerivedData.
@@ -339,26 +332,49 @@ async function buildUnlocked(
     result.runtime.fingerprint = digest(
       result.runtime.fingerprint + productionHash,
     );
-  // prebuild can update package/config fields; cache the actual post-generation inputs.
-  writeJson(
-    path.join(destination, "Contents/Resources/spark-runtime.json"),
-    result.runtime,
-  );
-  if (mode === "release") await prepareCustomizeArtifacts(root, result.runtime, destination);
-  copyHelpers(root, destination, readAppConfig(root).expo?.extra?.spark?.helpers);
-  if (mode === "release") {
-    // Hermes is prebuilt, so Xcode's app/Pod compiler settings cannot strip it.
-    const hermes = path.join(destination, "Contents/Frameworks/hermes.framework/Versions/Current/hermes");
-    if (existsSync(hermes))
-      await run(root, ["strip", "-S", "-x", hermes], { capture: true });
+  const target = path.dirname(destination);
+  const staging = `${target}.staging`;
+  const stagedApp = path.join(staging, product);
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
+  try {
+    cpSync(path.join(products, product), stagedApp, { recursive: true, verbatimSymlinks: true });
+    if (mode === "release") {
+      if (!existsSync(path.join(stagedApp, "Contents/Resources/main.jsbundle"))) throw new Error("Standalone build is missing its JavaScript bundle.");
+      checkReleaseTestDriver(stagedApp, nativeConfig.macos?.testDriverInRelease === true);
+      const plist = path.join(stagedApp, "Contents/Info.plist");
+      const info = JSON.parse(await run(root, ["plutil", "-convert", "json", "-o", "-", plist], { capture: true }));
+      const ats = info.NSAppTransportSecurity;
+      if (ats && "NSAllowsLocalNetworking" in ats) {
+        const key = Object.keys(ats).length === 1
+          ? "NSAppTransportSecurity" : "NSAppTransportSecurity.NSAllowsLocalNetworking";
+        await run(root, ["plutil", "-remove", key, plist], { capture: true });
+      }
+    }
+    // prebuild can update package/config fields; cache the actual post-generation inputs.
+    writeJson(
+      path.join(stagedApp, "Contents/Resources/spark-runtime.json"),
+      result.runtime,
+    );
+    if (mode === "release") await prepareCustomizeArtifacts(root, result.runtime, stagedApp);
+    copyHelpers(root, stagedApp, readAppConfig(root).expo?.extra?.spark?.helpers);
+    if (mode === "release") {
+      // Hermes is prebuilt, so Xcode's app/Pod compiler settings cannot strip it.
+      const hermes = path.join(stagedApp, "Contents/Frameworks/hermes.framework/Versions/Current/hermes");
+      if (existsSync(hermes))
+        await run(root, ["strip", "-S", "-x", hermes], { capture: true });
+    }
+    // Development apps can opt into a local identity for same-team native plugins.
+    // Standalone outputs remain ad-hoc until `spark package` signs its staging copy.
+    await run(
+      root,
+      ["codesign", "--force", "--deep", "--sign", localSigningIdentity(root, mode), stagedApp],
+      { capture: true },
+    );
+    publishDirectory(staging, target, stateFile(root, "tools"));
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
   }
-  // Development apps can opt into a local identity for same-team native plugins.
-  // Standalone outputs remain ad-hoc until `spark package` signs its staging copy.
-  await run(
-    root,
-    ["codesign", "--force", "--deep", "--sign", localSigningIdentity(root, mode), destination],
-    { capture: true },
-  );
   writeJson(resultFile, result);
   console.log(`Built ${destination}`);
   return result;

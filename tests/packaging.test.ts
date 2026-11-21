@@ -27,9 +27,9 @@ function appFixture(root: string) {
   machO(path.join(app, "Contents/MacOS/Probe"));
   machO(path.join(app, "Contents/Frameworks/Hermes.framework/Versions/A/Hermes"), 6);
   symlinkSync("A", path.join(app, "Contents/Frameworks/Hermes.framework/Versions/Current"));
-  writeJson(path.join(app, "Contents/Info.plist"), { CFBundleIdentifier: "test.probe", CFBundleShortVersionString: "1.0.0", CFBundleVersion: "1", CFBundleExecutable: "Probe" });
+  writeJson(path.join(app, "Contents/Info.plist"), { CFBundleIdentifier: "test.probe", CFBundleShortVersionString: "1.0.0", CFBundleVersion: "1", CFBundleExecutable: "Probe", CFBundlePackageType: "APPL" });
   mkdirSync(path.join(app, "Contents/Resources"));
-  writeFileSync(path.join(app, "Contents/Resources/main.jsbundle"), "hello");
+  writeFileSync(path.join(app, "Contents/Resources/main.jsbundle"), Buffer.from("c61fbc03c103191f", "hex"));
   return app;
 }
 
@@ -127,11 +127,16 @@ function harness(arch: "arm64" | "x64" = "arm64", binaryArch = arch === "x64" ? 
   writeJson(path.join(root, "app.json"), { expo: { name: "Probe", slug: "probe", version: "1.0.0", macos: { bundleIdentifier: "test.probe" } } });
   writeJson(path.join(root, ".spark/native-selection.json"), { included: [] });
   const runtime: Runtime = { schema: 1, framework: VERSION, platform: "macos", arch, mode: "release", fingerprint: "test", modules: {} };
+  writeJson(path.join(source, "Contents/Resources/spark-runtime.json"), runtime);
   const state = { status: "In Progress", submits: 0, upload: "", badHash: false, invalidSignature: false, uncertainSubmit: false, calls: [] as string[][] };
   const execute: Runner = async (_root, args) => {
     state.calls.push(args);
     if (args[0] === "plutil") return args.includes("json") ? readFileSync(args.at(-1)!, "utf8") : "";
     if (args[0] === "lipo") return binaryArch + "\n";
+    if (args[0] === "otool") {
+      const type = args.at(-1)!.endsWith("/Probe") ? "EXECUTE" : "DYLIB";
+      return `Mach header\nmagic cputype cpusubtype caps filetype ncmds sizeofcmds flags\nMH_MAGIC_64 ${binaryArch.toUpperCase()} ALL 0x00 ${type} 0 0 0\n`;
+    }
     if (args[0] === "codesign") {
       if (args.includes("-dvvv")) return state.invalidSignature ? "Signature=adhoc\n" : `Authority=${identity.name}\nTeamIdentifier=${identity.teamId}\nCodeDirectory flags=0x10000(runtime)\nTimestamp=Sep 10, 2026\n`;
       return "";
@@ -218,6 +223,15 @@ test("invalid signatures and changed staged artifacts are rejected before submis
     writeFileSync(path.join(stage, "Contents/Resources/main.jsbundle"), "changed");
     await expect(packageApp(h.root, { waitMs: 0 }, h.dependencies)).rejects.toThrow("artifacts changed");
     expect(h.state.submits).toBe(1);
+  } finally { h.cleanup(); }
+});
+
+test("packaging rejects development artifacts before submitting for notarization", async () => {
+  const h = harness();
+  try {
+    writeFileSync(path.join(h.source, "Contents/Resources/main.jsbundle.map"), "{}");
+    await expect(packageApp(h.root, { waitMs: 0 }, h.dependencies)).rejects.toThrow("Development artifact");
+    expect(h.state.submits).toBe(0);
   } finally { h.cleanup(); }
 });
 

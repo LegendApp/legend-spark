@@ -125,7 +125,7 @@ export class KitchenSinkApp {
    * Launches the app in driver mode with the caller's `arguments` (after its own) and `env`. `locale` sets the app's
    * language and region formats through launch arguments.
    */
-  launch(options: { locale?: string; arguments?: readonly string[]; env?: Readonly<Record<string, string>>; log: ProcessLog }): Promise<Driver> {
+  launch(options: { locale?: string; arguments?: readonly string[]; env?: Readonly<Record<string, string>>; log?: ProcessLog }): Promise<Driver> {
     if (options.locale !== undefined && !LOCALE.test(options.locale)) throw new Error(`${options.locale} is not a language identifier such as ar or en-US`);
     const [languages, region] = this.reserved.locale;
     const locale = options.locale ? [languages, `(${options.locale})`, region, options.locale] : [];

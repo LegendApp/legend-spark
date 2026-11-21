@@ -34,7 +34,6 @@
         "exclude": [
           "@expo/ui",
           "expo-clipboard",
-          "expo-linking",
           "expo-secure-store",
           "expo-document-picker",
           "expo-dev-client",
