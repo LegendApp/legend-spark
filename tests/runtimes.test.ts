@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { selection, type NativePackage } from "../packages/cli/src/project.ts";
@@ -49,5 +49,15 @@ module.exports = config;
     upgradeManagedEntry(root);
     expect(readFileSync(path.join(root, "metro.config.js"), "utf8")).toContain("withDesktop");
     expect(readFileSync(path.join(root, "index.ts"), "utf8")).toContain("__THREADED_RUNTIME_ENV__");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+test("the generated worker entry accepts its own hot updates, so a worker edit never reloads the whole app", () => {
+  const { generateThreadedRuntimeEntry } = require("@react-native-runtimes/core/metro");
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-runtimes-entry-"));
+  try {
+    const generatedEntry = path.join(root, ".threaded-runtime/entry.js");
+    generateThreadedRuntimeEntry({ generatedEntry, projectRoot: root, roots: [] });
+    const actual = readFileSync(generatedEntry, "utf8");
+    expect(actual).toContain("module.hot?.accept();");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
