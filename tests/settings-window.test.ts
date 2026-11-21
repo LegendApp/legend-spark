@@ -31,8 +31,8 @@ import {
   createSettingsWindowOptions,
 } from "../packages/desktop/ui-settings";
 
-const general = React.createElement(SettingsPage, { id: "general", title: "General", icon: "gearshape" }, "General content");
-const advanced = React.createElement(SettingsPage, { id: "advanced", title: "Advanced", icon: "wrench" }, "Advanced content");
+const general = React.createElement(SettingsPage, { id: "general", title: "General", icon: "gearshape", children: "General content" });
+const advanced = React.createElement(SettingsPage, { id: "advanced", title: "Advanced", icon: "wrench", children: "Advanced content" });
 const pages = React.createElement(React.Fragment, null, general, false, advanced);
 const settings = { children: pages, windowId: "settings" };
 const ready = { phase: "ready", contentHeight: 500, contentWidth: 500, sidebarHeight: 500, sidebarWidth: 200 };
@@ -187,9 +187,9 @@ test("other platforms report the macOS boundary before touching window APIs", as
 });
 
 test("sections divide non-null children and keep custom content full width", async () => {
-  const switchRow = React.createElement(SettingsSwitchRow, { label: "Wrap", description: "Long lines", info: "Editor only", value: true, disabled: true, onValueChange: vi.fn() });
-  const fragment = React.createElement(React.Fragment, null, React.createElement("CustomEditor"), React.createElement("CustomPreview"));
-  await mount(React.createElement(SettingsSection, { title: "Editor" }, switchRow, null, fragment, false));
+  const switchRow = React.createElement(SettingsSwitchRow, { key: "wrap", label: "Wrap", description: "Long lines", info: "Editor only", value: true, disabled: true, onValueChange: vi.fn() });
+  const fragment = React.createElement(React.Fragment, { key: "custom" }, React.createElement("CustomEditor"), React.createElement("CustomPreview"));
+  await mount(React.createElement(SettingsSection, { title: "Editor", children: [switchRow, null, fragment, false] }));
   expect(rendered.root.findAllByType("View").filter((node: any) => node.props.style?.[1]?.backgroundColor === "separatorColor")).toHaveLength(1);
   expect(rendered.root.findByType("Switch").props).toMatchObject({ accessibilityLabel: "Wrap", accessibilityHint: "Long lines Editor only", disabled: true });
   expect(rendered.root.findByType("CustomEditor").parent).toBe(rendered.root.findByType("CustomPreview").parent);
