@@ -1,5 +1,5 @@
 // `bun run e2e:run <flow|dir>… [--backend name[,name]] [--agent] [--report dir] [--app path]`
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, statSync } from "node:fs";
 import path from "node:path";
 import { collect } from "../files.ts";
 import { KitchenSinkApp } from "../kitchen-sink.ts";
@@ -16,7 +16,7 @@ const repo = path.resolve(import.meta.dirname, "../../..");
  * `--pointer` attaches OS mouse input to that driver's session; a full AX backend is separate (#50).
  */
 export const BACKENDS: Readonly<Record<string, BackendFactory>> = {
-  driver: ({ app }) => new DriverBackend(new KitchenSinkApp(app)),
+  driver: ({ app, exact }) => new DriverBackend(new KitchenSinkApp(app, exact)),
 };
 export const NO_BACKENDS = "no backends are registered";
 
@@ -98,7 +98,9 @@ export async function runCommand(args: string[], io: RunIO): Promise<number> {
   const files = targets.flatMap(collect).filter(([, kind]) => kind === "flow").map(([file]) => file);
   if (!files.length) { io.stderr(`no flows under ${targets.map(target => path.relative(process.cwd(), target) || ".").join(", ")}`); return 2; }
 
-  const runDir = path.resolve(options.report ?? path.join(repo, "artifacts/e2e", `run-${new Date().toISOString().replace(/[:.]/g, "-")}`));
+  const defaultReports = path.join(repo, "artifacts/e2e");
+  if (!options.report) mkdirSync(defaultReports, { recursive: true });
+  const runDir = options.report ? path.resolve(options.report) : mkdtempSync(path.join(defaultReports, `run-${new Date().toISOString().replace(/[:.]/g, "-")}-`));
   if (options.agent) io.stdout(JSON.stringify({ event: "run-start", runDir, platform: backends[0]!.platform, backends: backends.map(({ name, kind }) => ({ name, kind })), files: files.length }));
   const { report, reports } = await runSuite(files, { backends, runDir, app: options.app && path.resolve(options.app), clock: io.clock, signal: io.signal, onEvent: printer(io, options.agent) });
   const { summary } = report;

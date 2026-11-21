@@ -291,7 +291,10 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   /** Failure evidence from every started backend: its element tree, plus whatever it collects (screenshot, logs, trace). */
   async function collect(): Promise<Artifact[]> {
     const out = path.join(dir, "failure");
-    mkdirSync(out, { recursive: true });
+    try { mkdirSync(out, { recursive: true }); } catch (error) {
+      errors.push(`artifact directory: ${message(error)}`);
+      return [];
+    }
     const artifacts: Artifact[] = [];
     for (const backend of started) {
       try {
@@ -300,7 +303,12 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
           writeFileSync(file, `${JSON.stringify({ windows: backend.windows ? await backend.windows() : undefined, elements: await backend.elements() }, null, 2)}\n`);
           artifacts.push({ kind: "elements", path: file, backend: backend.name });
         }
-        if (backend.collect) artifacts.push(...(await backend.collect(out)).map(artifact => ({ ...artifact, backend: backend.name })));
+      } catch (error) {
+        errors.push(`elements from ${backend.name}: ${message(error)}`);
+      }
+      try {
+        if (backend.collect)
+          for await (const artifact of backend.collect(out)) artifacts.push({ ...artifact, backend: backend.name });
       } catch (error) {
         errors.push(`artifacts from ${backend.name}: ${message(error)}`);
       }
@@ -347,7 +355,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   for (const { label, undo } of restores.reverse()) {
     try { await undo(); } catch (error) { restoreErrors.push(`restore ${label}: ${message(error)}`); }
   }
-  if (restoreErrors.length && !failure) failure = { kind: "restore", message: restoreErrors.join("\n"), location: headerLocation, stack: [], candidates: [], matches: [], artifacts: [] };
+  if (restoreErrors.length && !failure) await fail(new Failure("restore", restoreErrors.join("\n")));
   else errors.push(...restoreErrors);
   for (const backend of started.reverse()) {
     try { await backend.stop(); } catch (error) { errors.push(`stop ${backend.name}: ${message(error)}`); }
@@ -361,6 +369,23 @@ export async function runFlows(files: string[], options: RunOptions): Promise<Fl
   const platforms = new Set(options.backends.map(backend => backend.platform));
   if (platforms.size > 1) throw new Error(`backends target different platforms: ${[...platforms].join(", ")}`);
   const results: FlowResult[] = [];
+  function finish(result: FlowResult, dir: string) {
+    const { id, file, intent, matrix, failure, errors } = result;
+    if (failure) {
+      const out = path.join(dir, "failure"), bundle = path.join(out, "bundle.json");
+      try {
+        mkdirSync(out, { recursive: true });
+        const artifacts = failure.artifacts.map(artifact => ({ ...artifact, path: path.relative(out, artifact.path) }));
+        writeFileSync(bundle, `${JSON.stringify({ id, file, intent, matrix, failure: { ...failure, artifacts }, errors }, null, 2)}\n`);
+        failure.artifacts.push({ kind: "output", path: bundle });
+      } catch (error) {
+        errors.push(`failure bundle: ${message(error)}`);
+      }
+    }
+    options.onEvent?.({ event: "flow-end", result });
+    results.push(result);
+  }
+
   for (const absolute of files) {
     const file = path.relative(process.cwd(), absolute);
     const relative = path.relative(rootOf(absolute), absolute).replace(/\.ya?ml$/, "");
@@ -371,8 +396,7 @@ export async function runFlows(files: string[], options: RunOptions): Promise<Fl
         id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], goldens: [], metrics: {},
         failure: { kind: "format", message: `${file} is not a valid flow`, location: { file: at, line, column }, stack: [], candidates: [], matches: [], artifacts: [], diagnostics: checked.diagnostics.map(formatDiagnostic) },
       };
-      options.onEvent?.({ event: "flow-end", result });
-      results.push(result);
+      finish(result, path.join(options.runDir, relative, "run"));
       continue;
     }
     const flow = checked.value;
@@ -381,9 +405,7 @@ export async function runFlows(files: string[], options: RunOptions): Promise<Fl
       const base = { id: suffix ? `${relative}[${suffix}]` : relative, file, name: flow.header.name, intent: flow.header.intent, checks: flow.header.checks ?? [], tags: flow.header.tags ?? [] };
       options.onEvent?.({ event: "flow-start", id: base.id, file, name: base.name, intent: base.intent, matrix });
       const dir = path.join(options.runDir, relative, suffix ? suffix.replace(/=/g, "-").replace(/,/g, "+") : "run");
-      const result = await executeFlow(flow, absolute, matrix, base, dir, options);
-      options.onEvent?.({ event: "flow-end", result });
-      results.push(result);
+      finish(await executeFlow(flow, absolute, matrix, base, dir, options), dir);
     }
   }
   return results;

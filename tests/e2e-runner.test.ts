@@ -47,7 +47,7 @@ describe("implicit waits and timeouts", () => {
     expect(result.failure!.candidates[0]).toEqual({ window: "w1", text: "Save", role: "button", frame: { x: 0, y: 0, width: 100, height: 20 } });
     expect(result.steps[0]!.durationMs).toBe(5000);
     expect(result.failure!.artifacts.map(artifact => [artifact.kind, path.basename(artifact.path), artifact.backend])).toEqual([
-      ["elements", "elements-memory.json", "memory"], ["screenshot", "memory-screenshot.png", "memory"], ["logs", "memory.log", "memory"],
+      ["elements", "elements-memory.json", "memory"], ["screenshot", "memory-screenshot.png", "memory"], ["logs", "memory.log", "memory"], ["output", "bundle.json", undefined],
     ]);
     const dump = JSON.parse(readFileSync(result.failure!.artifacts[0]!.path, "utf8"));
     expect(dump.windows).toEqual([WINDOW]);
@@ -362,6 +362,8 @@ describe("flows that do not run", () => {
   test("an invalid flow is a format failure with every diagnostic", async () => {
     const { result } = await run("appId: x\n---\n- tapOn: X\n", [memory()]);
     expect(result.failure).toMatchObject({ kind: "format", diagnostics: [expect.stringContaining('missing required key "name"')] });
+    const bundle = JSON.parse(readFileSync(result.failure!.artifacts[0]!.path, "utf8"));
+    expect(bundle.failure.diagnostics).toEqual(result.failure!.diagnostics);
   });
 });
 
@@ -387,11 +389,17 @@ describe("reports", () => {
   }
 
   test("JSON report: summary, results and artifact paths relative to the run directory", async () => {
-    const { report } = await sample();
+    const { report, runDir } = await sample();
     expect(report).toMatchObject({ version: 1, platform: "macos", backends: [{ name: "memory", kind: "black-box" }, { name: "driver", kind: "driver" }], summary: { total: 3, passed: 1, failed: 1, skipped: 1 } });
     const [pass, fail] = report.flows as [FlowResult, FlowResult];
     expect(pass.artifacts).toEqual([{ kind: "screenshot", path: "flows/a/pass/run/output/home.png", backend: "driver" }]);
-    expect(fail.failure!.artifacts.map(artifact => artifact.path)).toEqual(["flows/a/fail/run/failure/elements-memory.json", "flows/a/fail/run/failure/memory-screenshot.png", "flows/a/fail/run/failure/memory.log", "flows/a/fail/run/failure/elements-driver.json"]);
+    const evidence = ["elements-memory.json", "memory-screenshot.png", "memory.log", "elements-driver.json"];
+    const failureDir = "flows/a/fail/run/failure";
+    expect(fail.failure!.artifacts.map(artifact => artifact.path)).toEqual([...evidence, "bundle.json"].map(file => `${failureDir}/${file}`));
+    const bundle = JSON.parse(readFileSync(path.join(runDir, failureDir, "bundle.json"), "utf8"));
+    expect(bundle).toMatchObject({ id: "flows/a/fail", intent: "The test intent.", failure: { kind: "not-found", command: "tapOn" } });
+    expect(bundle.failure.artifacts.map((artifact: { path: string }) => artifact.path)).toEqual(evidence);
+    expect(existsSync(path.join(runDir, "flows/a/pass/run/failure/bundle.json"))).toBe(false);
     expect(fail).toMatchObject({ id: "flows/a/fail", name: "Test flow", intent: "The test intent.", checks: [], tags: [] });
   });
 

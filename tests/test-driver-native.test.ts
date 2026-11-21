@@ -77,6 +77,11 @@ test.skipIf(!darwin)("disconnect restores pointer window and activation state be
   const result = run("pointer-disconnect");
   expect(result.stdout, result.stderr).toContain("pointer-disconnect passed");
 });
+test.skipIf(!darwin)("navigation waits for a new mount after reload", () => {
+  const result = run("reload");
+  expect(result.stdout, result.stderr).toContain("reload passed");
+});
+
 test.skipIf(!darwin)("protocol: ping, navigate, openFile, waitFor, appearance, settled private captures and quit", () => {
   const result = run("session");
   expect(result.stdout, result.stderr).toContain("session passed");

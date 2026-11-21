@@ -233,8 +233,8 @@ Backends find elements. The runner applies the rest, so every backend behaves th
 
 ### Reports
 
-Each run writes one directory. The default is `artifacts/e2e/run-<timestamp>`; use
-`--report` to choose another.
+Each run writes to `artifacts/e2e/run-<timestamp>-<suffix>` by default. Use
+`--report` to choose another directory.
 
 ```
 report.json                    # the gate and dashboards read this
@@ -244,12 +244,15 @@ index.html                     # static page; open it in a browser
   tmp/                         # ${TMP}
   output/                      # takeScreenshot and other files the flow asked for
   screenshots/                 # assertScreenshot: <name>.png, and on failure <name>.expected.png, <name>.diff.png
-  failure/                     # elements-<backend>.json, screenshot, logs, driver trace
+  failure/                     # bundle.json, elements-<backend>.json, screenshots, driver trace
   backend-<name>/              # the backend's private directory (Session.dir)
 ```
 
-Failure evidence is collected when the failure happens, before `onFlowComplete` and
-restoration change anything.
+When a command fails, the runner collects failure evidence before `onFlowComplete`
+and restoration change the app. Each failed flow writes `failure/bundle.json` with
+the failure, follow-up errors, and relative links to available evidence such as
+screenshots, trees and logs.
+The normal run reports list the bundle alongside those artifacts.
 
 `report.json` has `version`, `startedAt`, `durationMs`, `platform`, `backends`,
 `interrupted`, `summary` (`total`, `passed`, `failed`, `skipped`) and `flows`. Each flow
@@ -344,6 +347,16 @@ driver queries, with the same white-box testID semantics. The release gate does 
 | `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window. Element frames are points from the window's top-left, the capture's origin, so masks line up. The `window` key is `unsupported` (the driver cannot list windows). |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
 
+#### Session state
+
+A macOS driver flow runs an ad hoc signed clone with fresh bundle and Spark project
+identifiers. Each matrix combination gets a separate clone. Relaunches within a flow
+reuse its clone, and the runner removes the clone and its supported state after the
+flow. Sandboxed apps and apps with identity-bound entitlements cannot be cloned.
+
+The release gate drives the exact artifact and its own state. The bundle ID must
+be free of running apps and other exact-artifact driver sessions.
+
 #### clearState
 
 `launchApp: { clearState: true }` (`scripts/e2e/app-state.ts`) deletes what a macOS Spark app
@@ -374,10 +387,9 @@ Not deleted:
 - **AppKit's recent documents** (`com.apple.sharedfilelist`): macOS denies access to it.
 - **Delivered notifications**: the notification center owns them.
 
-It refuses, before deleting anything, when the bundle identifier is not reverse-DNS (or is
-`com.apple.*`), is not the gate manifest's `appId`, the project identifier is empty, the app is
-sandboxed (its state is in `~/Library/Containers/<bundle id>`, which needs a permission that
-would prompt), or any process of the app is running (`lsappinfo`). `defaults delete` goes
+It refuses invalid or `com.apple.*` bundle identifiers, empty project identifiers,
+sandboxed apps, and apps that are running (`lsappinfo`). An exact-artifact session
+also requires the gate manifest's `appId`. `defaults delete` goes
 through `cfprefsd`, so a quit app cannot write a cached domain back. Nothing is globbed.
 `e2e/flows/infra/launch-state.yaml` checks it end to end: a setting (Application Support) and
 a recent document (the defaults domain) saved by one launch are found by the next and gone after

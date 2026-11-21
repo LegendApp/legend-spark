@@ -21,6 +21,7 @@ static inline BOOL SparkTestDriverStart(void)
 }
 static inline BOOL SparkTestDriverActive(void) { return NO; }
 static inline void SparkTestDriverDidMount(void) {}
+static inline void SparkTestDriverDidReload(void) {}
 static inline BOOL SparkTestDriverEnding(void) { return NO; }
 #else
 
@@ -30,6 +31,7 @@ FOUNDATION_EXPORT BOOL SparkTestDriverStart(void);
 FOUNDATION_EXPORT BOOL SparkTestDriverActive(void);
 // The host reports each mounted UI transaction; captures wait until mounts settle.
 FOUNDATION_EXPORT void SparkTestDriverDidMount(void);
+FOUNDATION_EXPORT void SparkTestDriverDidReload(void);
 // YES once the runner's session has ended: that termination is teardown, not a user quit,
 // so the host terminates without running the app's quit guards.
 FOUNDATION_EXPORT BOOL SparkTestDriverEnding(void);

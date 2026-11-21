@@ -156,7 +156,7 @@ describe("assertScreenshot in the runner", () => {
     expect(result.failure).toMatchObject({ kind: "assertion", command: "assertScreenshot", message: expect.stringMatching(/^0\.250% of pixels \(25 of 10000\) differ from golden .*home\.png by more than ΔE 2; the threshold is 0\.1%/) });
     const dir = "flows/area/test/appearance-light+locale-en/screenshots";
     expect(report.flows[0]!.failure!.artifacts.map(artifact => [artifact.kind, artifact.path])).toEqual([
-      ["screenshot", `${dir}/home.png`], ["golden", `${dir}/home.expected.png`], ["diff", `${dir}/home.diff.png`], ["elements", "flows/area/test/appearance-light+locale-en/failure/elements-driver.json"],
+      ["screenshot", `${dir}/home.png`], ["golden", `${dir}/home.expected.png`], ["diff", `${dir}/home.diff.png`], ["elements", "flows/area/test/appearance-light+locale-en/failure/elements-driver.json"], ["output", "flows/area/test/appearance-light+locale-en/failure/bundle.json"],
     ]);
     expect(report.flows[0]!.goldens[0]).toMatchObject({ status: "failed", diff: `${dir}/home.diff.png`, stats: { different: 25 } });
     expect(at(readPng(path.join(over.runDir, dir, "home.diff.png")), 2, 2)).toEqual([255, 0, 0, 255]);
@@ -183,7 +183,7 @@ describe("assertScreenshot in the runner", () => {
     const { result } = await run();
     expect(result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("a run never creates one") });
     expect(result.goldens[0]!.status).toBe("missing");
-    expect(result.failure!.artifacts.map(artifact => artifact.kind)).toEqual(["screenshot", "elements"]);
+    expect(result.failure!.artifacts.map(artifact => artifact.kind)).toEqual(["screenshot", "elements", "output"]);
     expect(existsSync(golden(GOLDEN))).toBe(false);
     expect(existsSync(path.join(root, "golden"))).toBe(false);
   });

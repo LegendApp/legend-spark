@@ -33,6 +33,7 @@ static void SparkDriverTerminate(void) { ending = YES; [NSApp terminate:nil]; }
 BOOL SparkTestDriverActive(void) { return active; }
 BOOL SparkTestDriverEnding(void) { return ending; }
 void SparkTestDriverDidMount(void) { lastMount = CACurrentMediaTime(); }
+void SparkTestDriverDidReload(void) { lastMount = 0; }
 static NSArray<NSString *> *const SparkBuiltInCommands = @[@"ping", @"navigate", @"openFile", @"waitFor", @"setAppAppearance", @"capture", @"pointerEvents", @"restorePointer", @"quit"];
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *SparkModuleCommands(void) {
   static NSMutableDictionary *commands;

@@ -86,13 +86,13 @@ export interface Backend {
    */
   screenshot?(file: string, window: WindowInfo | undefined): Promise<Capture>;
   /** Writes failure evidence it can produce (screenshot, logs, driver trace) into `dir`. */
-  collect?(dir: string): Promise<Artifact[]>;
+  collect?(dir: string): AsyncIterable<Artifact>;
 }
 
 /** Where a screenshot came from: the captured area in the coordinate space of element frames, and its pixels per point. */
 export type Capture = { frame: Rect; scale: number };
 
-export type BackendFactory = (options: { app?: string }) => Backend;
+export type BackendFactory = (options: { app?: string; exact?: boolean }) => Backend;
 
 export type FailureKind =
   | "assertion" | "not-found" | "ambiguous" | "unsupported" | "invalid" | "timeout" | "interrupted" | "restore" | "format" | "error";
