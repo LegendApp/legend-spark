@@ -14,14 +14,14 @@ const sha = "a".repeat(40);
 const patch = "--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-upstream\n+patched\n";
 function json(file: string, value: unknown) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, JSON.stringify(value, null, 2) + "\n"); }
 function temp() { const root = mkdtempSync(path.join(os.tmpdir(), "spark-registry-")); directories.push(root); return root; }
-function fixture(version = "1.0.0", registry?: PatchRegistry) {
+function fixture(version = "1.0.0", sparkVersion = "0.0.4") {
   const root = temp(), spark = path.join(root, "node_modules/@legendapp/spark"), library = path.join(root, "node_modules/example-lib");
   mkdirSync(path.join(spark, "vendor"), { recursive: true });
-  json(path.join(root, "package.json"), { name: "test-app", packageManager: "npm@11.0.0", dependencies: { "@legendapp/spark": "0.0.4", "example-lib": version } });
-  json(path.join(spark, "package.json"), { name: "@legendapp/spark", version: "0.0.4", spark: { bundledModuleRoot: "vendor" } });
+  json(path.join(root, "package.json"), { name: "test-app", packageManager: "npm@11.0.0", dependencies: { "@legendapp/spark": sparkVersion, "example-lib": version } });
+  json(path.join(spark, "package.json"), { name: "@legendapp/spark", version: sparkVersion, spark: { bundledModuleRoot: "vendor" } });
   json(path.join(library, "package.json"), { name: "example-lib", version });
   writeFileSync(path.join(library, "file.txt"), "upstream\n");
-  const manifest = registry ?? { schema: 1, libraries: { "example-lib": { kind: "patch", versions: [
+  const manifest: PatchRegistry = { schema: 1, libraries: { "example-lib": { kind: "patch", versions: [
     { version: "1.0.0", minSpark: "0.0.4", patch: "example-lib@1.0.0.patch", sha256: hash(patch), optional: true },
     { version: "2.0.0", minSpark: "0.0.4", patch: "example-lib@2.0.0.patch", sha256: hash(patch), optional: true },
   ] } } };
@@ -46,6 +46,9 @@ test("registry is generated from dependency, camera, SDK and redirect inventorie
   expect(registry.libraries["react-native-webview"].kind).toBe("sdk");
   const root = temp();
   cpSync(path.join(repository, "patches"), path.join(root, "patches"), { recursive: true });
+  cpSync(path.join(repository, "package.json"), path.join(root, "package.json"));
+  json(path.join(root, "packages/desktop/package.json"), { version: "999.0.0" });
+  expect(generateRegistry(root)).toEqual(registry);
   writeFileSync(path.join(root, "patches/new-lib@1.0.0.patch"), patch);
   expect(() => validateRegistryFiles(root, registry)).toThrow("missing from registry");
   rmSync(path.join(root, "patches/new-lib@1.0.0.patch"));
@@ -213,7 +216,8 @@ test("new recipes replace the previous Spark layer", async () => {
 });
 
 test("doctor CLI reports registry fixes and tool errors without any filesystem writes", async () => {
-  const f = fixture("8.0.0");
+  const { version } = JSON.parse(readFileSync(path.join(repository, "packages/cli/package.json"), "utf8"));
+  const f = fixture("8.0.0", version);
   json(path.join(f.root, "desktop.config.json"), { name: "Fixture", version: "1.0.0", projectId: "test.fixture" });
   const preload = path.join(f.root, "offline.cjs"); writeFileSync(preload, 'globalThis.fetch = async () => { throw new Error("offline fixture"); };\n');
   const { spawnSync } = await import("node:child_process");

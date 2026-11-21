@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateRegistry, type PatchRegistry, type RegistryVersion } from "../packages/config-plugin/patch-registry.cjs";
+import { isDeepStrictEqual } from "node:util";
+import { selectPatch, validateRegistry, type PatchRegistry, type RegistryVersion } from "../packages/config-plugin/patch-registry.cjs";
 
 export function generateRegistry(root: string): PatchRegistry {
   const read = (file: string) => JSON.parse(readFileSync(path.join(root, file), "utf8"));
@@ -15,9 +16,10 @@ export function generateRegistry(root: string): PatchRegistry {
     if (entry.patch) entry.sha256 = createHash("sha256").update(readFileSync(path.join(root, "patches", entry.patch))).digest("hex");
     const library = registry.libraries[name] ??= { kind, versions: [] };
     if (library.kind !== kind) throw new Error(`Registry kind changed: ${name}`);
-    const previous = library.versions.find(version => version.version === entry.version && version.minSpark === entry.minSpark);
-    if (!previous) library.versions.push(entry);
-    else if (JSON.stringify(Object.entries(previous).sort()) !== JSON.stringify(Object.entries(entry).sort())) throw new Error(`Patch changed without a new minSpark: ${name}@${entry.version}. Preserve old patch files and add a new entry.`);
+    const previous = selectPatch(library, entry.version, entry.minSpark);
+    if (previous && isDeepStrictEqual(previous, { ...entry, minSpark: previous.minSpark })) return;
+    if (previous?.minSpark === entry.minSpark) throw new Error(`Patch changed without a new minSpark: ${name}@${entry.version}. Preserve old patch files and add a new entry.`);
+    library.versions.push(entry);
   }
   for (const [name, pin] of Object.entries(read("patches/dependencies.json")) as [string, any][]) {
     const { version, patch, integrity, requires, optional } = pin;
