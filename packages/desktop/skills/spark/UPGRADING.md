@@ -554,3 +554,61 @@ inactive-target configuration remains accepted.
 
 The SecureStore original-import adapter remains held for verification and is not
 included in 0.0.4.
+
+## 0.0.5
+
+Breaking: yes. macOS settings windows move from
+`@legendapp/spark/settings/window` to `@legendapp/spark/ui/settings` (#561).
+
+1. Change settings window imports and re-exports to the new path. Install
+   `@legendapp/list` in the app if it is missing. Keep the window registration
+   with `createSettingsWindowOptions()` and pass the registered `windowId`.
+2. Replace the `pages` array and render callbacks with `SettingsPage` children.
+   Keep each page's ID and title, and add an SF Symbol name as `icon`. Remove any
+   `backgroundClassName`, `contentBackgroundClassName`, `contentMinWidth`,
+   `sidebarMinWidth` and `estimatedItemSize` props from the window. Move any page
+   actions into the page content.
+3. Place rows in `SettingsSection` cards in place of `SettingsCard` and
+   `SettingsRowGroup`. Change row `title` to `label` and put custom controls in
+   the row's children in place of `control`. Built-in switch, select, segmented
+   and image choice rows take the app's `value` and `onValueChange`.
+
+**Before**
+
+```tsx
+import { SettingsRow, SettingsWindow } from "@legendapp/spark/settings/window";
+
+<SettingsWindow windowId="settings" pages={[
+  { id: "general", title: "General", render: () => <SettingsRow title="Theme" control={<ThemePicker />} /> },
+]} />
+```
+
+**After**
+
+```tsx
+import { SettingsPage, SettingsRow, SettingsSection, SettingsWindow } from "@legendapp/spark/ui/settings";
+
+<SettingsWindow windowId="settings">
+  <SettingsPage id="general" title="General" icon="gearshape">
+    <SettingsSection title="Appearance">
+      <SettingsRow label="Theme"><ThemePicker /></SettingsRow>
+    </SettingsSection>
+  </SettingsPage>
+</SettingsWindow>
+```
+
+Standalone forms can import `Switch` from `@legendapp/spark/ui` with a boolean
+`value`, `onValueChange` and an accessibility label. Use
+`Select variant="borderless"` on macOS and web.
+
+Run `spark upgrade`, `spark doctor`, and the app's typecheck and tests. Rebuild
+custom macOS hosts and check sidebar selection, scrolling between pages, and
+settings value persistence after reopening the window.
+
+- macOS driver flows isolate app state and reattach after the main React host
+  reloads. Use the per-flow failure bundle to diagnose errors (#560).
+- macOS packaging verifies the signed app's load paths, signing settings and
+  bundle contents. Check apps with custom native dependencies using
+  `bun run release:check <project-directory> <signed.app>` from the Spark
+  source checkout. Local rebuilds keep the last complete output available until
+  the new app is ready (#562).

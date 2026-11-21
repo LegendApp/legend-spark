@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.0.5
 
-- [Breaking] Move macOS settings windows to `@legendapp/spark/ui/settings`. Replace the `pages` array with `SettingsPage` children and give each page an SF Symbol name. Place rows inside `SettingsSection` cards, use `label` on rows, and pass custom controls as children. Built-in rows take `value` and `onValueChange`.
-- ui: Add `Switch` and support borderless `Select` on macOS and web.
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- [Breaking] Move macOS settings windows from `@legendapp/spark/settings/window` to `@legendapp/spark/ui/settings`. Declare pages as children to get a shared scrolling view with a sidebar that follows the visible page. See UPGRADING.md (#561).
+- ui: Add controlled `Switch` and support `Select variant="borderless"` on macOS and web (#561).
+- test driver: Reconnect the macOS mount gate to the reloaded React host, isolate app state per flow while testing the exact release artifact, and retain partial diagnostics in per-flow failure bundles (#560).
+- macos: Verify signed release apps for invalid Mach-O load paths, unexpected entitlements and development files. Add `bun run release:check` and a Kitchen Sink startup probe. Publish completed local builds with an atomic directory swap (#562).
 
 ## 0.0.4
 

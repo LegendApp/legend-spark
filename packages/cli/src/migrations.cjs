@@ -106,6 +106,9 @@ const migrations = [
   { version: '0.0.4', automatic: false, breaking: true, apply(context) {
     context.manualStep('Quit older builds, back up macOS file/MMKV data, keep bundle identifiers stable, and rebuild custom hosts. First launch automatically migrates owned legacy data to ~/Library/Application Support/<bundle id>/Spark; ambiguous sources and IO errors stop startup. Review any reported conflict without overwriting data, then verify file/MMKV values and relaunch persistence; see the linked upgrade notes.');
   } },
+  { version: '0.0.5', automatic: false, breaking: true, apply(context) {
+    context.manualStep('For macOS settings windows, replace @legendapp/spark/settings/window with @legendapp/spark/ui/settings, install @legendapp/list if missing, and migrate the pages and rows to the new JSX API. See the linked upgrade notes and verify the settings window after rebuilding custom macOS hosts.');
+  } },
 ];
 
 /** @param {string} root */
