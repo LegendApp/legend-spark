@@ -13,6 +13,7 @@ import { runChecks, type Check } from "./checks";
 import { APIChecks } from "./APIChecks";
 import { NativeControls } from "./NativeControls";
 import { ExpansionChecks } from "./ExpansionChecks";
+import { SETTINGS_DEMO_WINDOW, SettingsDemoWindow } from "./screens/native-controls/SettingsDemo";
 import { Shell } from "./shell/Shell";
 import { testDriver } from "./test-driver";
 import { argument, reportLaunch, type ReportFlag } from "./launch";
@@ -30,6 +31,7 @@ const reports: Record<ReportFlag, (report: string, args: readonly string[]) => R
 };
 export default function App(props: Props) {
   const args = props.launchArguments ?? [];
+  if (props.windowId === SETTINGS_DEMO_WINDOW) return <SettingsDemoWindow />;
   if (props.windowId && props.windowId !== "main") return <SecondaryWindow {...props} />;
   const launch = reportLaunch(args);
   if (launch) return reports[launch.flag](launch.report, args);

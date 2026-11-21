@@ -1,10 +1,11 @@
-import { selectionIndex } from "./select";
+import { selectionIndex, validateSelectVariant } from "./select";
 import type { CSSProperties } from "react";
 import { View } from "react-native";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { controlKinds, unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateRadioGroup, validateSegmented } from "./control";
 import type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
-export type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+export { Switch } from "./switch";
+export type { SwitchProps, ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export function getControlAvailability(control: ControlKind): Availability {
   if (!controlKinds.includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
   return { available: true };
@@ -47,9 +48,10 @@ function useSelection(props: SelectProps) {
   } };
 }
 export function Select(props: SelectProps) {
+  validateSelectVariant(props.variant);
   const control = useSelection(props);
   return <View ref={control.ref} style={[{ width: 240, height: 36 }, props.style]} testID={props.testID}>
-    <select value={props.value} disabled={control.disabled} onChange={event => control.change(event.currentTarget.value)} aria-label={props.accessibilityLabel} style={nativeStyle}>
+    <select value={props.value} disabled={control.disabled} onChange={event => control.change(event.currentTarget.value)} aria-label={props.accessibilityLabel} aria-description={props.accessibilityHint} style={props.variant === "borderless" ? borderlessStyle : nativeStyle}>
       {props.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
   </View>;
@@ -58,7 +60,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
   validateSegmented(props);
   const control = useSelection(props), fill = props.distribution === "fill", font = props.size === "small" ? "12px system-ui" : nativeStyle.font;
   return <View ref={control.ref} style={[{ width: 240, height: 36 }, props.style]} testID={props.testID}>
-    <div role="group" aria-label={props.accessibilityLabel} style={{ display: "flex", width: "100%", height: "100%" }}>
+    <div role="group" aria-label={props.accessibilityLabel} aria-description={props.accessibilityHint} style={{ display: "flex", width: "100%", height: "100%" }}>
       {props.options.map(option => <button type="button" key={option.value} disabled={control.disabled} aria-pressed={option.value === props.value} onClick={() => control.change(option.value)} style={{ ...nativeStyle, font, flex: fill ? 1 : "0 0 auto", width: fill ? "100%" : "auto" }}>{option.label}</button>)}
     </div>
   </View>;

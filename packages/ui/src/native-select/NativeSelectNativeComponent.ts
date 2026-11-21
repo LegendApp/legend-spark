@@ -7,6 +7,7 @@ export type NativeSelectChangeEvent = {
 };
 
 export interface NativeProps extends ViewProps {
+  borderless?: boolean;
   enabled?: boolean;
   selectionRevision?: Int32;
   itemsJson: string;

@@ -30,7 +30,8 @@ availability and the evidence for that platform.
 
 | Group | Export paths |
 | --- | --- |
-| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./menus`, `./notifications`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos` |
+| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./menus`, `./notifications`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos` |
+| macOS settings windows | `./ui/settings` |
 | UI | `./ui`, `./ui/classnames`, `./ui/glass`, `./ui/search`, `./ui/sidebar`, `./ui/split-view`, `./ui/symbol`, `./ui/swipe`, `./ui/uniwind`, `./markdown`, `./html` |
 | AI and diagnostics | `./ai`, `./ai/codex`, `./diagnostics`, `./contracts`, `./customize` |
 | Configuration and build integration | `./config`, `./config-plugin`, `./expo-config`, `./metro`, `./runtime-entry`, `./metro-gate`, `./init-template`, `./native`, `./cli` |

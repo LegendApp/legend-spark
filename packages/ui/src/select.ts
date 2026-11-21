@@ -7,3 +7,7 @@ export function selectionIndex(options: SelectProps["options"], value: string): 
   if (index < 0) throw new SparkError("E_INVALID_ARGUMENT", "Select value must match an option");
   return index;
 }
+
+export function validateSelectVariant(variant: SelectProps["variant"]) {
+  if (variant !== undefined && variant !== "default" && variant !== "borderless") throw new SparkError("E_INVALID_ARGUMENT", "Invalid Select variant");
+}

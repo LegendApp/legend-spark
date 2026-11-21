@@ -17,11 +17,11 @@ static int channel(SharedColor value, int index) { CGFloat c[4]; [value.color ge
 int redFromColor(SharedColor value) { return channel(value, 0); } int greenFromColor(SharedColor value) { return channel(value, 1); }
 int blueFromColor(SharedColor value) { return channel(value, 2); } int alphaFromColor(SharedColor value) { return channel(value, 3); }
 struct SFSymbolProps : Props { std::string name, scale, accessibilityLabel; double size = 24, yOffset = 0; SharedColor color{}; };
-struct NativeSelectProps : Props { std::string itemsJson, value, accessibilityLabel, testId; bool enabled = true; };
+struct NativeSelectProps : Props { std::string itemsJson, value, accessibilityLabel, accessibilityHint, testId; bool enabled = true, borderless = false; };
 enum class NativeSegmentedControlControlSize { Regular, Small };
 enum class NativeSegmentedControlDistribution { Fit, Fill };
 struct NativeSegmentedControlProps : Props {
-  std::string segmentsJson, value, accessibilityLabel, testId; bool enabled = true;
+  std::string segmentsJson, value, accessibilityLabel, accessibilityHint, testId; bool enabled = true;
   NativeSegmentedControlControlSize controlSize = NativeSegmentedControlControlSize::Regular;
   NativeSegmentedControlDistribution distribution = NativeSegmentedControlDistribution::Fit;
 };
@@ -173,7 +173,15 @@ int main() { @autoreleasepool {
   [select updateProps:choices oldProps:nullptr];
   NSPopUpButton *popup = [select valueForKey:@"popUpButton"];
   assert(popup.numberOfItems == 2); assert([popup.selectedItem.representedObject isEqual:@"second"]);
-  choices->value = ""; [select updateProps:choices oldProps:select->_props]; assert([popup.selectedItem.representedObject isEqual:@""]);
+  assert(popup.isBordered);
+  select.frame = NSMakeRect(0, 0, 190, 22);
+  choices->value = ""; choices->borderless = true; choices->accessibilityHint = "Select an interval";
+  [select updateProps:choices oldProps:select->_props];
+  assert([popup.selectedItem.representedObject isEqual:@""]);
+  assert(!popup.isBordered && NSMaxX(popup.frame) == 190 && NSWidth(popup.frame) < 190);
+  assert([popup.accessibilityHelp isEqualToString:@"Select an interval"]);
+  [select prepareForRecycle];
+  assert(popup.isBordered && popup.accessibilityHelp == nil);
   RNNativeSegmentedControl *segmented = [RNNativeSegmentedControl new];
   auto segments = std::make_shared<NativeSegmentedControlProps>(); segments->segmentsJson = choices->itemsJson; segments->value = "";
   [segmented updateProps:segments oldProps:nullptr];

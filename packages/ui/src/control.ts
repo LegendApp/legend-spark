@@ -30,7 +30,7 @@ export function useControl(props: ControlProps, availability: Availability = { a
   const ref = useCallback((value: MeasureTarget) => { target.current = value; }, []);
   return { ref, disabled, failed: failed || !availability.available, error, unavailable, mounted: () => mounted.current, active: () => mounted.current && !disabled && !failed && availability.available };
 }
-export const controlKinds = ["button", "text-input", "select", "segmented-control", "checkbox", "radio-group"] as const;
+export const controlKinds = ["button", "text-input", "select", "segmented-control", "checkbox", "radio-group", "switch"] as const;
 export const unsupportedPlatform: Availability = { available: false, reason: "unsupported-platform" };
 export function validateButton(props: ButtonProps) {
   if (typeof props.children !== "string" || !props.children.length || (props.onPress !== undefined && typeof props.onPress !== "function") || (props.variant !== undefined && !["default", "bordered", "borderless", "disclosure"].includes(props.variant))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid button options");

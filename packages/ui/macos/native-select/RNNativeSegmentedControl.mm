@@ -167,6 +167,7 @@ using namespace facebook::react;
   }
   _segmentedControl.enabled = newProps.enabled;
   _segmentedControl.accessibilityLabel = [NSString stringWithUTF8String:newProps.accessibilityLabel.c_str()];
+  _segmentedControl.accessibilityHelp = [NSString stringWithUTF8String:newProps.accessibilityHint.c_str()];
   _segmentedControl.accessibilityIdentifier = [NSString stringWithUTF8String:newProps.testId.c_str()];
 #endif
   [super updateProps:props oldProps:oldProps];
@@ -183,6 +184,7 @@ using namespace facebook::react;
   _isUpdatingSelection = NO;
   _segmentedControl.segmentCount = 0;
   _segmentedControl.enabled = YES;
+  _segmentedControl.accessibilityHelp = nil;
   _segmentedControl.accessibilityLabel = nil; _segmentedControl.accessibilityIdentifier = nil;
 #endif
 }

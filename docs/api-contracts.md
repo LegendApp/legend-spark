@@ -327,11 +327,11 @@ Auth keeps success/cancel/dismiss/timeout outcomes and a prepared state/redirect
 
 One `/drag-drop` component handles files/text/URLs/custom MIME payloads. Use consumer-facing event payloads consistently, explicit operations/coordinates, and `onError`/availability behavior instead of hard-coded English fallback UI. Remove the competing `/drag-drop/views` component and move music-specific track models out of the framework.
 
-`/ui` owns the small common controls. `Button`, `TextInput`, `Select` share disabled/accessibility/testID/style/ref conventions; input-specific `onChangeText` and value-specific `onValueChange` remain recognizable. Controlled and uncontrolled input modes are explicitly typed. `NativeSelect` should not be a second ordinary selector with `enabled/onChange` vocabulary. Keep segmented control as a distinct control.
+`/ui` owns the small common controls. `Button`, `Switch`, `TextInput`, `Select` share disabled/accessibility/testID/style/ref conventions; input-specific `onChangeText` and value-specific `onValueChange` remain recognizable. Controlled and uncontrolled input modes are explicitly typed. `NativeSelect` should not be a second ordinary selector with `enabled/onChange` vocabulary. Keep segmented control as a distinct control.
 
 Keep coherent capability subpaths for split view, sidebar, glass, symbols, and search if their native cost or specialization warrants them. They use the same React Native baseline props and typed consumer events. Group AppKit chrome options; name pane composition and layout readiness. Apple symbols stay explicitly Apple-specific. Raw generated native components are internal.
 
-Settings-window composition may remain under `/settings/window` because it is a distinct higher-level feature, not a React-versus-non-React split. Fold its options helper into that module. Normal and virtualized settings pages share page IDs, render vocabulary and controlled selection. Props must be exported by name. Styling adapters `/ui/uniwind` and `/ui/classnames` remain optional, explicitly library-specific integrations.
+Settings-window composition and its options helper live at `/ui/settings`. The macOS window takes `SettingsPage` children and uses a single virtualized list with controlled or uncontrolled page selection. Props must be exported by name. Styling adapters `/ui/uniwind` and `/ui/classnames` remain optional, explicitly library-specific integrations.
 
 ## 5. Concrete replacement boundaries for SQLite and WebView
 
@@ -406,7 +406,7 @@ This map accounts for all 63 original umbrella entries. “Fold” means update 
 | `/files`, `/files/scanner`, `/files/watchers` | `/files`; keep internal operation modules and operation-scoped lifetimes. |
 | `/settings`, `/settings/paths` | Settings stays; general storage/path helpers move to files. |
 | `/settings/observable` | Retain explicit Legend State integration, shared storage backend. |
-| `/settings/window`, `/settings/window/options` | `/settings/window`; one page/options contract. |
+| `/settings/window`, `/settings/window/options` | `/ui/settings` with declarative `SettingsPage` children. |
 | `/clipboard`, `/secure-storage`, `/links` | Keep; selected Expo methods plus owned extensions; remove duplicate aliases. |
 | `/notifications`, `/updates`, `/processes`, `/processes/commands`, `/system` | Keep capabilities; fold commands helper into processes; consolidate duplicate facades. |
 | `/audio`, `/auth-session` | Keep owned resource contracts and hooks in each feature. |
