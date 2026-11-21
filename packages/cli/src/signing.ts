@@ -1,18 +1,20 @@
-import { writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { readAppConfig } from "./project.ts";
 import { existsSync, openSync, closeSync, readSync, readdirSync, realpathSync, lstatSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { isDeepStrictEqual } from "node:util";
 import { run } from "./commands.ts";
-import { digest, nativePackages, readJson, stateFile, writeJson } from "./project.ts";
+import { digest, nativePackages, readJson, stateFile, writeJson, type Runtime } from "./project.ts";
 import type { Runner, SigningCredentials } from "./credentials.ts";
+import { checkReleaseLoadPaths, checkReleasePayload } from "./release-app.ts";
+import { checkReleaseTestDriver } from "./release-driver.ts";
 
 const { resolveEntitlements } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/entitlements.cjs");
 export type Entitlements = Record<string, unknown>;
 
 export function distributionEntitlements(value: Entitlements) {
-  for (const key of ["com.apple.security.get-task-allow", "get-task-allow"]) {
+  for (const key of ["com.apple.security.get-task-allow", "get-task-allow", "com.apple.security.cs.disable-library-validation"]) {
     if (value[key] !== undefined && value[key] !== false) throw new Error(`${key} must be absent or false in a distribution app.`);
   }
   function inspect(item: unknown) {
@@ -30,6 +32,18 @@ export function appEntitlements(root: string, modules: Record<string, string>): 
   // A cached release can coexist with a last-generated dev graph. Use the
   // release binary's module set, not whichever selection file was written last.
   return resolveEntitlements(readAppConfig(root), selected.map((pkg) => pkg.json));
+}
+
+export function releaseAppExpectation(root: string, runtime: Runtime, config: ReturnType<typeof readAppConfig>["expo"], buildVersion: string) {
+  if (runtime.platform !== "macos" || !["release", "go"].includes(runtime.mode)) throw new Error("Expected a macOS release app or Spark Runner.");
+  const bundleId = config.macos?.bundleIdentifier, version = config.version;
+  if (!bundleId || !version || typeof buildVersion !== "string" || !buildVersion) throw new Error("Bundle identifier and release version metadata must be configured before packaging.");
+  return {
+    runtime, bundleId, version, buildVersion,
+    entitlements: appEntitlements(root, runtime.modules),
+    byPath: config.extra?.spark?.signing?.macos?.entitlementsByPath ?? {},
+    testDriverInRelease: config.macos?.testDriverInRelease === true,
+  };
 }
 
 function machOType(file: string): number | undefined {
@@ -76,8 +90,14 @@ export function signingOrder(app: string): string[] {
 }
 
 async function entitlementTargets(root: string, app: string, order: string[], entitlements: Entitlements, byPath: Record<string, Entitlements>, execute: Runner) {
-  const targets = new Map(order.map((file) => [file, byPath[path.relative(app, file)] ?? {}]));
-  targets.set(app, entitlements);
+  const targets = new Map<string, Entitlements>(order.map(file => [file, {}]));
+  targets.set(app, distributionEntitlements(entitlements));
+  for (const [relative, value] of Object.entries(byPath)) {
+    const file = path.join(app, relative);
+    if (path.relative(app, file) !== relative || !targets.has(file) || file === app) throw new Error(`Unknown nested signing target: ${relative}`);
+    if (!isProcessTarget(file) && Object.keys(value).length) throw new Error(`Entitlements belong on executable processes, not libraries: ${relative}`);
+    targets.set(file, distributionEntitlements(value));
+  }
   for (const container of order.filter((file) => /\.(app|xpc|appex)$/.test(file))) {
     const plist = existsSync(path.join(container, "Contents/Info.plist")) ? path.join(container, "Contents/Info.plist") : path.join(container, "Info.plist");
     const info = JSON.parse(await execute(root, ["plutil", "-convert", "json", "-o", "-", plist], { capture: true }));
@@ -92,63 +112,62 @@ async function entitlementTargets(root: string, app: string, order: string[], en
   return targets;
 }
 
-export async function signApp(root: string, app: string, credentials: SigningCredentials, entitlements: Entitlements, byPath: Record<string, Entitlements> = {}, execute: Runner = run) {
+function isProcessTarget(file: string) {
+  return /\.(app|xpc|appex)$/.test(file) || (lstatSync(file).isFile() && machOType(file) === 2);
+}
+
+export async function signApp(root: string, app: string, credentials: Pick<SigningCredentials, "hash" | "keychain">, entitlements: Entitlements, byPath: Record<string, Entitlements> = {}, execute: Runner = run) {
   app = realpathSync(app);
-  distributionEntitlements(entitlements);
   const order = signingOrder(app);
-  const relatives = new Set(order.map((file) => path.relative(app, file) || "."));
-  for (const [relative, value] of Object.entries(byPath)) {
-    if (!relatives.has(relative) || relative === ".") throw new Error(`Unknown nested signing target: ${relative}`);
-    distributionEntitlements(value);
-  }
   const targets = await entitlementTargets(root, app, order, entitlements, byPath, execute);
   for (const file of order) {
-    const relative = path.relative(app, file) || ".";
-    const value = targets.get(file)!;
-    const processTarget = /\.(app|xpc|appex)$/.test(file) || (lstatSync(file).isFile() && machOType(file) === 2);
-    if (!processTarget && Object.keys(value).length) throw new Error(`Entitlements belong on executable processes, not libraries: ${relative}`);
-    const plist = stateFile(root, `packaging/entitlements/${digest(relative)}.plist`);
-    writeJson(plist, value);
-    await execute(root, ["plutil", "-convert", "xml1", plist], { capture: true });
-    await execute(root, ["codesign", "--force", "--sign", credentials.hash, "--options", "runtime", "--timestamp", ...(processTarget ? ["--entitlements", plist] : []),
-      ...(credentials.keychain ? ["--keychain", credentials.keychain] : []), file], { capture: true });
+    const args = ["codesign", "--force", "--sign", credentials.hash, "--options", "runtime", "--timestamp"];
+    if (isProcessTarget(file)) {
+      const relative = path.relative(app, file) || ".";
+      const plist = stateFile(root, `packaging/entitlements/${digest(relative)}.plist`);
+      writeJson(plist, targets.get(file)!);
+      await execute(root, ["plutil", "-convert", "xml1", plist], { capture: true });
+      args.push("--entitlements", plist);
+    }
+    if (credentials.keychain) args.push("--keychain", credentials.keychain);
+    await execute(root, [...args, file], { capture: true });
   }
   return order;
 }
 
-export async function validateApp(root: string, app: string, credentials: SigningCredentials, expected: { arch: "arm64" | "x64"; runner?: boolean; bundleId: string; version: string; buildVersion: string; entitlements: Entitlements; byPath: Record<string, Entitlements> }, notarized: boolean, execute: Runner = run) {
+export async function validateApp(root: string, app: string, identity: Pick<SigningCredentials, "name" | "teamId">, expected: ReturnType<typeof releaseAppExpectation>, notarized: boolean, execute: Runner = run) {
   app = realpathSync(app);
-  if (expected.runner) {
-    const runtime = readJson(path.join(app, "Contents/Resources/spark-runtime.json"));
-    if (runtime.mode !== "go" || runtime.platform !== "macos" || runtime.arch !== expected.arch) throw new Error("Distribution app is not a macOS Spark Runner.");
-  } else if (!existsSync(path.join(app, "Contents/Resources/main.jsbundle"))) throw new Error("Distribution app is missing its JavaScript bundle.");
   const info = JSON.parse(await execute(root, ["plutil", "-convert", "json", "-o", "-", path.join(app, "Contents/Info.plist")], { capture: true }));
+  checkReleasePayload(app, expected.runtime.mode === "go", info);
+  if (expected.runtime.mode === "release") checkReleaseTestDriver(app, expected.testDriverInRelease);
+  const runtime = readJson(path.join(app, "Contents/Resources/spark-runtime.json"));
+  if (!isDeepStrictEqual(runtime, expected.runtime)) throw new Error("The packaged runtime receipt does not match the release build.");
   for (const [key, value] of Object.entries({ CFBundleIdentifier: expected.bundleId, CFBundleShortVersionString: expected.version, CFBundleVersion: expected.buildVersion })) {
     if (info[key] !== value) throw new Error(`Packaged ${key} does not match the release build.`);
   }
-  const arches = (await execute(root, ["lipo", "-archs", path.join(app, "Contents/MacOS", info.CFBundleExecutable)], { capture: true })).trim().split(/\s+/);
-  const expectedArch = expected.arch === "x64" ? "x86_64" : "arm64";
+  const executable = info.CFBundleExecutable;
+  if (info.CFBundlePackageType !== "APPL" || typeof executable !== "string" || !executable || path.basename(executable) !== executable) throw new Error("Invalid app package type or executable name in Info.plist.");
+  const main = path.join(app, "Contents/MacOS", executable);
+  const arches = (await execute(root, ["lipo", "-archs", main], { capture: true })).trim().split(/\s+/);
+  const expectedArch = expected.runtime.arch === "x64" ? "x86_64" : "arm64";
   if (arches.length !== 1 || arches[0] !== expectedArch) throw new Error(`The package must contain a ${expectedArch} app.`);
-  await execute(root, ["codesign", "--verify", "--deep", "--strict", "--verbose=2", app], { capture: true });
+  // Apple TN3127's Developer ID Application requirement, independent of the certificate's display name.
+  const developerId = "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists";
+  await execute(root, ["codesign", "--verify", "--deep", "--strict", "--verbose=2", "-R=" + developerId, app], { capture: true });
   const order = signingOrder(app);
   const targets = await entitlementTargets(root, app, order, expected.entitlements, expected.byPath, execute);
   for (const file of order) {
     const signature = await execute(root, ["codesign", "-dvvv", file], { capture: true });
-    if (!signature.includes(`Authority=${credentials.name}\n`) || !signature.includes(`TeamIdentifier=${credentials.teamId}\n`) || !/flags=.*\bruntime\b/.test(signature) || !/^Timestamp=/m.test(signature)) {
+    if (!signature.includes(`Authority=${identity.name}\n`) || !signature.includes(`TeamIdentifier=${identity.teamId}\n`) || !/flags=.*\bruntime\b/.test(signature) || !/^Timestamp=/m.test(signature)) {
       throw new Error(`Invalid Developer ID signature, hardened runtime, or timestamp: ${file}`);
     }
-    const signedEntitlements = await execute(root, ["codesign", "-d", "--entitlements", ":-", file], { capture: true });
-    // Inspect the final signature, not just the input entitlement file.
+    const signedEntitlements = await execute(root, ["codesign", "-d", "--entitlements", "-", "--xml", file], { capture: true });
     const xml = signedEntitlements.match(/<\?xml[\s\S]*?<\/plist>|<plist[\s\S]*?<\/plist>/)?.[0];
-    let actual: Entitlements = {};
-    if (xml) {
-      const plist = stateFile(root, "packaging/verified-entitlements.plist");
-      await writeFile(plist, xml);
-      actual = distributionEntitlements(JSON.parse(await execute(root, ["plutil", "-convert", "json", "-o", "-", plist], { capture: true })));
-    }
+    const actual = xml ? distributionEntitlements(JSON.parse(execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", "-"], { input: xml, encoding: "utf8" }))) : {};
     const desired = targets.get(file);
     if (!isDeepStrictEqual(actual, desired)) throw new Error(`Signed entitlements do not match the release configuration: ${file}`);
   }
+  await checkReleaseLoadPaths(root, app, main, order.filter(file => lstatSync(file).isFile()), execute);
   if (notarized) {
     await execute(root, ["xcrun", "stapler", "validate", app], { capture: true });
     await execute(root, ["spctl", "--assess", "--type", "execute", "--verbose=4", app], { capture: true });

@@ -74,7 +74,7 @@ Native packages may declare requirements in their `package.json` under `spark.en
 
 The framework owns the generated entitlements file. It does not inherit the desktop template's sandbox defaults. Custom config plugins should express entitlement requirements through the same app declarations or native-package metadata. Capabilities requiring provisioning-profile generation/embedding are not implemented by this packaging command.
 
-Packaging resolves requirements from the release binary's actual native module set. An unused SDK module cannot contribute entitlements merely because it was present in an earlier development build. Development-only `get-task-allow` privileges and unresolved Xcode variables are rejected for distribution. Electron-specific JIT or library-validation exceptions are not enabled by default.
+Packaging resolves requirements from the release binary's actual native module set. An unused SDK module cannot contribute entitlements merely because it was present in an earlier development build. Distribution rejects enabled `get-task-allow`, disabled library validation, and unresolved Xcode variables.
 
 For an embedded helper process, declare an exact bundle-relative target under `expo.extra.spark.signing.macos.entitlementsByPath`, for example:
 
@@ -87,6 +87,18 @@ For an embedded helper process, declare an exact bundle-relative target under `e
 ```
 
 Unknown targets fail. Helpers use their own entitlements; libraries receive no process entitlements. Configure a helper's bundle instead of conflicting overrides on its main executable.
+
+## Verify a macOS app
+
+Packaging verifies the signed app before notarization and checks the app extracted from the final ZIP. It checks Developer ID, hardened runtime, the configured entitlements, Mach-O install names and runpaths, and bundle contents. Standalone apps must embed Hermes bytecode and may not ship source maps or debug build files. The Spark Runner retains the development runtime it needs to run client projects.
+
+The source checkout exposes the same checks for a signed app.
+
+```sh
+bun run release:check <project-directory> <signed.app>
+```
+
+Use the project that built the app so the check can resolve its native module entitlements. Add `--probe` for a signed Kitchen Sink release. The probe waits for the embedded UI to start, checks that it ignored the decoy development server, and checks for unexpected sockets in the app process.
 
 ## Notarization and retries
 
