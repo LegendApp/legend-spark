@@ -436,8 +436,13 @@ test("a missing macOS slice is restored even when the XCFramework container surv
   expect(commandCount("xcodebuild")).toBe(2);
 });
 
-test("macOS prebuild generates and installs without building, then reuses preparation for build", async () => {
+test("macOS prebuild uses a bundled template and reuses preparation for build", async () => {
   await prebuild(root);
+  const [, argv] = commands.run.mock.calls.find(([, args]) => args.includes("prebuild"))!;
+  const template = argv[argv.indexOf("--template") + 1];
+  expect(path.isAbsolute(template)).toBe(true);
+  const manifest = execFileSync("tar", ["-xOzf", template, "package/package.json"], { encoding: "utf8" });
+  expect(JSON.parse(manifest)).toMatchObject({ name: "expo-desktop-template-bare-minimum", version: "55.83.10" });
   expect(commandCount("prebuild")).toBe(1);
   expect(commandCount("pod")).toBe(1);
   expect(commandCount("xcodebuild")).toBe(0);

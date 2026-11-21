@@ -36,9 +36,12 @@ struct NativeSelectEventEmitter : EventEmitter {
   struct OnValueChange { std::string value; };
   void onValueChange(OnValueChange event) const {}
 };
+static std::vector<std::pair<double, double>> segmentedSizes;
 struct NativeSegmentedControlEventEmitter : EventEmitter {
   struct OnValueChange { std::string value; };
   void onValueChange(OnValueChange event) const {}
+  struct OnIntrinsicSize { double width, height; };
+  void onIntrinsicSize(OnIntrinsicSize event) const { segmentedSizes.push_back({event.width, event.height}); }
 };
 struct TextInputSearchEventEmitter : EventEmitter {
   using OnChangeText = TextChange;
@@ -187,6 +190,15 @@ int main() { @autoreleasepool {
   [segmented updateProps:segments oldProps:nullptr];
   NSSegmentedControl *segmentsView = [segmented valueForKey:@"segmentedControl"];
   assert(segmentsView.segmentCount == 2 && segmentsView.selectedSegment == 0);
+  [segmented updateEventEmitter:std::make_shared<NativeSegmentedControlEventEmitter>()];
+  assert(segmentedSizes.size() == 1);
+  segments = std::make_shared<NativeSegmentedControlProps>(*segments);
+  segments->segmentsJson = R"([{"label":"Compact","value":""},{"label":"Comfortable","value":"second"},{"label":"Spacious","value":"third"},{"label":"Extra spacious","value":"fourth"}])";
+  [segmented updateProps:segments oldProps:segmented->_props];
+  assert(segmentedSizes.size() == 2 && segmentedSizes.back().first > 190);
+  assert(segmentedSizes.back().first == ceil(segmentsView.intrinsicContentSize.width));
+  [segmented updateProps:segments oldProps:segmented->_props];
+  assert(segmentedSizes.size() == 2);
   RNTextInputSearch *search = [RNTextInputSearch new];
   search->_eventEmitter = std::make_shared<TextInputSearchEventEmitter>();
   auto searchProps = std::make_shared<TextInputSearchProps>(); searchProps->controlled = true; searchProps->text = "query";

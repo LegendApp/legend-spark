@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
+import { nativePackages } from "../packages/cli/src/project.ts";
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 const require = createRequire(import.meta.url);
@@ -54,5 +55,41 @@ test("Expo's duplicate UIApplication alias is removed before native fingerprinti
     expect(patched).toBe("#import <Foundation/Foundation.h>\n\n\n");
     removeExpoApplicationAlias(...roots);
     expect(readFileSync(path.join(root, "node_modules/expo-modules-core/ios/Platform/Platform.h"), "utf8")).toBe(patched);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("macOS native preparation patches Expo Constants in the selected pod copy", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-expo-computer-name-"));
+  try {
+    const write = (file: string, content: string) => {
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, content);
+    };
+    write(path.join(root, "package.json"), JSON.stringify({ dependencies: { "react-native-macos": "0.83.0", expo: "55.0.32" } }));
+    write(path.join(root, "node_modules/react-native-macos/package.json"), JSON.stringify({ name: "react-native-macos", version: "0.83.0" }));
+    const expo = path.join(root, "node_modules/expo");
+    write(path.join(expo, "package.json"), JSON.stringify({ name: "expo", version: "55.0.32", dependencies: { "expo-modules-core": "55.0.27" } }));
+    const expoCore = path.join(expo, "node_modules/expo-modules-core");
+    write(path.join(expoCore, "package.json"), JSON.stringify({ name: "expo-modules-core", version: "55.0.27" }));
+    write(path.join(expoCore, "ExpoModulesCore.podspec"), "");
+    const provider = path.join(expoCore, "ios/Utilities/ConstantsProvider.swift");
+    write(provider, `internal final class ConstantsProvider: EXConstantsInterface {}
+
+private func getDeviceName() -> String {
+  #if os(iOS) || os(tvOS)
+  return UIDevice.current.name
+  #elseif os(macOS)
+  return ProcessInfo.processInfo.hostName
+  #endif
+}
+`);
+    expect(nativePackages(root).find(pkg => pkg.name === "expo-modules-core")?.root).toBe(realpathSync(expoCore));
+    const patched = readFileSync(provider, "utf8");
+    expect(patched).toContain("#if os(macOS)\nimport SystemConfiguration\n#endif");
+    expect(patched).toContain("return UIDevice.current.name");
+    expect(patched).toContain('return SCDynamicStoreCopyComputerName(nil, nil) as String? ?? ""');
+    expect(patched).not.toContain("ProcessInfo.processInfo.hostName");
+    nativePackages(root);
+    expect(readFileSync(provider, "utf8")).toBe(patched);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

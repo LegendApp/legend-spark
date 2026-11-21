@@ -385,4 +385,18 @@ function removeExpoApplicationAlias(rn, expo) {
   fs.renameSync(temporary, file); // Preserve package-manager cache hardlinks.
 }
 
-module.exports = { appPatchIssues, prepareNativePatches, removeExpoApplicationAlias, appPatches, layerPatches, resolveManifest, withoutReceipt };
+function patchExpoComputerName(expo) {
+  const file = path.join(expo, "ios/Utilities/ConstantsProvider.swift");
+  if (!fs.existsSync(file)) return;
+  const source = fs.readFileSync(file, "utf8");
+  const lookup = "#elseif os(macOS)\n  return ProcessInfo.processInfo.hostName";
+  if (!source.includes(lookup)) return;
+  const patched = source
+    .replace("internal final class ConstantsProvider", "#if os(macOS)\nimport SystemConfiguration\n#endif\n\ninternal final class ConstantsProvider")
+    .replace(lookup, '#elseif os(macOS)\n  return SCDynamicStoreCopyComputerName(nil, nil) as String? ?? ""');
+  const temporary = `${file}.spark-${process.pid}.tmp`;
+  fs.writeFileSync(temporary, patched);
+  fs.renameSync(temporary, file);
+}
+
+module.exports = { appPatchIssues, prepareNativePatches, removeExpoApplicationAlias, patchExpoComputerName, appPatches, layerPatches, resolveManifest, withoutReceipt };

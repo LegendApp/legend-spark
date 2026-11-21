@@ -112,7 +112,7 @@ export function SettingsSelectRow({ value, options, onValueChange, disabled, ...
 
 export function SettingsSegmentedRow({ value, options, onValueChange, disabled, ...text }: SettingsSegmentedRowProps) {
   return <Row {...text} disabled={disabled}>
-    <SegmentedControl options={options} value={value} onValueChange={onValueChange} disabled={disabled} style={styles.selection} {...accessibility(text)} />
+    <SegmentedControl options={options} value={value} onValueChange={onValueChange} disabled={disabled} {...accessibility(text)} />
   </Row>;
 }
 
