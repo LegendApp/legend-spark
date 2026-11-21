@@ -4,12 +4,21 @@ import { SFSymbol } from "@legendapp/spark-ui/src/sf-symbol";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { Children, Fragment, useState, type ReactNode } from "react";
 import * as RN from "react-native";
-import type { KeyEvent } from "react-native-macos";
-import type { ImageSourcePropType } from "react-native";
+import type { ColorValue, ImageSourcePropType, NativeSyntheticEvent } from "react-native";
 
 const { Image, Platform, PlatformColor, Pressable, StyleSheet, Text, View } = RN;
 
-const macOS = RN as typeof RN & Pick<typeof import("react-native-macos"), "DynamicColorMacOS">;
+// The macOS type entry also declares globals. Keep the additions used here local.
+const macOS = RN as typeof RN & {
+  DynamicColorMacOS(colors: { light: string; dark: string }): ColorValue;
+};
+type KeyEvent = NativeSyntheticEvent<{
+  key: string;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+}>;
 const cardColor = Platform.OS === "macos" ? macOS.DynamicColorMacOS({
   light: "rgba(0,0,0,0.03)",
   dark: "rgba(255,255,255,0.025)",
