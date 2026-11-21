@@ -103,10 +103,23 @@ static void RNSidebarLayoutCount(NSView *cell, NSTextField *field)
 @end
 
 @interface RNSidebarRowView : NSTableRowView
+@property (nonatomic, weak) NSOutlineView *outlineView;
 @property (nonatomic, assign) BOOL contextHighlighted;
 @end
 
 @implementation RNSidebarRowView
+- (BOOL)isEmphasized
+{
+  if (self.outlineView.style == NSTableViewStyleSourceList && self.window) return self.window.isKeyWindow;
+  return [super isEmphasized];
+}
+
+- (void)setEmphasized:(BOOL)emphasized
+{
+  if (self.outlineView.style == NSTableViewStyleSourceList && self.window) emphasized = self.window.isKeyWindow;
+  [super setEmphasized:emphasized];
+}
+
 - (void)setContextHighlighted:(BOOL)contextHighlighted
 {
   _contextHighlighted = contextHighlighted;
@@ -822,9 +835,16 @@ static std::string RNSidebarJsonFromStrings(NSArray<NSString *> *strings)
   return node.selectable && !node.group;
 }
 
+- (NSString *)outlineView:(NSOutlineView *)outlineView typeSelectStringForTableColumn:(NSTableColumn *)tableColumn item:(id)item
+{
+  RNSidebarNode *node = item;
+  return node.view ? node.view.accessibilityLabel : node.title;
+}
+
 - (NSTableRowView *)outlineView:(NSOutlineView *)outlineView rowViewForItem:(id)item
 {
   RNSidebarRowView *rowView = [RNSidebarRowView new];
+  rowView.outlineView = outlineView;
   RNSidebarItem *view = ((RNSidebarNode *)item).view;
   rowView.contextHighlighted = view && view == _contextHighlightedItem;
   return rowView;

@@ -1,6 +1,6 @@
 # Storage and settings
 
-Exports: `@legendapp/spark/settings`, `/settings/observable`, `/settings/window`, `/secure-storage`, `/sqlite`.
+Exports: `@legendapp/spark/settings`, `/settings/observable`, `/secure-storage`, `/sqlite`.
 
 ## Pick the right store
 
@@ -52,33 +52,7 @@ try {
 }
 ```
 
-## Settings window UI
-
-`/settings/window` builds a macOS-style preferences window: a sidebar of pages (`SettingsWindow`, or `VirtualizedSettingsWindow` for long pages) whose content is `SettingsPage` > `SettingsSection` > `SettingsRow` (`title`, optional `description`, and a `control`). Register the window with `createSettingsWindowOptions()`: it opens hidden and `SettingsWindow` shows it once its native layout is ready. `windowId` must match the registered ID and cannot change while mounted. Selection is uncontrolled (`defaultPageId`) or controlled (`selectedPageId` + `onSelectionChange`). Requires the `@legendapp/list` peer.
-
-```tsx
-import { SettingsPage, SettingsRow, SettingsSection, SettingsWindow, createSettingsWindowOptions } from '@legendapp/spark/settings/window';
-import { createWindowsNavigator } from '@legendapp/spark/windows';
-import { Switch } from 'react-native';
-
-function General() {
-  return (
-    <SettingsPage>
-      <SettingsSection title="Startup" first>
-        <SettingsRow title="Open at login" control={<Switch value={false} onValueChange={() => {}} />} />
-      </SettingsSection>
-    </SettingsPage>
-  );
-}
-
-function Settings() {
-  return <SettingsWindow windowId="settings" pages={[{ id: 'general', title: 'General', render: () => <General /> }]} />;
-}
-
-export const windows = createWindowsNavigator({
-  settings: { id: 'settings', component: Settings, options: createSettingsWindowOptions() },
-});
-```
+For settings window composition, see `/ui/settings` in [UI components](ui.md).
 
 ## Platforms
 

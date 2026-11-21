@@ -10,9 +10,10 @@ import { RadioGroupFallback } from "./checkbox-unavailable";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { macosButton, unsupportedPlatform, useControl, useTextValue, validateButton, validateCheckbox, validateRadioGroup, validateSegmented } from "./control";
 import { getControlAvailability } from "./availability";
-import { selectionIndex } from "./select";
+import { selectionIndex, validateSelectVariant } from "./select";
 import type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, SelectProps, SegmentedControlProps } from "./types";
-export type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+export { Switch } from "./switch";
+export type { SwitchProps, ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { getControlAvailability } from "./availability";
 
 // AppKit buttons report their intrinsic size, which sizes the view unless a style sets width or height.
@@ -70,22 +71,23 @@ export function TextInput(props: TextInputProps) {
 function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }) {
   selectionIndex(props.options, props.value);
   if (typeof props.onValueChange !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onValueChange");
-  const control = useControl(props, getControlAvailability(segmented ? "segmented-control" : "select"));
+  const { variant = "default" } = props;
+  const control = useControl(props, variant === "borderless" && Platform.OS !== "macos" ? unsupportedPlatform : getControlAvailability(segmented ? "segmented-control" : "select"));
   const [selectionRevision, revise] = useState(0);
-  const { options, value, onValueChange, accessibilityLabel, style, testID } = props;
+  const { options, value, onValueChange, accessibilityLabel, accessibilityHint, style, testID } = props;
   function changed(event: NativeSyntheticEvent<{ value: string }>) {
     if (!control.active()) return;
     const next = event?.nativeEvent?.value;
     if (!options.some(option => option.value === next)) { control.error(new SparkError("E_INVALID_DATA", "Native selection is not an option")); return; }
     revise(revision => revision + 1); onValueChange(next);
   }
-  const common = { ref: control.ref, value, accessibilityLabel, testID, style: [{ width: 240, height: 36 }, style], selectionRevision };
-  if (control.failed) return <View ref={control.ref} style={common.style} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}><Text>{options.find(option => option.value === value)!.label}</Text></View>;
+  const common = { ref: control.ref, value, accessibilityLabel, accessibilityHint, testID, style: [{ width: 240, height: 36 }, style], selectionRevision };
+  if (control.failed) return <View ref={control.ref} style={common.style} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityHint={accessibilityHint} accessibilityState={{ disabled: true }}><Text>{options.find(option => option.value === value)!.label}</Text></View>;
   if (segmented) return <NativeSegmentedControl {...common} segmentsJson={JSON.stringify(options)} enabled={!control.disabled} controlSize={(props as SegmentedControlProps).size ?? "regular"} distribution={(props as SegmentedControlProps).distribution ?? "fit"} onValueChange={changed} />;
   if (Platform.OS === "windows") return <WindowsSelect {...common} itemsJson={JSON.stringify(options)} disabled={control.disabled} onSelectionChange={changed} onUnavailable={control.unavailable} />;
-  return <NativeSelect {...common} itemsJson={JSON.stringify(options)} enabled={!control.disabled} onValueChange={changed} />;
+  return <NativeSelect {...common} borderless={variant === "borderless"} itemsJson={JSON.stringify(options)} enabled={!control.disabled} onValueChange={changed} />;
 }
-export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
+export function Select(props: SelectProps) { validateSelectVariant(props.variant); return <Selection {...props} segmented={false} />; }
 export function SegmentedControl(props: SegmentedControlProps) { validateSegmented(props); return <Selection {...props} segmented />; }
 /** AppKit radio buttons (NSButton) in a stack. Without a width or height style it takes its intrinsic size. */
 export function RadioGroup(props: RadioGroupProps) {

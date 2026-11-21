@@ -140,11 +140,15 @@ using namespace facebook::react;
     [self selectValue:_value];
   }
 
+  _popUpButton.bordered = !newProps.borderless;
+  ((NSPopUpButtonCell *)_popUpButton.cell).arrowPosition = NSPopUpArrowAtCenter;
   _popUpButton.enabled = newProps.enabled;
   _popUpButton.accessibilityLabel = [NSString stringWithUTF8String:newProps.accessibilityLabel.c_str()];
+  _popUpButton.accessibilityHelp = [NSString stringWithUTF8String:newProps.accessibilityHint.c_str()];
   _popUpButton.accessibilityIdentifier = [NSString stringWithUTF8String:newProps.testId.c_str()];
 #endif
   [super updateProps:props oldProps:oldProps];
+  [self layoutSubviews];
 }
 
 - (void)prepareForRecycle
@@ -156,6 +160,8 @@ using namespace facebook::react;
   _isUpdatingSelection = NO;
   [_popUpButton removeAllItems];
   _popUpButton.enabled = YES;
+  _popUpButton.bordered = YES;
+  _popUpButton.accessibilityHelp = nil;
   _popUpButton.accessibilityLabel = nil; _popUpButton.accessibilityIdentifier = nil;
 #endif
 }
@@ -163,7 +169,17 @@ using namespace facebook::react;
 - (void)layoutSubviews
 {
   [super layoutSubviews];
-  _popUpButton.frame = self.bounds;
+  CGRect frame = self.bounds;
+#if TARGET_OS_OSX
+  if (!_popUpButton.isBordered) {
+    CGFloat width = _popUpButton.intrinsicContentSize.width;
+    if (width > 0 && width < NSWidth(frame)) {
+      if (_popUpButton.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionLeftToRight) frame.origin.x = NSMaxX(frame) - width;
+      frame.size.width = width;
+    }
+  }
+#endif
+  _popUpButton.frame = frame;
 }
 
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics

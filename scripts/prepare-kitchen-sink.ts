@@ -34,6 +34,7 @@ async function prepareKitchenSinkConsumer(root: string, packageManifest?: string
     if (!overrides[name]) throw new Error(`Kitchen Sink needs the ${name} override`);
     pkg.dependencies[name] = overrides[name];
   }
+  pkg.dependencies["@legendapp/list"] = readJson(path.join(source, "package.json")).dependencies["@legendapp/list"];
   pkg.dependencies["base64-js"] = "1.5.1";
   pkg.dependencies.uniwind = "1.6.3";
   pkg.dependencies.tailwindcss = "4.2.4";

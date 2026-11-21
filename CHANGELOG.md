@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- [Breaking] Move macOS settings windows to `@legendapp/spark/ui/settings`. Replace the `pages` array with `SettingsPage` children and give each page an SF Symbol name. Place rows inside `SettingsSection` cards, use `label` on rows, and pass custom controls as children. Built-in rows take `value` and `onValueChange`.
+- ui: Add `Switch` and support borderless `Select` on macOS and web.
+
 ## 0.0.4
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified

@@ -3,6 +3,7 @@ import { CommonControls } from "./CommonControls";
 import { Glass } from "./Glass";
 import { PaneSplitViewDemo } from "./PaneSplitViewDemo";
 import { PopoverDemo } from "./PopoverDemo";
+import { SettingsDemo } from "./SettingsDemo";
 import { Search } from "./Search";
 import { SheetDemo } from "./SheetDemo";
 import { TableDemo } from "./TableDemo";
@@ -19,6 +20,7 @@ export default defineScreens("native-controls", [
   { id: "sidebar-tree", title: "Sidebar: tree", titles: { ar: "الشريط الجانبي: شجرة" }, summary: "Source-list section headers, nested rows, trailing counts, collapsible sections, double-click and multiple selection.", summaries: { ar: "عناوين أقسام قائمة المصادر، وصفوف متداخلة، وأعداد في نهاية الصف، وأقسام قابلة للطي، والنقر المزدوج، والتحديد المتعدد." }, component: SidebarTree },
   { id: "sidebar-tree-react-rows", title: "Sidebar: tree of React rows", titles: { ar: "الشريط الجانبي: شجرة من صفوف React" }, summary: "React rows nested with parentId under a group row, with a trailing count.", summaries: { ar: "صفوف React متداخلة عبر parentId تحت صف مجموعة، مع عدد في نهاية الصف." }, component: SidebarTreeReactRows },
   { id: "common-controls", title: "Buttons, checkboxes, radios and segments", titles: { ar: "الأزرار ومربعات الاختيار وأزرار الاختيار والمقاطع" }, summary: "Intrinsically sized buttons, checkboxes, a disclosure button, radio groups, small and fill segmented controls, and placeholder and multiline text inputs.", summaries: { ar: "أزرار بحجمها الطبيعي، ومربعات اختيار، وزر إفصاح، ومجموعات أزرار اختيار، وعناصر تحكم مقسّمة صغيرة وممتدة، وحقول نص بنص بديل ومتعددة الأسطر." }, component: CommonControls },
+  { id: "settings", title: "Settings window", titles: { ar: "نافذة الإعدادات" }, summary: "A scrolling macOS settings window with native controls and an icon sidebar.", summaries: { ar: "نافذة إعدادات قابلة للتمرير على macOS مع عناصر تحكم أصلية وشريط جانبي بأيقونات." }, component: SettingsDemo },
   { id: "popover", title: "Popover", titles: { ar: "النافذة المنبثقة" }, summary: "An NSPopover hosting React content, anchored to a button or to a rect inside a view.", summaries: { ar: "‏NSPopover يستضيف محتوى React، مثبّت على زر أو على مستطيل داخل عرض." }, component: PopoverDemo },
   { id: "table", title: "Table", titles: { ar: "الجدول" }, summary: "An NSTableView with a header, columns, 5,000 rows, single or multiple selection and double-click.", summaries: { ar: "‏NSTableView بعنوان وأعمدة و5000 صف، مع تحديد مفرد أو متعدد ونقر مزدوج." }, component: TableDemo },
   { id: "sheet", title: "Sheet", titles: { ar: "الورقة" }, summary: "A sheet on the window hosting a React form, with a placeholder and a multiline text input.", summaries: { ar: "ورقة على النافذة تستضيف نموذج React، مع نص بديل وحقل نص متعدد الأسطر." }, component: SheetDemo },

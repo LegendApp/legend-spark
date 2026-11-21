@@ -1,6 +1,6 @@
 # Common controls
 
-Import `Button`, `Checkbox`, `RadioGroup`, `TextInput`, `Select`, and `SegmentedControl` from `@legendapp/spark/ui`. Spark owns their props and consumer events; React Native, Expo UI and AppKit/WinUI implement the controls internally. The separate ordinary `NativeSelect` API and `/ui/select-controls` path are removed. Generated native components and their event envelopes are internal.
+Import `Button`, `Checkbox`, `RadioGroup`, `Switch`, `TextInput`, `Select`, and `SegmentedControl` from `@legendapp/spark/ui`. Spark owns their props and consumer events; React Native, Expo UI and AppKit/WinUI implement the controls internally. The separate ordinary `NativeSelect` API and `/ui/select-controls` path are removed. Generated native components and their event envelopes are internal.
 
 All controls accept `disabled`, `accessibilityLabel`, `testID`, layout `style`, `onError`, and a `ref` to `ControlRef`. The ref exposes only `measureInWindow(callback)`, in React Native logical coordinates. A retained ref rejects after unmount; it does not expose backend objects, text setters, or a focus API that every backend cannot support. Button labels default to their text children. Layout styles size the native control; they do not restyle all OS chrome.
 
@@ -43,12 +43,17 @@ On macOS, `Button` and `Checkbox` take their AppKit intrinsic size (from the lab
 
 Select and SegmentedControl use the same `SelectOption` array and controlled `value`/`onValueChange`. Values are unique strings, including an empty string if desired; labels are nonempty strings and may repeat. There is no implicit selection of the first option when the requested value is missing. A native selection callback reports only a validated value, and a parent that retains its current value retains that selection.
 
+`Switch` takes a boolean `value` and `onValueChange(next)`. It uses React Native's platform switch, an AppKit `NSSwitch` on macOS. Give it an `accessibilityLabel` and, when useful, an `accessibilityHint`.
+
+`Select variant="borderless"` removes the popup bezel on macOS and web while keeping the native menu. The default variant keeps the standard presentation. Windows, iOS and Android show the selected option as disabled text and report `E_UNSUPPORTED_PLATFORM` through `onError` for the borderless variant.
+
 | Control | macOS | Windows | iOS | Android | React Native Web |
 | --- | --- | --- | --- | --- | --- |
 | Button | AppKit | WinUI | Expo SwiftUI | Expo Compose | HTML button |
 | TextInput | AppKit | WinUI | RN TextInput | RN TextInput | HTML input |
 | Select | Popup | ComboBox | Menu picker | Inline choices | HTML select |
 | SegmentedControl | Segmented control | Unsupported | Segmented picker | Inline choices | Button group |
+| Switch | AppKit `NSSwitch` | RN Switch | RN Switch | RN Switch | RN Web Switch |
 | Checkbox | Checkbox (`NSButton` switch) | WinUI `CheckBox` | Unsupported | Unsupported | HTML checkbox |
 | RadioGroup | Radio buttons (`NSButton` radio) | Unsupported | Unsupported | Unsupported | HTML radio inputs |
 | Button `disclosure` | Disclosure button | Unsupported | Unsupported | Unsupported | `aria-expanded` button |
@@ -212,10 +217,38 @@ The swipe AppKit fixture runs the actual implementation for axis replay, rest/ar
 
 ## Settings windows
 
-`@legendapp/spark/settings/window` exports `SettingsWindow`, `VirtualizedSettingsWindow`, their named props, the shared `SettingsWindowPage` (`id`, `title`, `render`), and `createSettingsWindowOptions`. The options-only subpath is removed. This composition requires `@legendapp/list` as a peer and uses the macOS split-view capability.
+Import the macOS settings composition from `@legendapp/spark/ui/settings` with the `@legendapp/list` peer installed. `SettingsWindow` and `VirtualizedSettingsWindow` are the same LegendList window. Clicking the icon sidebar scrolls to a page. Scrolling updates the sidebar selection and native window title. Other platforms throw `E_UNSUPPORTED_PLATFORM` when rendering the window.
 
-Selection has one owner: use `selectedPageId` with `onSelectionChange`, or initialize internal selection with `defaultPageId`. Defaults apply once per mount. Pages need unique nonempty IDs and at least one page; controlled selection must identify an existing page. Removing an internally selected page selects the first remaining page. Both variants update the native title. The scrolling variant restores the selected page when a controlled parent declines a selection change.
+Use `createSettingsWindowOptions()` when registering or opening the window. It starts hidden and becomes visible after split-view layout and the initial scroll. Pass its registered ID as `windowId` and remount to change it. `appearance` defaults to `"system"` and also accepts `"light"` and `"dark"`. `onError` receives native and scroll failures.
 
-Pass the explicit `windowId`; remount to change its owner or selection mode. The composition shows a hidden macOS window after its split layout and initial scroll are ready, and stops late completions after unmount. If the native split view is unavailable, its row-layout fallback has no native readiness event, so this composition leaves the settings window hidden. `onError` receives native/scroll failures; without it errors are logged. `SettingsRow.muted` controls visual emphasis only; disable the actual control through its own API.
+```tsx
+import { useState } from 'react';
+import {
+  SettingsPage, SettingsSection, SettingsSwitchRow, SettingsWindow, createSettingsWindowOptions,
+} from '@legendapp/spark/ui/settings';
+import { createWindowsNavigator } from '@legendapp/spark/windows';
 
-The settings options helper currently uses the existing managed-window option type; it will move with the canonical window contract in the window implementation unit.
+function Preferences() {
+  const [wrap, setWrap] = useState(true);
+  return (
+    <SettingsWindow windowId="settings" defaultPageId="editor">
+      <SettingsPage id="editor" title="Editor" icon="square.and.pencil">
+        <SettingsSection title="Reading">
+          <SettingsSwitchRow label="Wrap long lines" value={wrap} onValueChange={setWrap} />
+        </SettingsSection>
+      </SettingsPage>
+    </SettingsWindow>
+  );
+}
+
+export const windows = createWindowsNavigator({
+  settings: { id: 'settings', component: Preferences, options: createSettingsWindowOptions() },
+});
+```
+
+- Give each `SettingsPage` a unique nonempty `id`, `title` and SF Symbol `icon`. Fragments can group page declarations.
+- Set `defaultPageId` to select a page on mount. For controlled selection, pass `selectedPageId` with `onSelectionChange`. A controlled parent that keeps its current selection scrolls back to that page.
+- `SettingsSection` adds an optional heading, a rounded card, and dividers between children. A custom child occupies the full card width and controls its own padding.
+- `SettingsRow` takes a `label`, optional `description` and `info` tooltip, and optional right-aligned control children. Supply accessibility labels and hints on custom controls.
+- `SettingsSwitchRow`, `SettingsSelectRow`, `SettingsSegmentedRow`, and `SettingsImageChoiceRow` take `value`, `onValueChange`, and optional `disabled`. The switch takes a boolean. The other rows take string values and `options`. Image choices take one React Native image `source` per option as its `image` field. Left and right arrows select a choice while its group has focus.
+- Keep values in the app's state. The settings UI applies platform colors and supplies labels and hints to its built-in controls.

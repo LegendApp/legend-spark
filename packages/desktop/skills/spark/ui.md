@@ -1,6 +1,6 @@
 # UI components
 
-Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `/ui/sidebar`, `/ui/split-view`, `/ui/swipe`, `/ui/glass`, `/ui/symbol`, `/ui/progress`, `/ui/popover`, `/ui/table`, `/ui/sheet`, `/webview`, `/markdown`, `/html`.
+Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `/ui/sidebar`, `/ui/split-view`, `/ui/swipe`, `/ui/glass`, `/ui/symbol`, `/ui/progress`, `/ui/popover`, `/ui/table`, `/ui/sheet`, `/ui/settings`, `/webview`, `/markdown`, `/html`.
 
 ## Rules
 
@@ -8,6 +8,8 @@ Exports: `@legendapp/spark/ui`, `/ui/uniwind`, `/ui/classnames`, `/ui/search`, `
 - `Button`, `TextInput`, `Select` and `SegmentedControl` (from `/ui`, or `/ui/uniwind` for className styling) render native AppKit/WinUI controls and work on iOS/Android/web through Expo UI or React Native.
 - `Checkbox` (`value`/`onValueChange`, string label children) is macOS, Windows (WinUI `CheckBox`) and web; check `getControlAvailability('checkbox')`. `Button variant="disclosure"` (requires `expanded`) is macOS and web only. `RadioGroup` (`options`/`value`/`onValueChange` like Select, `orientation` `vertical`/`horizontal`, `size` `regular`/`small`/`mini`) is macOS (`NSButton` radios) and web only; check `getControlAvailability('radio-group')`. On macOS, buttons and checkboxes size themselves; give no fixed width unless you want one.
 - `Button` takes `symbol` (an SF Symbol before the title; macOS only) and `size` (`regular`/`small`/`mini`; macOS, and web as smaller text). Elsewhere they report `E_UNSUPPORTED_PLATFORM` and render the disabled fallback; a symbol missing on the running macOS reports `E_NOT_FOUND`.
+- `Switch` takes a boolean `value` and `onValueChange`. It uses the platform React Native switch, including `NSSwitch` on macOS. Label it with `accessibilityLabel`.
+- `Select variant="borderless"` removes the bezel on macOS and web. Windows, iOS and Android report `E_UNSUPPORTED_PLATFORM` and show the current value in a disabled fallback.
 - `SegmentedControl` takes `size` (`regular`/`small`) and `distribution` (`fit`/`fill`). `Sidebar` takes `listStyle="plain"` for lists inside content.
 - `TextInput` is single-line unless `multiline` (an `NSTextView` on macOS; Return inserts a newline) and takes `placeholder`. It is either controlled (`value`) or uncontrolled (`defaultValue`), never both; switching needs a remount.
 - `Select`/`SegmentedControl` never auto-select the first option when `value` is missing. Values are unique strings.
@@ -41,6 +43,30 @@ export function Preferences() {
   );
 }
 ```
+
+## Settings windows on macOS
+
+Use `@legendapp/spark/ui/settings` with `@legendapp/list` installed. Register a hidden window with `createSettingsWindowOptions()` and pass the registered `windowId` to `SettingsWindow` (also exported as `VirtualizedSettingsWindow`). The sidebar scrolls the shared list and follows its current page. Use `defaultPageId` or `selectedPageId` with `onSelectionChange`. Other platforms throw `E_UNSUPPORTED_PLATFORM` on render.
+
+```tsx
+import { useState } from 'react';
+import { SettingsPage, SettingsSection, SettingsSwitchRow, SettingsWindow } from '@legendapp/spark/ui/settings';
+
+export function Preferences() {
+  const [wrap, setWrap] = useState(false);
+  return (
+    <SettingsWindow windowId="settings">
+      <SettingsPage id="editor" title="Editor" icon="square.and.pencil">
+        <SettingsSection title="Reading">
+          <SettingsSwitchRow label="Wrap long lines" value={wrap} onValueChange={setWrap} />
+        </SettingsSection>
+      </SettingsPage>
+    </SettingsWindow>
+  );
+}
+```
+
+Add `SettingsSelectRow`, `SettingsSegmentedRow`, or `SettingsImageChoiceRow` for controlled choices. Each image option has a `label`, `value`, and one React Native `image` source. Rows accept an optional `description` and `info` tooltip. Pass a custom control as children of `SettingsRow`, or put a full-width custom element directly in a section.
 
 ## WebView, Markdown and HTML
 

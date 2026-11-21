@@ -17,16 +17,17 @@ function Segments({ labels, selected, enabled, onSelect }: { labels: string[]; s
 import { View, Text } from "react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
-import { selectionIndex } from "./select";
+import { selectionIndex, validateSelectVariant } from "./select";
 import { controlKinds, macosButton, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
 import { UnavailableCheckbox, UnavailableRadioGroup } from "./checkbox-unavailable";
 import type { ButtonProps, CheckboxProps, RadioGroupProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
-export type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+export { Switch } from "./switch";
+export type { SwitchProps, ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { TextInput } from "./mobile-input";
 export function getControlAvailability(control: ControlKind): Availability {
   if (!controlKinds.includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
   if (control === "checkbox" || control === "radio-group") return unsupportedPlatform;
-  return control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
+  return control === "switch" || control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
 }
 export function Button(props: ButtonProps) {
   validateButton(props); const control = useControl(props, macosButton(props) ? unsupportedPlatform : getControlAvailability("button"));
@@ -39,15 +40,15 @@ export function Button(props: ButtonProps) {
 function Selection(props: SelectProps) {
   const selected = selectionIndex(props.options, props.value);
   if (typeof props.onValueChange !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onValueChange");
-  const control = useControl(props, getControlAvailability("select"));
-  return <View ref={control.ref} style={[{ width: 280, minHeight: 48, flexDirection: "row" }, props.style]} testID={props.testID} accessibilityLabel={props.accessibilityLabel}>
+  const control = useControl(props, props.variant === "borderless" ? unsupportedPlatform : getControlAvailability("select"));
+  return <View ref={control.ref} style={[{ width: 280, minHeight: 48, flexDirection: "row" }, props.style]} testID={props.testID} accessibilityLabel={props.accessibilityLabel} accessibilityHint={props.accessibilityHint}>
     {control.failed ? <Text accessibilityState={{ disabled: true }}>{props.options[selected].label}</Text> :
       <Segments labels={props.options.map(option => option.label)} selected={selected} enabled={!control.disabled}
         onSelect={index => { if (control.active()) props.onValueChange(props.options[index].value); }} />}
   </View>;
 }
 /** Android presents its choices inline; there is no dropdown backend in the pinned Expo UI. */
-export function Select(props: SelectProps) { return <Selection {...props} />; }
+export function Select(props: SelectProps) { validateSelectVariant(props.variant); return <Selection {...props} />; }
 export function Checkbox(props: CheckboxProps) { return <UnavailableCheckbox {...props} availability={getControlAvailability("checkbox")} />; }
 export function RadioGroup(props: RadioGroupProps) { return <UnavailableRadioGroup {...props} availability={getControlAvailability("radio-group")} />; }
 /** Native mobile segmented pickers have one size and fill their frame; `size` and `distribution` keep those defaults here. */

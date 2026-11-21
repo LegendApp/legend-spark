@@ -15,20 +15,21 @@ function Option(props: ComponentProps<typeof import("@expo/ui/swift-ui").Text>) 
   const Component = (require("@expo/ui/swift-ui") as typeof import("@expo/ui/swift-ui")).Text;
   return <Component {...props} />;
 }
-import { frame, buttonStyle, pickerStyle, tag, disabled as disabledModifier, accessibilityLabel as labelModifier } from "@expo/ui/swift-ui/modifiers";
+import { frame, buttonStyle, pickerStyle, tag, disabled as disabledModifier, accessibilityLabel as labelModifier, accessibilityHint as hintModifier } from "@expo/ui/swift-ui/modifiers";
 import { View, Text } from "react-native";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { controlKinds, macosButton, unsupportedPlatform, useControl, validateButton, validateSegmented } from "./control";
 import { UnavailableCheckbox, UnavailableRadioGroup } from "./checkbox-unavailable";
-import { selectionIndex } from "./select";
+import { selectionIndex, validateSelectVariant } from "./select";
 import type { ButtonProps, CheckboxProps, RadioGroupProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
-export type { ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
+export { Switch } from "./switch";
+export type { SwitchProps, ButtonProps, CheckboxProps, RadioGroupProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { TextInput } from "./mobile-input";
 export function getControlAvailability(control: ControlKind): Availability {
   if (!controlKinds.includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
   if (control === "checkbox" || control === "radio-group") return unsupportedPlatform;
-  return control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
+  return control === "switch" || control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
 }
 const fill = [frame({ maxWidth: Infinity, maxHeight: Infinity })];
 export function Button(props: ButtonProps) {
@@ -44,11 +45,11 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
   const selectedIndex = selectionIndex(props.options, props.value);
   const [selectionRevision, revise] = useState(0);
   if (typeof props.onValueChange !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onValueChange");
-  const control = useControl(props, getControlAvailability(segmented ? "segmented-control" : "select"));
-  const { options, onValueChange, accessibilityLabel, style, testID } = props;
-  const modifiers = [disabledModifier(control.disabled), ...(accessibilityLabel ? [labelModifier(accessibilityLabel)] : [])];
+  const control = useControl(props, props.variant === "borderless" ? unsupportedPlatform : getControlAvailability(segmented ? "segmented-control" : "select"));
+  const { options, onValueChange, accessibilityLabel, accessibilityHint, style, testID } = props;
+  const modifiers = [disabledModifier(control.disabled), ...(accessibilityLabel ? [labelModifier(accessibilityLabel)] : []), ...(accessibilityHint ? [hintModifier(accessibilityHint)] : [])];
   return <View ref={control.ref} style={[{ width: 240, height: 44 }, style]}>
-    {control.failed ? <Text accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }} testID={testID}>{options[selectedIndex].label}</Text> :
+    {control.failed ? <Text accessibilityLabel={accessibilityLabel} accessibilityHint={accessibilityHint} accessibilityState={{ disabled: true }} testID={testID}>{options[selectedIndex].label}</Text> :
       <Host style={{ flex: 1 }}><Picker key={selectionRevision} selection={selectedIndex}
         onSelectionChange={index => {
           if (!control.active()) return;
@@ -62,7 +63,7 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
       </Picker></Host>}
   </View>;
 }
-export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
+export function Select(props: SelectProps) { validateSelectVariant(props.variant); return <Selection {...props} segmented={false} />; }
 export function Checkbox(props: CheckboxProps) { return <UnavailableCheckbox {...props} availability={getControlAvailability("checkbox")} />; }
 export function RadioGroup(props: RadioGroupProps) { return <UnavailableRadioGroup {...props} availability={getControlAvailability("radio-group")} />; }
 /** Native mobile segmented pickers have one size and fill their frame; `size` and `distribution` keep those defaults here. */

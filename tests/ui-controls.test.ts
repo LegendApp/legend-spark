@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import React, { act, StrictMode, createRef } from "react";
 const { create } = createRequire(import.meta.url)("react-test-renderer");
 const { platform, registered } = vi.hoisted(() => ({ platform: { OS: "macos" }, registered: vi.fn(() => true) }));
-vi.mock("react-native", () => ({ Platform: platform, UIManager: { hasViewManagerConfig: registered }, View: "View", Text: "Text", TextInput: "RNTextInput" }));
+vi.mock("react-native", () => ({ Platform: platform, UIManager: { hasViewManagerConfig: registered }, View: "View", Text: "Text", TextInput: "RNTextInput", Switch: "RNSwitch" }));
 vi.mock("../packages/ui/src/SparkButtonNativeComponent", () => ({ default: "SparkButton" }));
 vi.mock("../packages/ui/src/SparkTextInputNativeComponent", () => ({ default: "SparkTextInput" }));
 vi.mock("../packages/ui/src/SparkSelectNativeComponent", () => ({ default: "SparkSelect" }));
@@ -11,10 +11,14 @@ vi.mock("../packages/ui/src/native-select/NativeSelectNativeComponent", () => ({
 vi.mock("../packages/ui/src/native-select/NativeSegmentedControlNativeComponent", () => ({ default: "NativeSegmentedControl" }));
 vi.mock("../packages/ui/src/radio-group/RadioGroupNativeComponent", () => ({ default: "SparkRadioGroup" }));
 vi.mock("expo-modules-core", () => ({ requireOptionalNativeModule: () => ({}) }));
-import { Button, Checkbox, RadioGroup, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index.macos";
+vi.mock("@expo/ui/swift-ui/modifiers", () => ({
+  frame: vi.fn(), buttonStyle: vi.fn(), pickerStyle: vi.fn(), tag: vi.fn(), disabled: vi.fn(), accessibilityLabel: vi.fn(), accessibilityHint: vi.fn(),
+}));
+import { Button, Checkbox, Switch, RadioGroup, TextInput, Select, SegmentedControl, getControlAvailability, type ControlRef } from "../packages/ui/src/index.macos";
 import { TextInput as MobileTextInput } from "../packages/ui/src/mobile-input";
 import { Button as WebButton, Checkbox as WebCheckbox, TextInput as WebTextInput, Select as WebSelect, SegmentedControl as WebSegmentedControl, RadioGroup as WebRadioGroup } from "../packages/ui/src/index.web";
 import { selectionIndex } from "../packages/ui/src/select";
+import { Select as IOSSelect } from "../packages/ui/src/index.ios";
 import { Select as AndroidSelect, Checkbox as AndroidCheckbox, Button as AndroidButton, RadioGroup as AndroidRadioGroup } from "../packages/ui/src/index.android";
 let rendered: any;
 const event = (text: string, eventCount: number) => ({ nativeEvent: { text, eventCount } });
@@ -235,4 +239,38 @@ test("web radio groups use native radio inputs", async () => {
   expect(inputs.map((input: any) => [input.props.type, input.props.checked])).toEqual([["radio", true], ["radio", false]]);
   expect(rendered.root.findByType("div").props).toMatchObject({ role: "radiogroup", "aria-label": "Review" });
   await act(async () => inputs[1].props.onChange()); expect(onValueChange).toHaveBeenCalledWith("two");
+});
+
+test.each(["macos", "windows", "ios", "android", "web"])("%s Switch keeps its controlled value and blocks disabled changes", async os => {
+  platform.OS = os;
+  const onValueChange = vi.fn();
+  const element = (disabled: boolean) => React.createElement(Switch, { value: false, onValueChange, disabled, accessibilityLabel: "Wrap lines", accessibilityHint: "Wrap at the editor edge" });
+  await mount(element(false));
+  const native = rendered.root.findByType("RNSwitch").props;
+  expect(native).toMatchObject({ value: false, accessibilityLabel: "Wrap lines", accessibilityHint: "Wrap at the editor edge" });
+  native.onValueChange(true);
+  expect(onValueChange).toHaveBeenCalledExactlyOnceWith(true);
+  expect(rendered.root.findByType("RNSwitch").props.value).toBe(false);
+  await act(async () => rendered.update(element(true)));
+  rendered.root.findByType("RNSwitch").props.onValueChange(true);
+  expect(onValueChange).toHaveBeenCalledTimes(1);
+});
+
+test("Select applies borderless presentation on macOS and web", async () => {
+  const props = { options, value: "one", variant: "borderless" as const, onValueChange: vi.fn() };
+  await mount(React.createElement(Select, props));
+  expect(rendered.root.findByType("NativeSelect").props.borderless).toBe(true);
+  await act(async () => rendered.update(React.createElement(Select, { ...props, variant: "default" })));
+  expect(rendered.root.findByType("NativeSelect").props.borderless).toBe(false);
+  await act(async () => rendered.update(React.createElement(WebSelect, props)));
+  expect(rendered.root.findByType("select").props.style).toMatchObject({ border: "none", background: "transparent" });
+  await expect(mount(React.createElement(Select, { ...props, variant: "plain" as never }))).rejects.toThrow("Invalid Select variant");
+});
+
+test.each([["windows", Select], ["ios", IOSSelect], ["android", AndroidSelect]] as const)("%s reports an unsupported borderless Select", async (os, Component) => {
+  platform.OS = os;
+  const onError = vi.fn();
+  await mount(React.createElement(Component, { options, value: "one", variant: "borderless", onValueChange: vi.fn(), onError }));
+  expect(onError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
+  expect(rendered.root.findByType("Text").children).toEqual(["One"]);
 });

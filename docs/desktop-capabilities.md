@@ -16,7 +16,7 @@ packages separately or link parallel native modules for these capabilities.
 | Keyboard events | `@legendapp/spark/shortcuts/keyboard` |
 | Glass, symbols, swipe actions, select/segmented controls, search | `@legendapp/spark/ui/glass`, `ui/symbol`, `ui`, `ui/search`, `ui/swipe` |
 | File scanning (macOS) and invalidation watches | `@legendapp/spark/files` |
-| Settings window and observable preferences | `@legendapp/spark/settings/window`, `settings/observable` |
+| Settings window and observable preferences | `@legendapp/spark/ui/settings`, `settings/observable` |
 | Menus, dialogs and context menus | `@legendapp/spark/menus`, `dialogs`, `context-menu` |
 | Drag/drop views | `@legendapp/spark/drag-drop` |
 | Process execution and command lookup | `@legendapp/spark/processes` |

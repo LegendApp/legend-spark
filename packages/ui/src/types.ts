@@ -26,6 +26,12 @@ export interface ButtonProps extends ControlProps {
   /** AppKit control size; `regular` (default) everywhere, `small` and `mini` on macOS and web. */
   size?: "regular" | "small" | "mini";
 }
+/** A controlled on/off switch. */
+export interface SwitchProps extends ControlProps {
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  accessibilityHint?: string;
+}
 /** A controlled native checkbox. `children` is its label; without one, set `accessibilityLabel`. */
 export interface CheckboxProps extends ControlProps {
   value: boolean;
@@ -51,22 +57,28 @@ export interface UncontrolledTextInputProps extends TextInputCommonProps {
 }
 export type TextInputProps = ControlledTextInputProps | UncontrolledTextInputProps;
 export interface SelectOption { label: string; value: string }
-export interface SelectProps extends ControlProps {
+interface ChoiceControlProps extends ControlProps {
   options: readonly SelectOption[];
   value: string;
   onValueChange: (value: string) => void;
 }
-export interface SegmentedControlProps extends SelectProps {
+export interface SelectProps extends ChoiceControlProps {
+  accessibilityHint?: string;
+  /** Borderless popup on macOS and web. Other platforms report `E_UNSUPPORTED_PLATFORM`. */
+  variant?: "default" | "borderless";
+}
+export interface SegmentedControlProps extends ChoiceControlProps {
+  accessibilityHint?: string;
   /** `small` is the compact control size. Defaults to `regular`. */
   size?: "regular" | "small";
   /** `fit` sizes segments to their labels; `fill` shares the control's width equally. Defaults to `fit`. */
   distribution?: "fit" | "fill";
 }
 /** A controlled group of native radio buttons: one per option, with `value` selected. */
-export interface RadioGroupProps extends SelectProps {
+export interface RadioGroupProps extends ChoiceControlProps {
   /** `vertical` (default) stacks the buttons; `horizontal` puts them on one line. */
   orientation?: "vertical" | "horizontal";
   /** AppKit control size: `regular` (default), `small` or `mini`. */
   size?: "regular" | "small" | "mini";
 }
-export type ControlKind = "button" | "text-input" | "select" | "segmented-control" | "checkbox" | "radio-group";
+export type ControlKind = "button" | "text-input" | "select" | "segmented-control" | "checkbox" | "radio-group" | "switch";

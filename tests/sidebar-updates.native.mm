@@ -99,6 +99,13 @@ using namespace facebook::react;
 - (void)setNeedsLayout:(BOOL)value { if (value) self.layouts++; [super setNeedsLayout:value]; }
 @end
 
+@interface SidebarKeyWindow : NSWindow
+@property BOOL testKey;
+@end
+@implementation SidebarKeyWindow
+- (BOOL)isKeyWindow { return self.testKey; }
+@end
+
 static int failures = 0;
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #condition); failures++; } } while (0)
 static NSOutlineView *Table(RNSidebar *sidebar) { return [sidebar valueForKey:@"tableView"]; }
@@ -212,7 +219,7 @@ int main() { @autoreleasepool {
 
   // Row geometry: the source-list table adds row insets to its column, so the column must fit the clip
   // view rather than match the Sidebar's width, or rows run past the trailing edge.
-  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+  SidebarKeyWindow *window = [[SidebarKeyWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
   window.contentView.wantsLayer = YES;
   auto five = std::make_shared<SidebarProps>();
   five->itemsJson = R"([{"id":"library","title":"Library"},{"id":"playlists","title":"Playlists"},{"id":"artists","title":"Artists"},{"id":"downloads","title":"Downloads"},{"id":"disabled","title":"Disabled Row","selectable":false}])";
@@ -221,6 +228,13 @@ int main() { @autoreleasepool {
   [ltr updateProps:five oldProps:nullptr];
   auto ltrEvents = Lay(ltr, window, LayoutDirection::LeftToRight);
   NSTableView *ltrTable = Table(ltr);
+  NSTableRowView *selectedRow = [ltrTable rowViewAtRow:0 makeIfNecessary:YES];
+  window.testKey = YES;
+  selectedRow.emphasized = NO;
+  CHECK(selectedRow.isEmphasized);
+  window.testKey = NO;
+  selectedRow.emphasized = YES;
+  CHECK(!selectedRow.isEmphasized);
   CHECK(RowsFit(ltr));
   CHECK(NSWidth(ltrTable.frame) == 320 && NSWidth([ltrTable rectOfRow:0]) == 320);
   // The reported row width is the column (the cell), not the Sidebar: React rows are laid out at it.
@@ -267,6 +281,9 @@ int main() { @autoreleasepool {
   [react updateProps:std::make_shared<SidebarProps>() oldProps:nullptr];
   auto reactEvents = Lay(react, window, LayoutDirection::RightToLeft);
   RNSidebarItem *albums = Item(react, 0, "albums", true, 44, false, 44);
+  albums.accessibilityLabel = @"Albums";
+  NSOutlineView *reactTable = Table(react);
+  CHECK([[react outlineView:reactTable typeSelectStringForTableColumn:nil item:[reactTable itemAtRow:0]] isEqual:@"Albums"]);
   [window layoutIfNeeded];
   NSView *firstCell = [Table(react) viewAtColumn:0 row:0 makeIfNecessary:YES];
   CHECK(albums.superview == firstCell && NSEqualRects(albums.frame, firstCell.bounds));
