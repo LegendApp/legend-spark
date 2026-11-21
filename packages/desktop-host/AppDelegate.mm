@@ -19,6 +19,7 @@
 @property (nonatomic, assign) BOOL sparkPrimaryInstance;
 @property (nonatomic, weak) NSWindow *sparkLastFocusedWindow;
 @property (nonatomic, strong) NSColor *sparkStartupColor;
+@property (nonatomic, weak) RCTSurfacePresenter *sparkDriverPresenter;
 @end
 
 @implementation AppDelegate
@@ -125,11 +126,7 @@
 - (void)loadReactNativeWindow:(NSDictionary *)launchOptions {
   [self sparkPrepareMainWindow];
   NSView *root = [self.rootViewFactory viewWithModuleName:self.moduleName initialProperties:self.initialProps launchOptions:launchOptions];
-  if (SparkTestDriverActive()) {
-    RCTSurfacePresenter *presenter = self.rootViewFactory.reactHost.surfacePresenter;
-    if (!presenter) [NSException raise:NSInternalInconsistencyException format:@"The test driver needs the Fabric surface presenter"];
-    [presenter addObserver:self];
-  }
+  if (SparkTestDriverActive()) [self sparkObserveDriverMounts:self.rootViewFactory.reactHost];
   root.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   NSDictionary *options = SparkWindowConfiguration();
   if ([options[@"transparent"] boolValue] || options[@"backgroundColor"] || SparkLifecycleConfiguration()[@"mainWindow"][@"backgroundColors"])
@@ -153,7 +150,21 @@
     }
   });
 }
+- (void)sparkObserveDriverMounts:(RCTHost *)host {
+  RCTSurfacePresenter *presenter = host.surfacePresenter;
+  if (!presenter) [NSException raise:NSInternalInconsistencyException format:@"The test driver needs the Fabric surface presenter"];
+  [self.sparkDriverPresenter removeObserver:self];
+  self.sparkDriverPresenter = presenter;
+  [presenter addObserver:self];
+}
 - (void)didMountComponentsWithRootTag:(NSInteger)rootTag { SparkTestDriverDidMount(); }
+- (void)hostDidStart:(RCTHost *)host {
+  [super hostDidStart:host];
+  if (SparkTestDriverActive() && host == self.rootViewFactory.reactHost) {
+    SparkTestDriverDidReload();
+    [self sparkObserveDriverMounts:host];
+  }
+}
 - (BOOL)windowShouldClose:(NSWindow *)window {
   NSString *behavior = SparkLifecycleConfiguration()[@"mainWindow"][@"closeBehavior"];
   if ([behavior isEqual:@"hide"]) { [window orderOut:nil]; return NO; }

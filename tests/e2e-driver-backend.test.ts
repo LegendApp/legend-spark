@@ -91,7 +91,7 @@ describe("command mapping", () => {
   test("a failure collects the app logs and a capture of the main window", async () => {
     const { result } = await run("- launchApp\n- assertVisible: { id: missing, timeout: 100ms }");
     expect(result.failure!.artifacts.map(artifact => [artifact.kind, path.basename(artifact.path), artifact.backend])).toEqual([
-      ["logs", "app-1.log", "driver"], ["screenshot", "driver-main.png", "driver"],
+      ["logs", "app-1.log", "driver"], ["screenshot", "driver-main.png", "driver"], ["output", "bundle.json", undefined],
     ]);
     expect(existsSync(result.failure!.artifacts[1]!.path)).toBe(true);
   });
@@ -152,6 +152,11 @@ describe("unsupported and invalid", () => {
       driver.capture = async () => { throw new DriverError("E_NOT_SETTLED", "The UI kept mounting changes until the timeout"); };
       return driver;
     };
-    expect((await run("- launchApp\n- takeScreenshot: x", app)).result.failure).toMatchObject({ kind: "error", message: "E_NOT_SETTLED: The UI kept mounting changes until the timeout" });
+    const { result } = await run("- launchApp\n- takeScreenshot: x", app);
+    expect(result.failure).toMatchObject({ kind: "error", message: "E_NOT_SETTLED: The UI kept mounting changes until the timeout" });
+    expect(result.failure!.artifacts.map(artifact => artifact.kind)).toEqual(["logs", "output"]);
+    const bundle = JSON.parse(readFileSync(result.failure!.artifacts[1]!.path, "utf8"));
+    expect(bundle.failure.artifacts).toEqual([{ kind: "logs", path: "../backend-driver/app-1.log", backend: "driver" }]);
+    expect(bundle.errors).toEqual(["artifacts from driver: E_NOT_SETTLED: The UI kept mounting changes until the timeout"]);
   });
 });

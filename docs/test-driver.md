@@ -70,7 +70,8 @@ Flows run through the `driver` runner backend
 `bun run e2e:run <flow> --backend driver`. It and `ks:capture` share
 `scripts/e2e/kitchen-sink.ts`, which resolves the app (a `.app` path, or the last
 development build), bundles and serves JavaScript to development builds, and launches
-in driver mode. Both use the client in `scripts/e2e/driver.ts`:
+in driver mode. They use a separate [app clone per session](e2e-flows.md#session-state)
+and the client in `scripts/e2e/driver.ts`:
 
 ```ts
 const driver = await launchDriver({ executable, args, env });
@@ -163,7 +164,7 @@ send one request at a time; each reply echoes `id`. Failures are
 | Command | Fields | Reply |
 | --- | --- | --- |
 | `ping` | | `ok` |
-| `navigate` | `url`, `timeoutMs` (30000) | Waits for the first rendered UI to settle (so link listeners are subscribed), then opens the URL through `application:openURLs:`, the path the OS uses for deep links. |
+| `navigate` | `url`, `timeoutMs` (30000) | Waits for the first UI from the current React host instance to settle (so link listeners are subscribed), then opens the URL through `application:openURLs:`, the path the OS uses for deep links. |
 | `openFile` | `path`, `timeoutMs` (30000) | `path` must be absolute and exist (`E_INVALID_ARGUMENT`, `E_NOT_FOUND`). Waits like `navigate`, then opens a file URL for it through `application:openURLs:`, the path the OS uses for a file opened from Finder. `navigate` rejects file URLs, so only `openFile` delivers files. |
 | `waitFor` | `testID`, `timeoutMs` (10000) | `window` identifier and `frame` of the first visible view whose accessibility identifier (React Native `testID`) matches. `frame` is in points from the top-left of the window's frame view, the area `capture` renders, so frame × `scale` is the view's pixels in a capture. `E_TIMEOUT` otherwise; `timeoutMs: 0` checks once. |
 | `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Waits for the first rendered UI to settle (an override set while the app is still launching did not last), then sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. `timeoutMs` bounds each wait. |

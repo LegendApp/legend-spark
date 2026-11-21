@@ -196,6 +196,21 @@ int main(int argc, char **argv) { @autoreleasepool {
     close(fd);
     finished = YES;
   });
+  else if ([mode isEqual:@"reload"]) Client(^{
+    int fd = Connect();
+    SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+    Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+    NSString *url = @"spark-ks://reloaded";
+    Check([Request(fd, @{ @"command": @"navigate", @"url": url })[@"ok"] boolValue], @"pre-reload UI is ready");
+    dispatch_sync(dispatch_get_main_queue(), ^{ SparkTestDriverDidReload(); });
+    Check([Code(Request(fd, @{ @"command": @"navigate", @"url": url, @"timeoutMs": @100 })) isEqual:@"E_TIMEOUT"],
+      @"navigate after reload waits for a new mount");
+    dispatch_sync(dispatch_get_main_queue(), ^{ SparkTestDriverDidMount(); });
+    Check([Request(fd, @{ @"command": @"navigate", @"url": url, @"timeoutMs": @2000 })[@"ok"] boolValue], @"navigate after a new mount");
+    Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+    finished = YES;
+    close(fd);
+  });
   else if ([mode isEqual:@"session"]) Client(^{
     int fd = Connect();
     // Split writes exercise partial reads on the accepted socket.
@@ -322,6 +337,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   }
   Pump(^{ return (BOOL)(access([directory stringByAppendingPathComponent:@"driver.sock"].fileSystemRepresentation, F_OK) != 0); }, 2);
   Check(access([directory stringByAppendingPathComponent:@"driver.sock"].fileSystemRepresentation, F_OK) != 0, @"socket is removed");
+  if ([mode isEqual:@"reload"]) Check(openedURLs.count == 2, @"timed-out navigation opens nothing");
   if ([mode isEqual:@"session"]) {
     Check(openedURLs.count == 2 && [openedURLs[0].absoluteString isEqual:@"spark-ks://windows/frame"], @"navigate opens the URL through the app delegate");
     Check(openedURLs[1].isFileURL && [openedURLs[1].path isEqual:@"/etc/hosts"], @"openFile opens a file URL through the app delegate");

@@ -9,7 +9,7 @@ import path from "node:path";
 import { binary, run } from "../../packages/cli/src/commands.ts";
 import type { ProcessLog } from "../../packages/cli/src/process.ts";
 import { entryFile, prepareConfig, readJson, stateFile } from "../../packages/cli/src/project.ts";
-import { clearAppState, type AppIdentity } from "./app-state.ts";
+import { prepareDriverState, type AppIdentity, type StateHost } from "./app-state.ts";
 import { DRIVER_ENV, launchDriver, type Driver } from "./driver.ts";
 import { readManifest } from "./gate/plan.ts";
 
@@ -27,7 +27,7 @@ const plistValue = (app: string, key: string) => {
   throw new Error(`plutil could not read ${key} from ${app}: ${result.stderr.trim()}`);
 };
 
-type Resolved = { app: string; executable: string; embedded: boolean } & AppIdentity;
+type Resolved = { app: string; executable: string; embedded: boolean; entitlements: string } & AppIdentity;
 
 /**
  * An app bundle in driver mode. A release build (`Contents/Resources/main.jsbundle`) runs its embedded JavaScript.
@@ -36,13 +36,14 @@ type Resolved = { app: string; executable: string; embedded: boolean } & AppIden
  */
 export class KitchenSinkApp {
   private resolved?: Resolved;
+  private state?: ReturnType<typeof prepareDriverState>;
   private bundle?: Buffer;
   /** Asset files by URL path (`/assets/…`), as a dev server serves fonts and images. */
   private assets = new Map<string, Buffer>();
   private server?: Server;
 
   /** `app` is a `.app` bundle; without it, the last dev build (`cd examples/kitchen-sink && bun run rebuild:macos`). It is resolved by `open()`. */
-  constructor(private readonly appPath?: string) {}
+  constructor(private readonly appPath?: string, private readonly exact = false, private readonly stateHost?: StateHost) {}
 
   private resolve(): Resolved {
     let app = this.appPath;
@@ -53,11 +54,12 @@ export class KitchenSinkApp {
     }
     if (!existsSync(path.join(app, "Contents/Info.plist"))) throw new Error(`${app} is not a macOS app bundle`);
     const bundleId = plist(app, "CFBundleIdentifier");
+    const entitlements = execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     return {
       app, executable: path.join(app, "Contents/MacOS", plist(app, "CFBundleExecutable")), bundleId,
       // The host falls back to the bundle identifier the same way (SparkContext in SparkDesktop.mm).
       projectId: plistValue(app, "SparkProjectIdentifier") ?? bundleId,
-      sandboxed: /<key>com\.apple\.security\.app-sandbox<\/key>\s*<true\/>/.test(execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })),
+      sandboxed: /<key>com\.apple\.security\.app-sandbox<\/key>\s*<true\s*\/>/.test(entitlements), entitlements,
       embedded: existsSync(path.join(app, "Contents/Resources/main.jsbundle")),
     };
   }
@@ -65,7 +67,17 @@ export class KitchenSinkApp {
   /** Resolves the app, then bundles (first call only) and serves the JavaScript a dev build loads. A release build needs neither. */
   async open(label?: string): Promise<{ app: string; bundleId: string }> {
     const resolved = this.resolved ??= this.resolve();
-    if (resolved.embedded || this.server) return resolved;
+    if (!resolved.embedded && !this.server) await this.serveBundle(label);
+    try {
+      this.state ??= prepareDriverState(resolved, this.exact ? readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId : undefined, this.stateHost);
+    } catch (error) {
+      await this.close();
+      throw error;
+    }
+    return { app: resolved.app, bundleId: resolved.bundleId };
+  }
+
+  private async serveBundle(label?: string) {
     if (!this.bundle) {
       const work = mkdtempSync(path.join(os.tmpdir(), "ks-bundle-"));
       try {
@@ -98,13 +110,12 @@ export class KitchenSinkApp {
     });
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     this.server = server;
-    return resolved;
   }
 
-  /** Deletes the app's persisted state (`clearAppState`), allowing only the gate manifest's app. Returns what existed. */
+  /** Deletes the persisted state of the session's app. Returns what existed. */
   async clearState(): Promise<string[]> {
-    if (!this.resolved) throw new Error("KitchenSinkApp.open() must run before clearState()");
-    return clearAppState(this.resolved, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId);
+    if (!this.state) throw new Error("KitchenSinkApp.open() must run before clearState()");
+    return this.state.clear();
   }
 
   /** What `launch` sets itself; a flow's own arguments and environment may not repeat it. `locale` only applies with a locale. */
@@ -118,13 +129,13 @@ export class KitchenSinkApp {
     if (options.locale !== undefined && !LOCALE.test(options.locale)) throw new Error(`${options.locale} is not a language identifier such as ar or en-US`);
     const [languages, region] = this.reserved.locale;
     const locale = options.locale ? [languages, `(${options.locale})`, region, options.locale] : [];
-    const resolved = this.resolved;
-    if (!resolved || (!resolved.embedded && !this.server)) throw new Error("KitchenSinkApp.open() must run before launch()");
+    const executable = this.state?.executable;
+    if (!executable) throw new Error("KitchenSinkApp.open() must run before launch()");
     const extra = options.arguments ?? [];
-    if (resolved.embedded) return launchDriver({ executable: resolved.executable, args: [...locale, ...extra], env: options.env, log: options.log });
-    const port = (this.server!.address() as AddressInfo).port;
+    if (!this.server) return launchDriver({ executable, args: [...locale, ...extra], env: options.env, log: options.log });
+    const port = (this.server.address() as AddressInfo).port;
     return launchDriver({
-      executable: resolved.executable,
+      executable,
       // RCT_jsLocation points React Native's packager connection at the same server as the bundle URL.
       args: [JS_LOCATION, `127.0.0.1:${port}`, ...locale, ...extra],
       env: { ...options.env, [BUNDLE_URL]: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=false&minify=false` },
@@ -132,10 +143,15 @@ export class KitchenSinkApp {
     });
   }
 
-  /** Stops serving JavaScript; the bundle is kept for the next `open()`. */
+  /** After the driver quits, closes the session and stops serving JavaScript. */
   async close() {
-    const server = this.server;
+    const server = this.server, state = this.state;
     this.server = undefined;
-    if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+    this.state = undefined;
+    try {
+      if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+    } finally {
+      state?.close();
+    }
   }
 }

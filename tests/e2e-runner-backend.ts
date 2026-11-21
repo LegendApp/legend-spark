@@ -61,11 +61,12 @@ export class MemoryBackend implements Backend {
     return this.items.filter(item => (item.from ?? 0) <= now && (item.until === undefined || now < item.until)).map(({ from: _from, until: _until, ...rest }) => rest);
   }
   async windows() { return this.windowList; }
-  async collect(dir: string): Promise<Artifact[]> {
-    if (!this.collects) return [];
+  async *collect(dir: string): AsyncIterable<Artifact> {
+    if (!this.collects) return;
     const screenshot = path.join(dir, `${this.name}-screenshot.png`), logs = path.join(dir, `${this.name}.log`);
     writeFileSync(screenshot, "png");
     writeFileSync(logs, this.log.join("\n"));
-    return [{ kind: "screenshot", path: screenshot }, { kind: "logs", path: logs }];
+    yield { kind: "screenshot", path: screenshot };
+    yield { kind: "logs", path: logs };
   }
 }

@@ -149,11 +149,11 @@ export class DriverBackend implements Backend {
   }
 
   /** The app logs of this flow and, while the app runs, a capture of the main window. */
-  async collect(dir: string): Promise<Artifact[]> {
-    const artifacts: Artifact[] = this.logs.map(log => ({ kind: "logs", path: log }));
-    if (!this.driver?.running) return artifacts;
+  async *collect(dir: string): AsyncIterable<Artifact> {
+    for (const log of this.logs) if (existsSync(log)) yield { kind: "logs", path: log };
+    if (!this.driver?.running) return;
     const file = path.join(dir, "driver-main.png");
     await this.screenshot(file);
-    return [...artifacts, { kind: "screenshot", path: file }];
+    yield { kind: "screenshot", path: file };
   }
 }
