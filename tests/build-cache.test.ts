@@ -7,6 +7,9 @@ import { build, prebuild } from "../packages/cli/src/build.ts";
 import { readJson, writeJson } from "../packages/cli/src/project.ts";
 import { preserveMacOSPods } from "../packages/cli/src/native-preparation.ts";
 
+// These integration fixtures wait for native preparation and may compile the directory-swap tool.
+vi.setConfig({ testTimeout: 20_000 });
+
 const commands = vi.hoisted(() => ({ run: vi.fn(), restore: true }));
 vi.mock("../packages/cli/src/commands.ts", () => ({ doctor: vi.fn(), binary: (_root: string, name: string) => name, run: commands.run }));
 vi.mock("../packages/cli/src/native-patch-preflight.ts", () => ({ assertNativePatchPreflight: vi.fn() }));
