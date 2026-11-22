@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- ui: Give macOS settings rows and sections more padding.
 - cli: Compile the directory swap helper with the full Xcode toolchain when Command Line Tools are selected.
 - macos: Use the local computer name in Expo Constants to avoid blocking hostname resolution during startup.
 - ui: Size macOS settings segmented controls to fit their labels.

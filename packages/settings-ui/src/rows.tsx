@@ -159,13 +159,15 @@ export function SettingsImageChoiceRow({ options, value, onValueChange, disabled
   );
 }
 
+const rowInset = 16;
+
 const styles = StyleSheet.create({
-  section: { gap: 6 },
-  heading: { fontSize: 13, lineHeight: 16, fontWeight: "600", marginHorizontal: 10 },
+  section: { gap: 8 },
+  heading: { fontSize: 13, lineHeight: 16, fontWeight: "600", marginHorizontal: rowInset },
   card: { backgroundColor: cardColor, borderRadius: 10, overflow: "hidden" },
-  divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 10 },
-  row: { flexDirection: "row", alignItems: "center", minHeight: 42, padding: 10, gap: 12 },
-  rowText: { flex: 1, minWidth: 0, gap: 2 },
+  divider: { height: StyleSheet.hairlineWidth, marginHorizontal: rowInset },
+  row: { flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: rowInset, paddingVertical: 12, gap: 12 },
+  rowText: { flex: 1, minWidth: 0, gap: 3 },
   labelLine: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   label: { fontSize: 13, lineHeight: 16, flexShrink: 1 },
   description: { fontSize: 11, lineHeight: 14 },
@@ -173,7 +175,7 @@ const styles = StyleSheet.create({
   control: { flexShrink: 1, alignItems: "flex-end" },
   selection: { height: 22, width: 190 },
   imageControl: { maxWidth: "70%" },
-  imageRow: { alignItems: "flex-start", paddingVertical: 8 },
+  imageRow: { alignItems: "flex-start" },
   imageRowText: { paddingTop: 5 },
   choices: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 20 },
   choice: { width: 76, alignItems: "center", gap: 6 },
