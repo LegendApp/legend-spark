@@ -16,6 +16,27 @@ import { readManifest } from "./gate/plan.ts";
 export const KITCHEN_SINK = path.resolve(import.meta.dirname, "../../examples/kitchen-sink");
 export const LOCALE = /^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$/;
 
+export function createBundleServer(bundle: Buffer, assets: ReadonlyMap<string, Buffer>): Server {
+  return createServer((request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    if (pathname === "/status") {
+      response.writeHead(200).end("packager-status:running");
+      return;
+    }
+    if (pathname === "/index.bundle") {
+      response.writeHead(200, { "Content-Type": "application/javascript" }).end(bundle);
+      return;
+    }
+    const asset = assets.get(decodeURIComponent(pathname));
+    if (asset) {
+      response.writeHead(200).end(asset);
+      return;
+    }
+    console.error(`Kitchen Sink: the app requested ${request.url}, which is not served`);
+    response.writeHead(404).end();
+  });
+}
+
 const JS_LOCATION = "-RCT_jsLocation", BUNDLE_URL = "SPARK_BUNDLE_URL";
 const plist = (app: string, key: string) =>
   execFileSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).trim();
@@ -93,21 +114,7 @@ export class KitchenSinkApp {
         rmSync(work, { recursive: true, force: true });
       }
     }
-    const bundle = this.bundle;
-    const server = createServer((request, response) => {
-      const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-      if (pathname === "/index.bundle") {
-        response.writeHead(200, { "Content-Type": "application/javascript" }).end(bundle);
-        return;
-      }
-      const asset = this.assets.get(decodeURIComponent(pathname));
-      if (asset) {
-        response.writeHead(200).end(asset);
-        return;
-      }
-      console.error(`Kitchen Sink: the app requested ${request.url}, which is not served`);
-      response.writeHead(404).end();
-    });
+    const server = createBundleServer(this.bundle, this.assets);
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     this.server = server;
   }
