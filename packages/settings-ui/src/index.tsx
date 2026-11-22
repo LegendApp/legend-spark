@@ -220,7 +220,7 @@ const pageKey = (page: SettingsPageProps) => page.id;
 const styles = StyleSheet.create({
   fill: { flex: 1, minWidth: 0 },
   listContent: { paddingTop: TITLEBAR_HEIGHT },
-  page: { alignSelf: "center", width: "100%", maxWidth: 760, padding: 20, gap: 16 },
+  page: { alignSelf: "center", width: "100%", maxWidth: 760, padding: 20, gap: 20 },
   sidebarRow: { flexDirection: "row", alignItems: "center", height: 30, gap: 10, paddingHorizontal: 10 },
   sidebarIcon: { width: 20, height: 20, alignItems: "center", justifyContent: "center" },
   sidebarLabel: { fontSize: 13, flexShrink: 1 },
