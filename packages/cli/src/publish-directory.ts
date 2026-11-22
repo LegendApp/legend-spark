@@ -13,6 +13,11 @@ int main(int argc, char **argv) {
 }
 `;
 
+export function swapToolchainEnv(selected = process.env.DEVELOPER_DIR || execFileSync("xcode-select", ["-p"], { encoding: "utf8" }).trim()) {
+  const developerDir = selected.endsWith("/CommandLineTools") ? "/Applications/Xcode.app/Contents/Developer" : selected;
+  return { ...process.env, DEVELOPER_DIR: developerDir };
+}
+
 export function publishDirectory(staged: string, target: string, tools: string) {
   if (!existsSync(target)) {
     renameSync(staged, target);
@@ -23,7 +28,7 @@ export function publishDirectory(staged: string, target: string, tools: string) 
     mkdirSync(tools, { recursive: true });
     const pending = `${tool}.${process.pid}.tmp`;
     try {
-      execFileSync("xcrun", ["clang", "-x", "c", "-o", pending, "-"], { input: source });
+      execFileSync("xcrun", ["clang", "-x", "c", "-o", pending, "-"], { input: source, env: swapToolchainEnv() });
       renameSync(pending, tool);
     } finally { rmSync(pending, { force: true }); }
   }
