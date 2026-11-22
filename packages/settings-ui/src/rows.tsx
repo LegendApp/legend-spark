@@ -75,7 +75,7 @@ export function SettingsSection({ title, children }: SettingsSectionProps) {
 function Row({ label, description, info, children, disabled, imageChoice }: SettingsRowProps & { disabled?: boolean; imageChoice?: boolean }) {
   if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Settings rows require macOS");
   return (
-    <View style={[styles.row, imageChoice && styles.imageRow]}>
+    <View style={[styles.row, description && styles.rowWithDescription, imageChoice && styles.imageRow]}>
       <View style={[styles.rowText, imageChoice && styles.imageRowText]}>
         <View style={styles.labelLine}>
           <Text style={[styles.label, { color: PlatformColor(disabled ? "tertiaryLabelColor" : "labelColor") }]}>{label}</Text>
@@ -100,7 +100,7 @@ function accessibility({ label, description, info }: RowText) {
 
 export function SettingsSwitchRow({ value, onValueChange, disabled, ...text }: SettingsSwitchRowProps) {
   return <Row {...text} disabled={disabled}>
-    <Switch value={value} onValueChange={onValueChange} disabled={disabled} {...accessibility(text)} />
+    <View style={styles.switchControl}><Switch value={value} onValueChange={onValueChange} disabled={disabled} {...accessibility(text)} /></View>
   </Row>;
 }
 
@@ -159,20 +159,22 @@ export function SettingsImageChoiceRow({ options, value, onValueChange, disabled
   );
 }
 
-const rowInset = 16;
+const rowInset = 12;
 
 const styles = StyleSheet.create({
-  section: { gap: 8 },
+  section: { gap: 10 },
   heading: { fontSize: 13, lineHeight: 16, fontWeight: "600", marginHorizontal: rowInset },
   card: { backgroundColor: cardColor, borderRadius: 10, overflow: "hidden" },
   divider: { height: StyleSheet.hairlineWidth, marginHorizontal: rowInset },
-  row: { flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: rowInset, paddingVertical: 12, gap: 12 },
+  row: { flexDirection: "row", alignItems: "center", minHeight: 42, paddingHorizontal: rowInset, paddingVertical: 10, gap: 12 },
   rowText: { flex: 1, minWidth: 0, gap: 3 },
+  rowWithDescription: { paddingVertical: 11 },
   labelLine: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   label: { fontSize: 13, lineHeight: 16, flexShrink: 1 },
   description: { fontSize: 11, lineHeight: 14 },
   info: { marginTop: 1.5 },
   control: { flexShrink: 1, alignItems: "flex-end" },
+  switchControl: { height: 22, justifyContent: "center" },
   selection: { height: 22, width: 190 },
   imageControl: { maxWidth: "70%" },
   imageRow: { alignItems: "flex-start" },
