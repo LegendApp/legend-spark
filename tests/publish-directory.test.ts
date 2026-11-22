@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { execFileSync } from "node:child_process";
-import { swapToolchainEnv } from "../packages/cli/src/publish-directory.ts";
+import path from "node:path";
+import { swapSdkPath, swapToolchainEnv } from "../packages/cli/src/publish-directory.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -11,6 +12,11 @@ test("swap helper honors the developer directory used by the native build", () =
 
 test("swap helper resolves Xcode when xcode-select points at Command Line Tools", () => {
   expect(swapToolchainEnv("/Library/Developer/CommandLineTools").DEVELOPER_DIR).toBe("/Applications/Xcode.app/Contents/Developer");
+});
+
+test("swap helper resolves the SDK from the selected Xcode", () => {
+  const env = swapToolchainEnv("/Applications/Xcode-27.2.0.app/Contents/Developer");
+  expect(path.relative(env.DEVELOPER_DIR!, swapSdkPath(env))).toMatch(/^Platforms\/MacOSX\.platform\/Developer\/SDKs\/MacOSX/);
 });
 
 test("swap helper uses xcode-select when DEVELOPER_DIR is unset", () => {
