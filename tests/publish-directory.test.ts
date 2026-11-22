@@ -15,7 +15,7 @@ test("swap helper resolves Xcode when xcode-select points at Command Line Tools"
 });
 
 test("swap helper resolves the SDK from the selected Xcode", () => {
-  const env = swapToolchainEnv("/Applications/Xcode-27.2.0.app/Contents/Developer");
+  const env = swapToolchainEnv();
   expect(path.relative(env.DEVELOPER_DIR!, swapSdkPath(env))).toMatch(/^Platforms\/MacOSX\.platform\/Developer\/SDKs\/MacOSX/);
 });
 
