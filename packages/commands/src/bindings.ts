@@ -85,6 +85,6 @@ export function bindingFromEvent(event: KeyboardEvent): string | null {
 export function formatHotkey(value: string | null | undefined, placeholder = ""): string {
   if (value == null) return placeholder;
   const canonical = normalizeBinding(value);
-  if (Platform.OS !== "macos") return canonical.replaceAll("CmdOrCtrl", "Ctrl").replaceAll("Cmd", "Win").split("+").join(" + ");
-  return canonical.split("+").map(part => ({ Cmd: "⌘", CmdOrCtrl: "⌘", Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Enter: "↩", Escape: "Esc", Backspace: "⌫", Delete: "⌦", Left: "←", Right: "→", Up: "↑", Down: "↓" })[part] ?? part).join(" + ");
+  if (Platform.OS !== "macos") return canonical.replaceAll("CmdOrCtrl", "Ctrl").replaceAll("Cmd", "Win").split("+").map(part => ({ MediaPlayPause: "Play/Pause", MediaNext: "Next Track", MediaPrevious: "Previous Track" }[part] ?? part)).join(" + ");
+  return canonical.split("+").map(part => ({ Cmd: "⌘", CmdOrCtrl: "⌘", Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Enter: "↩", Escape: "Esc", Backspace: "⌫", Delete: "⌦", Left: "←", Right: "→", Up: "↑", Down: "↓", MediaPlayPause: "⏯", MediaNext: "⏭", MediaPrevious: "⏮" }[part] ?? part)).join(" + ");
 }
