@@ -659,3 +659,41 @@ heading uses the SF title2 style (17/22 pt regular) so it stands apart from
 Run `spark upgrade`, `spark doctor`, and the app's typecheck and tests. Rebuild
 custom macOS hosts and verify startup, segmented controls, and that scrolling
 and clicking the sidebar keep the visible page and native title in sync.
+
+## 0.0.7
+
+Breaking: yes. macOS settings windows require `@legendapp/list` 3.7.3 or later
+in the app's dependencies (#571). Upgrade the app's pin and lockfile if needed.
+Page jumps use Legend List's updated handling of temporary render pins.
+
+`createSettingsWindowOptions()` now hides native titlebar text by default. The
+in-pane `SettingsPage` heading carries the page title. Pass an explicit opt-out
+to keep the native title visible (#570). Direct open and sidebar jumps to a
+page, including a last page taller than the window, align the page heading with
+the titlebar edge. That scroll correction is automatic.
+
+**Before**
+
+```tsx
+options: createSettingsWindowOptions()
+```
+
+**After (keep showing the native title)**
+
+```tsx
+options: createSettingsWindowOptions({
+  macos: { titleBar: { titleVisibility: "visible" } },
+})
+```
+
+If the app already passes `titleVisibility: "hidden"` or relies on the in-pane
+heading, no options change is required. Rebuild custom macOS hosts and confirm
+that opening Settings to a long last page, and jumping there from the sidebar,
+leaves the page heading at the titlebar edge.
+
+Split-view pane recycling and the markdown cursor-over-overlay fix apply
+automatically after a rebuild. The markdown change is the 1.1.1 patch already
+registered for Spark 0.0.6 and later. `HotkeyCapture` media-key labels are
+display-only; saved bindings do not change.
+
+Run `spark upgrade`, `spark doctor`, and the app's typecheck and tests.

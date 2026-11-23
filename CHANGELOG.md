@@ -1,10 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.0.7
 
-- [Breaking] Require `@legendapp/list` 3.7.3 or later for macOS settings windows. Page jumps use Legend List's updated handling of temporary render pins.
-- ui: Align macOS settings pages below the titlebar on direct open and sidebar jumps, including a last page taller than the window.
-- [Behavior change] `createSettingsWindowOptions()` hides native titlebar text by default. Use the in-pane `SettingsPage` heading, or pass `{ macos: { titleBar: { titleVisibility: "visible" } } }` to keep showing the native title.
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- [Breaking] Require `@legendapp/list` 3.7.3 or later for macOS settings windows. Page jumps use Legend List's updated handling of temporary render pins. See UPGRADING.md (#571).
+- [Behavior change] `createSettingsWindowOptions()` hides native titlebar text by default. Use the in-pane `SettingsPage` heading, or pass `{ macos: { titleBar: { titleVisibility: "visible" } } }` to keep showing the native title. See UPGRADING.md (#570).
+- ui: Align macOS settings pages below the titlebar on direct open and sidebar jumps, including a last page taller than the window (#570).
+- ui: Restore split view panes before Fabric recycles them, so a closed window's sidebar is not reused hidden or zero-sized in another component.
+- patches: For Spark 0.0.6 and later, use a new `react-native-enriched-markdown` 1.1.1 patch so the mouse cursor stays with views drawn over markdown text, such as a floating format bar. Earlier Spark versions keep the previous patch.
+- ui: Show readable media-key labels in `HotkeyCapture` (⏯, ⏭, and ⏮ on macOS; Play/Pause, Next Track, and Previous Track on Windows). Stored binding names are unchanged (#572).
 
 ## 0.0.6
 

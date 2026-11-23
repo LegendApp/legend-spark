@@ -112,6 +112,10 @@ const migrations = [
   { version: '0.0.6', automatic: false, breaking: true, apply(context) {
     context.manualStep('For macOS settings windows, upgrade @legendapp/list to 3.3.4 or later and review the new in-pane SettingsPage heading. Set heading={false} on pages that already render their own heading. See the linked upgrade notes.');
   } },
+  { version: '0.0.7', automatic: false, breaking: true, apply(context) {
+    context.manualStep('For macOS settings windows, upgrade @legendapp/list to 3.7.3 or later. Page jumps use Legend List\'s updated handling of temporary render pins. See the linked upgrade notes.');
+    context.manualStep('createSettingsWindowOptions() now hides native titlebar text by default. The in-pane SettingsPage heading carries the title. Pass { macos: { titleBar: { titleVisibility: "visible" } } } to keep showing the native title. See the linked upgrade notes.');
+  } },
 ];
 
 /** @param {string} root */
