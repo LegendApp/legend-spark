@@ -1366,12 +1366,23 @@ static char RNSidebarSplitViewStartupKey;
 }
 #endif
 
+#if TARGET_OS_OSX
+// Fabric recycles React subviews for any component, so undo the native state
+// syncReactSubview set outside their layout metrics.
+static void detachReactSubview(RCTUIView<RCTComponentViewProtocol> *_Nullable subview)
+{
+  subview.hidden = NO;
+  subview.autoresizingMask = NSViewNotSizable;
+  [subview removeFromSuperview];
+}
+#endif
+
 - (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView
                           index:(NSInteger)index
 {
 #if TARGET_OS_OSX
   if (index == 0) {
-    [_sidebarReactView removeFromSuperview];
+    detachReactSubview(_sidebarReactView);
     _sidebarReactView = childComponentView;
     _sidebarReactLayoutMetrics = EmptyLayoutMetrics;
     childComponentView.hidden = YES;
@@ -1390,7 +1401,7 @@ static char RNSidebarSplitViewStartupKey;
   }
 
   if (index == 1) {
-    [_contentReactView removeFromSuperview];
+    detachReactSubview(_contentReactView);
     _contentReactView = childComponentView;
     _contentReactLayoutMetrics = EmptyLayoutMetrics;
     childComponentView.hidden = YES;
@@ -1410,7 +1421,7 @@ static char RNSidebarSplitViewStartupKey;
 
   // React renders the inspector pane last: after the list when there is one.
   if (index == 3 || (index == 2 && !_hasList && _hasInspector)) {
-    [_inspectorReactView removeFromSuperview];
+    detachReactSubview(_inspectorReactView);
     _inspectorReactView = childComponentView;
     _inspectorReactLayoutMetrics = EmptyLayoutMetrics;
     childComponentView.hidden = YES;
@@ -1425,7 +1436,7 @@ static char RNSidebarSplitViewStartupKey;
   }
 
   if (index == 2) {
-    [_listReactView removeFromSuperview];
+    detachReactSubview(_listReactView);
     _listReactView = childComponentView;
     _listReactLayoutMetrics = EmptyLayoutMetrics;
     childComponentView.hidden = YES;
@@ -1460,28 +1471,28 @@ static char RNSidebarSplitViewStartupKey;
   if (childComponentView == _sidebarReactView) {
     _sidebarReactView = nil;
     _sidebarReactLayoutMetrics = EmptyLayoutMetrics;
-    [childComponentView removeFromSuperview];
+    detachReactSubview(childComponentView);
     return;
   }
 
   if (childComponentView == _contentReactView) {
     _contentReactView = nil;
     _contentReactLayoutMetrics = EmptyLayoutMetrics;
-    [childComponentView removeFromSuperview];
+    detachReactSubview(childComponentView);
     return;
   }
 
   if (childComponentView == _listReactView) {
     _listReactView = nil;
     _listReactLayoutMetrics = EmptyLayoutMetrics;
-    [childComponentView removeFromSuperview];
+    detachReactSubview(childComponentView);
     return;
   }
 
   if (childComponentView == _inspectorReactView) {
     _inspectorReactView = nil;
     _inspectorReactLayoutMetrics = EmptyLayoutMetrics;
-    [childComponentView removeFromSuperview];
+    detachReactSubview(childComponentView);
     return;
   }
 #else
@@ -1714,10 +1725,10 @@ static char RNSidebarSplitViewStartupKey;
   [super prepareForRecycle];
 
 #if TARGET_OS_OSX
-  [_sidebarReactView removeFromSuperview];
-  [_contentReactView removeFromSuperview];
-  [_listReactView removeFromSuperview];
-  [_inspectorReactView removeFromSuperview];
+  detachReactSubview(_sidebarReactView);
+  detachReactSubview(_contentReactView);
+  detachReactSubview(_listReactView);
+  detachReactSubview(_inspectorReactView);
   _inspectorReactView = nil;
   _inspectorReactLayoutMetrics = EmptyLayoutMetrics;
   _inspectorMinWidth = 220;
