@@ -359,6 +359,13 @@
           "patch": "react-native-enriched-markdown@1.1.1.patch",
           "integrity": "sha512-JvbRIVy75MAoGCv8V6sSscu11/Ian588wfIgH+j64XFpf6gy5sNNkMyG087MH88jNCf3p7fTjgEAGxZMhEqL4A==",
           "sha256": "6c95b00605e7ff33ef214b91a4a7061033a5202e7eca77e4b4f9fe6d35728681"
+        },
+        {
+          "version": "1.1.1",
+          "minSpark": "0.0.6",
+          "patch": "react-native-enriched-markdown@1.1.1-spark0.0.6.patch",
+          "integrity": "sha512-JvbRIVy75MAoGCv8V6sSscu11/Ian588wfIgH+j64XFpf6gy5sNNkMyG087MH88jNCf3p7fTjgEAGxZMhEqL4A==",
+          "sha256": "aa2b79836249c5c2879bea7b411bc24975960897245b7f28e754ac342fc8e7a2"
         }
       ]
     },
