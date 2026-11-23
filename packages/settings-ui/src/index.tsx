@@ -139,7 +139,6 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
   const { onResize, markContentReady, report } = useSettingsWindow(windowId, pages[pageIndex].title, appearance, onError);
   const [hasLayout, setHasLayout] = useState(false);
   const [measureThrough, setMeasureThrough] = useState(0);
-  // LegendList needs a dataVersion change to recalculate its range when pins change.
   const alwaysRender = useMemo(() => measureThrough ? { top: measureThrough } : undefined, [measureThrough]);
   const cancelJump = useRef<(() => void) | undefined>(undefined);
   const visiblePage = useRef<PageId | undefined>(undefined);
@@ -228,7 +227,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
         </Sidebar>
       }
       content={hasLayout ? (
-        <LegendList ref={listRef} data={pages} dataVersion={measureThrough} keyExtractor={pageKey} renderItem={renderPage} anchoredEndSpace={anchoredEndSpace} alwaysRender={alwaysRender}
+        <LegendList ref={listRef} data={pages} keyExtractor={pageKey} renderItem={renderPage} anchoredEndSpace={anchoredEndSpace} alwaysRender={alwaysRender}
           contentContainerStyle={styles.listContent} contentInsetAdjustmentBehavior="never"
           onFirstVisibleItemChanged={onScroll} onScroll={onScroll} onScrollBeginDrag={onScrollBeginDrag} scrollEventThrottle={16} style={styles.fill} />
       ) : null}
