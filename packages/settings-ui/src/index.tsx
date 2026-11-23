@@ -222,7 +222,7 @@ function renderPage({ item }: LegendListRenderItemProps<SettingsPageProps>) {
   const { heading = item.title, children } = item;
   return (
     <View style={styles.page}>
-      {heading !== false && <SettingsHeading title={heading} />}
+      {heading !== false && <SettingsHeading title={heading} variant="page" />}
       <View style={styles.pageBody}>{children}</View>
     </View>
   );
