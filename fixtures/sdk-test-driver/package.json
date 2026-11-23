@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-sdk-test-driver",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "license": "MIT",
   "main": "src/index.ts",
   "react-native": "src/index.ts",
@@ -32,7 +32,7 @@
     "testOnly": true
   },
   "dependencies": {
-    "@legendapp/spark": "0.0.5"
+    "@legendapp/spark": "0.0.6"
   },
   "private": true
 }

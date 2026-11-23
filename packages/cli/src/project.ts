@@ -21,7 +21,7 @@ import path from "node:path";
 import { readJson, writeJson } from "./json.ts";
 export { readJson, writeJson };
 
-export const VERSION = "0.0.5";
+export const VERSION = "0.0.6";
 export type Package = { name: string; root: string; json: any };
 export type NativePackage = Package & {
   signature: string;

@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-expo-compat",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "license": "MIT",
   "files": [
@@ -8,10 +8,10 @@
     "metro.cjs"
   ],
   "dependencies": {
-    "@legendapp/spark-clipboard": "0.0.5",
+    "@legendapp/spark-clipboard": "0.0.6",
     "base64-js": "1.5.1",
-    "@legendapp/spark-file-dialog": "0.0.5",
-    "@legendapp/spark-file-system": "0.0.5"
+    "@legendapp/spark-file-dialog": "0.0.6",
+    "@legendapp/spark-file-system": "0.0.6"
   },
   "peerDependencies": {
     "react": "^19.2.0",
