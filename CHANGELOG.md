@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- ui: Give macOS settings pages larger in-pane titles so they stand apart from card section headers.
 - ui: Size macOS settings pages to their content, add in-pane headings through `SettingsPage.heading`, and keep the native title and sidebar selection in sync with the visible page. The settings list requires `@legendapp/list` 3.3.4 or later.
 - test driver: Answer React Native’s optional Metro `/status` request from the one-shot bundle server.
 - ui: Match macOS settings row and section spacing to the Journal reference.

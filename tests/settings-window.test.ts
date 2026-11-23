@@ -94,6 +94,20 @@ test("fragments declare one list and one icon sidebar", async () => {
     .map((node: any) => node.props.children)).toEqual(["General", "Advanced"]);
 });
 
+test("page titles use a larger text style than card section headers", async () => {
+  const children = React.cloneElement(general, {
+    children: React.createElement(SettingsSection, { title: "Startup", children: "General content" }),
+  });
+  await mount(React.createElement(SettingsWindow, { ...settings, children }));
+  await resize();
+
+  const headings = rendered.root.findAll((node: any) => node.type === "Text" && node.props.accessibilityRole === "header");
+  expect(headings.map((node: any) => node.props.children)).toEqual(["General", "Startup"]);
+  const [page, section] = headings.map((node: any) => Object.assign({}, ...node.props.style));
+  expect(page).toMatchObject({ fontSize: 17, lineHeight: 22, fontWeight: "400" });
+  expect(section).toMatchObject({ fontSize: 13, lineHeight: 16, fontWeight: "600" });
+});
+
 test("sidebar selects and scrolls to the requested page while scroll changes update the title", async () => {
   const onSelectionChange = vi.fn();
   await mount(React.createElement(SettingsWindow, { ...settings, onSelectionChange }));

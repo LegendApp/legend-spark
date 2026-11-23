@@ -60,7 +60,7 @@ export function SettingsSection({ title, children }: SettingsSectionProps) {
   if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Settings sections require macOS");
   return (
     <View style={styles.section}>
-      {title ? <SettingsHeading title={title} /> : null}
+      {title ? <SettingsHeading title={title} variant="section" /> : null}
       <View style={styles.card}>
         {Children.toArray(children).map((child, index) => (
           <Fragment key={typeof child === "object" && "key" in child ? child.key : index}>
