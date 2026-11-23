@@ -612,3 +612,50 @@ settings value persistence after reopening the window.
   `bun run release:check <project-directory> <signed.app>` from the Spark
   source checkout. Local rebuilds keep the last complete output available until
   the new app is ready (#562).
+
+## 0.0.6
+
+Breaking: yes. macOS settings windows require `@legendapp/list` 3.3.4 or later in
+the app's dependencies (#568). Upgrade the app's pin and lockfile if needed.
+
+Settings pages now fit their content, and the sidebar and native window title
+follow the visible page. The in-pane heading defaults to the page's `title`.
+Pass a string to customize it, or `heading={false}` if the page already renders
+its own heading. The sidebar and window still use `title`. The default in-pane
+heading uses the SF title2 style (17/22 pt regular) so it stands apart from
+13/16 pt semibold card section headers (#569).
+
+**Before**
+
+```tsx
+<SettingsPage id="general" title="General" icon="gearshape">
+  <GeneralHeading />
+  <GeneralSettings />
+</SettingsPage>
+```
+
+**After**
+
+```tsx
+<SettingsPage id="general" title="General" icon="gearshape" heading={false}>
+  <GeneralHeading />
+  <GeneralSettings />
+</SettingsPage>
+```
+
+- Recheck settings rows that use fixed widths or spacing. Segmented controls
+  using fit distribution size to their labels, and row and section spacing
+  matches Journal (#563, #565, #566).
+- Expo Constants reports the local computer name as `hostName` on macOS.
+  Review consumers that expect a DNS hostname. macOS prebuild uses a bundled
+  template, so template generation works offline. Installing Pods can still
+  require network access (#563).
+- The build output swap helper uses a full Xcode installation and its matching
+  SDK. If Command Line Tools are selected, Spark looks for standard Xcode.
+  Select a full installation with `DEVELOPER_DIR` on custom build hosts (#564).
+- The Kitchen Sink driver answers Metro's `/status` probe during one-shot bundle
+  tests. The app's Metro setup needs no change (#567).
+
+Run `spark upgrade`, `spark doctor`, and the app's typecheck and tests. Rebuild
+custom macOS hosts and verify startup, segmented controls, and that scrolling
+and clicking the sidebar keep the visible page and native title in sync.

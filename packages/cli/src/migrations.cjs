@@ -109,6 +109,9 @@ const migrations = [
   { version: '0.0.5', automatic: false, breaking: true, apply(context) {
     context.manualStep('For macOS settings windows, replace @legendapp/spark/settings/window with @legendapp/spark/ui/settings, install @legendapp/list if missing, and migrate the pages and rows to the new JSX API. See the linked upgrade notes and verify the settings window after rebuilding custom macOS hosts.');
   } },
+  { version: '0.0.6', automatic: false, breaking: true, apply(context) {
+    context.manualStep('For macOS settings windows, upgrade @legendapp/list to 3.3.4 or later and review the new in-pane SettingsPage heading. Set heading={false} on pages that already render their own heading. See the linked upgrade notes.');
+  } },
 ];
 
 /** @param {string} root */

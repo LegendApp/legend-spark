@@ -1,15 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.0.6
 
-- ui: Give macOS settings pages larger in-pane titles so they stand apart from card section headers.
-- ui: Size macOS settings pages to their content, add in-pane headings through `SettingsPage.heading`, and keep the native title and sidebar selection in sync with the visible page. The settings list requires `@legendapp/list` 3.3.4 or later.
-- test driver: Answer React Native’s optional Metro `/status` request from the one-shot bundle server.
-- ui: Match macOS settings row and section spacing to the Journal reference.
-- cli: Compile the directory swap helper with the full Xcode toolchain when Command Line Tools are selected.
-- macos: Use the local computer name in Expo Constants to avoid blocking hostname resolution during startup.
-- ui: Size macOS settings segmented controls to fit their labels.
-- cli: Bundle the macOS prebuild template so project generation works without npm registry access.
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- [Breaking] Require `@legendapp/list` 3.3.4 or later for macOS settings windows. Pages size to their content, and the native title and sidebar selection follow the visible page. Use `SettingsPage.heading` to customize or hide the new in-pane heading. See UPGRADING.md (#568).
+- ui: Give macOS settings pages larger in-pane titles (SF title2, 17/22 pt regular) so they stand apart from 13/16 pt semibold card section headers (#569).
+- test driver: Answer React Native’s Metro `/status` request from the Kitchen Sink one-shot bundle server (#567).
+- ui: Match macOS settings row and section spacing to Journal (#565, #566).
+- cli: Compile the directory swap helper with the selected full Xcode toolchain and its SDK. Use standard Xcode when Command Line Tools are selected (#564).
+- macos: Use the local computer name for Expo Constants’ `hostName` to avoid blocking hostname resolution during startup. Fit settings segments to their labels and bundle the macOS prebuild template for offline project generation (#563).
 
 ## 0.0.5
 
