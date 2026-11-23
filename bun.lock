@@ -646,7 +646,7 @@
         "@legendapp/spark-ui": "0.0.5",
       },
       "peerDependencies": {
-        "@legendapp/list": ">=3.3.0",
+        "@legendapp/list": ">=3.3.4",
         "react": "^19.2.0",
         "react-native": "0.83.10",
       },

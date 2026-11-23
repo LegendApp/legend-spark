@@ -6,6 +6,7 @@ import { identifier } from "@legendapp/spark-ui/src/specialized";
 import { SparkError, nativeError } from "@legendapp/spark-desktop-app/src/contracts";
 import { Children, Fragment, isValidElement, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Platform, PlatformColor, StyleSheet, Text, View } from "react-native";
+import { SettingsHeading, settingsHeadingGap } from "./heading";
 
 export * from "./options";
 export * from "./rows";
@@ -19,6 +20,7 @@ export interface SettingsPageProps<PageId extends string = string> {
   id: PageId;
   title: string;
   icon: string;
+  heading?: string | false;
   children: ReactNode;
 }
 
@@ -67,6 +69,7 @@ function useSettingsSelection<PageId extends string>(props: SettingsWindowProps<
     identifier(page.id, "settings page ID");
     identifier(page.title, "settings page title");
     identifier(page.icon, "settings page icon");
+    if (page.heading !== undefined && page.heading !== false) identifier(page.heading, "settings page heading");
     if (ids.has(page.id)) throw new SparkError("E_INVALID_ARGUMENT", "Settings page IDs must be unique");
     ids.add(page.id);
   }
@@ -79,12 +82,11 @@ function useSettingsSelection<PageId extends string>(props: SettingsWindowProps<
   useEffect(() => { if (!controlled && local !== selected) setLocal(selected); }, [controlled, local, selected]);
   const [revision, setRevision] = useState(0);
   const requestSelection = useCallback((id: PageId) => {
-    if (selected === id) return;
     // A controlled parent may keep its value, so request a scroll even if it stays the same.
     if (controlled) setRevision(value => value + 1);
     else setLocal(id);
     onSelectionChange?.(id);
-  }, [controlled, onSelectionChange, selected]);
+  }, [controlled, onSelectionChange]);
   return { selected, requestSelection, revision };
 }
 
@@ -132,19 +134,19 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
   const { selected, requestSelection, revision } = useSettingsSelection(props, pages);
   const listRef = useRef<LegendListRef | null>(null);
   const pageIndex = pages.findIndex(page => page.id === selected);
+  const lastPageIndex = pages.length - 1;
+  const anchoredEndSpace = useMemo(() => ({ anchorIndex: lastPageIndex, anchorOffset: TITLEBAR_HEIGHT }), [lastPageIndex]);
   const { onResize, markContentReady, report } = useSettingsWindow(windowId, pages[pageIndex].title, appearance, onError);
-  const [viewportHeight, setViewportHeight] = useState(0);
-  const hasLayout = viewportHeight > 0;
+  const [hasLayout, setHasLayout] = useState(false);
   const scrollingToPage = useRef(false);
   const visiblePage = useRef<PageId | undefined>(undefined);
   const initialized = useRef(false);
 
   useEffect(() => {
-    if (!hasLayout) return;
+    if (!hasLayout || (initialized.current && visiblePage.current === selected)) return;
     let current = true;
     scrollingToPage.current = true;
     const frame = requestAnimationFrame(() => {
-      if (visiblePage.current === selected && initialized.current) { scrollingToPage.current = false; return; }
       const list = listRef.current;
       if (!list) { report(new SparkError("E_UNAVAILABLE", "Settings list is not mounted")); return; }
       visiblePage.current = undefined;
@@ -158,15 +160,22 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
           markContentReady();
         });
     });
-    return () => { current = false; cancelAnimationFrame(frame); };
+    return () => {
+      current = false;
+      scrollingToPage.current = false;
+      cancelAnimationFrame(frame);
+    };
   }, [hasLayout, markContentReady, pageIndex, report, revision, selected]);
 
   const onScroll = useCallback(() => {
     if (!initialized.current || scrollingToPage.current) return;
     const state = listRef.current?.getState();
-    if (!state || state.start < 0) return;
+    if (!state || state.start == null || state.start < 0) return;
+    // LegendList item positions exclude the top padding that matches the overlay title bar.
+    const paneTop = state.scroll + 0.5;
     let index = state.start;
-    while (index < pages.length - 1 && state.positionAtIndex(index + 1) <= state.scroll + 0.5) index++;
+    while (index > 0 && state.positionAtIndex(index) > paneTop) index--;
+    while (index < pages.length - 1 && state.positionAtIndex(index + 1) <= paneTop) index++;
     const page = pages[index];
     if (page && visiblePage.current !== page.id) {
       visiblePage.current = page.id;
@@ -174,20 +183,12 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
     }
   }, [pages, requestSelection]);
 
-  // Keep short pages tall enough to align at the top and avoid opening on two pages at once.
-  const pageHeight = Math.max(0, viewportHeight - TITLEBAR_HEIGHT);
-  const renderItem = useCallback(({ item }: LegendListRenderItemProps<SettingsPageProps<PageId>>) => (
-    <View style={[styles.page, { minHeight: pageHeight }]}>
-      {item.children}
-    </View>
-  ), [pageHeight]);
-
   return (
     <SidebarSplitView appearance={appearance} contentMinWidth={340} sidebarMinWidth={180} sidebarWidth={200} titleBar={titleBar} style={styles.fill}
-      onResize={event => { if (event.contentWidth > 0) setViewportHeight(event.contentHeight); onResize(event); }} onError={report}
+      onResize={event => { if (event.contentWidth > 0) setHasLayout(event.contentHeight > 0); onResize(event); }} onError={report}
       sidebar={
         <Sidebar defaultRowHeight={30} contentInsetTop={66} selectedId={selected} style={styles.fill} onError={report}
-          onSelectionChange={({ id }) => { if (id !== null) requestSelection(id as PageId); }}>
+          onSelectionChange={({ id }) => { if (id !== null && id !== selected) requestSelection(id as PageId); }}>
           {pages.map(({ id, title, icon }) => {
             const active = id === selected;
             const foreground = active ? PlatformColor("alternateSelectedControlTextColor") : PlatformColor("labelColor");
@@ -205,7 +206,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
         </Sidebar>
       }
       content={hasLayout ? (
-        <LegendList ref={listRef} data={pages} keyExtractor={pageKey} renderItem={renderItem} estimatedItemSize={Math.max(1, pageHeight)}
+        <LegendList ref={listRef} data={pages} keyExtractor={pageKey} renderItem={renderPage} anchoredEndSpace={anchoredEndSpace}
           contentContainerStyle={styles.listContent} contentInsetAdjustmentBehavior="never"
           onFirstVisibleItemChanged={onScroll} onScroll={onScroll} scrollEventThrottle={16} style={styles.fill} />
       ) : null}
@@ -217,10 +218,21 @@ export { VirtualizedSettingsWindow as SettingsWindow };
 
 const pageKey = (page: SettingsPageProps) => page.id;
 
+function renderPage({ item }: LegendListRenderItemProps<SettingsPageProps>) {
+  const { heading = item.title, children } = item;
+  return (
+    <View style={styles.page}>
+      {heading !== false && <SettingsHeading title={heading} />}
+      <View style={styles.pageBody}>{children}</View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1, minWidth: 0 },
-  listContent: { paddingTop: TITLEBAR_HEIGHT },
-  page: { alignSelf: "center", width: "100%", maxWidth: 760, padding: 20, gap: 20 },
+  listContent: { paddingTop: TITLEBAR_HEIGHT, paddingBottom: 20 },
+  page: { alignSelf: "center", width: "100%", maxWidth: 760, paddingHorizontal: 20, paddingTop: 20, gap: settingsHeadingGap },
+  pageBody: { gap: 20 },
   sidebarRow: { flexDirection: "row", alignItems: "center", height: 30, gap: 10, paddingHorizontal: 10 },
   sidebarIcon: { width: 20, height: 20, alignItems: "center", justifyContent: "center" },
   sidebarLabel: { fontSize: 13, flexShrink: 1 },

@@ -23,7 +23,8 @@ vi.mock("react-native", () => ({
 vi.mock("@legendapp/list/react-native", () => ({
   LegendList: React.forwardRef((props: any, ref) => {
     React.useImperativeHandle(ref, () => ({ scrollToIndex, getState: () => listState }));
-    return React.createElement("List", props);
+    return React.createElement("List", props, props.data.map((item: any, index: number) =>
+      React.createElement(React.Fragment, { key: item.id }, props.renderItem({ item, index }))));
   }),
 }));
 import {
@@ -85,7 +86,12 @@ test("fragments declare one list and one icon sidebar", async () => {
   await resize();
   expect(rendered.root.findAllByType("SFSymbol").map((node: any) => node.props.name)).toEqual(["gearshape", "wrench"]);
   expect(list().data.map((page: any) => page.id)).toEqual(["general", "advanced"]);
-  expect(list().renderItem({ index: 1, item: list().data[1] }).props.children).toBe("Advanced content");
+  expect(list().anchoredEndSpace).toEqual({ anchorIndex: 1, anchorOffset: 52 });
+  for (const view of rendered.root.findByType("List").findAllByType("View")) {
+    for (const style of [view.props.style].flat()) expect(style).not.toHaveProperty("minHeight");
+  }
+  expect(rendered.root.findByType("List").findAll((node: any) => node.type === "Text" && node.props.accessibilityRole === "header")
+    .map((node: any) => node.props.children)).toEqual(["General", "Advanced"]);
 });
 
 test("sidebar selects and scrolls to the requested page while scroll changes update the title", async () => {
@@ -96,13 +102,66 @@ test("sidebar selects and scrolls to the requested page while scroll changes upd
   await runFrames();
   expect(scrollToIndex).toHaveBeenLastCalledWith({ index: 1, animated: true, viewOffset: 52, viewPosition: 0 });
   expect(sidebar().selectedId).toBe("advanced");
-  const lastPage = list().renderItem({ index: 1, item: list().data[1] });
-  expect(lastPage.props.style[1].minHeight).toBe(448);
   await scroll(0, 0);
   await runFrames();
   expect(scrollToIndex).toHaveBeenCalledTimes(2);
   expect(sidebar().selectedId).toBe("general");
   expect(onSelectionChange.mock.calls).toEqual([["advanced"], ["general"]]);
+  expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "General", appearance: "system" });
+});
+
+test("scroll selection changes at the visible pane boundary in either direction", async () => {
+  const onSelectionChange = vi.fn();
+  await mount(React.createElement(SettingsWindow, { ...settings, onSelectionChange }));
+  await resize(); await runFrames();
+  await scroll(99, 0);
+  expect(sidebar().selectedId).toBe("general");
+  await scroll(100, 0);
+  expect(sidebar().selectedId).toBe("advanced");
+  expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "Advanced", appearance: "system" });
+  await scroll(99, 1);
+  expect(sidebar().selectedId).toBe("general");
+  expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "General", appearance: "system" });
+  await runFrames();
+  expect(scrollToIndex).toHaveBeenCalledTimes(1);
+  expect(onSelectionChange.mock.calls).toEqual([["advanced"], ["general"]]);
+});
+
+test("scroll can return to the rendered page before React commits a selection", async () => {
+  const onSelectionChange = vi.fn();
+  await mount(React.createElement(SettingsWindow, { ...settings, onSelectionChange }));
+  await resize(); await runFrames();
+  await act(async () => {
+    listState.scroll = 100;
+    list().onScroll();
+    listState.scroll = 99;
+    list().onScroll();
+  });
+  expect(sidebar().selectedId).toBe("general");
+  expect(onSelectionChange.mock.calls).toEqual([["advanced"], ["general"]]);
+});
+
+test("canceling a sidebar jump before it starts leaves manual scroll enabled", async () => {
+  await mount(React.createElement(SettingsWindow, settings));
+  await resize(); await runFrames();
+  await act(async () => sidebar().onSelectionChange({ id: "advanced" }));
+  await act(async () => sidebar().onSelectionChange({ id: "general" }));
+  await runFrames();
+  expect(scrollToIndex).toHaveBeenCalledTimes(1);
+  await scroll(100, 0);
+  expect(sidebar().selectedId).toBe("advanced");
+});
+
+test("a page can override or hide its heading without changing navigation labels", async () => {
+  const children = React.createElement(React.Fragment, null,
+    React.cloneElement(general, { heading: "Startup preferences" }),
+    React.cloneElement(advanced, { heading: false }));
+  await mount(React.createElement(SettingsWindow, { ...settings, children }));
+  await resize(); await runFrames();
+  expect(rendered.root.findByType("List").findAll((node: any) => node.type === "Text" && node.props.accessibilityRole === "header")
+    .map((node: any) => node.props.children)).toEqual(["Startup preferences"]);
+  expect(rendered.root.findAllByType("SidebarItem").map((node: any) => node.props.accessibilityLabel))
+    .toEqual(["General", "Advanced"]);
   expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "General", appearance: "system" });
 });
 
