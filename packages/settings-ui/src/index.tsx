@@ -138,37 +138,52 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
   const anchoredEndSpace = useMemo(() => ({ anchorIndex: lastPageIndex, anchorOffset: TITLEBAR_HEIGHT }), [lastPageIndex]);
   const { onResize, markContentReady, report } = useSettingsWindow(windowId, pages[pageIndex].title, appearance, onError);
   const [hasLayout, setHasLayout] = useState(false);
-  const scrollingToPage = useRef(false);
+  const [measureThrough, setMeasureThrough] = useState(0);
+  // LegendList needs a dataVersion change to recalculate its range when pins change.
+  const alwaysRender = useMemo(() => measureThrough ? { top: measureThrough } : undefined, [measureThrough]);
+  const cancelJump = useRef<(() => void) | undefined>(undefined);
   const visiblePage = useRef<PageId | undefined>(undefined);
   const initialized = useRef(false);
 
   useEffect(() => {
     if (!hasLayout || (initialized.current && visiblePage.current === selected)) return;
-    let current = true;
-    scrollingToPage.current = true;
-    const frame = requestAnimationFrame(() => {
+    let frame: number;
+    const cancel = () => {
+      if (cancelJump.current !== cancel) return;
+      cancelJump.current = undefined;
+      cancelAnimationFrame(frame);
+      setMeasureThrough(0);
+    };
+    const jumpWhenMeasured = () => {
       const list = listRef.current;
-      if (!list) { report(new SparkError("E_UNAVAILABLE", "Settings list is not mounted")); return; }
+      if (!list) { report(new SparkError("E_UNAVAILABLE", "Settings list is not mounted")); cancel(); return; }
+      const { sizeAtIndex } = list.getState();
+      for (let index = 0; index <= pageIndex; index++) {
+        if (sizeAtIndex(index) === undefined) {
+          // A distant page and its predecessors may be outside LegendList's render window.
+          setMeasureThrough(pageIndex + 1);
+          frame = requestAnimationFrame(jumpWhenMeasured);
+          return;
+        }
+      }
       visiblePage.current = undefined;
       void list.scrollToIndex({ animated: initialized.current, index: pageIndex, viewOffset: TITLEBAR_HEIGHT, viewPosition: 0 })
-        .then(() => { if (current) visiblePage.current = selected; })
-        .catch(cause => { if (current) report(cause); })
+        .then(() => { if (cancelJump.current === cancel) visiblePage.current = selected; })
+        .catch(cause => { if (cancelJump.current === cancel) report(cause); })
         .finally(() => {
-          if (!current) return;
+          if (cancelJump.current !== cancel) return;
+          cancel();
           initialized.current = true;
-          scrollingToPage.current = false;
           markContentReady();
         });
-    });
-    return () => {
-      current = false;
-      scrollingToPage.current = false;
-      cancelAnimationFrame(frame);
     };
+    cancelJump.current = cancel;
+    frame = requestAnimationFrame(jumpWhenMeasured);
+    return cancel;
   }, [hasLayout, markContentReady, pageIndex, report, revision, selected]);
 
   const onScroll = useCallback(() => {
-    if (!initialized.current || scrollingToPage.current) return;
+    if (!initialized.current || cancelJump.current) return;
     const state = listRef.current?.getState();
     if (!state || state.start == null || state.start < 0) return;
     // LegendList item positions exclude the top padding that matches the overlay title bar.
@@ -182,6 +197,13 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
       requestSelection(page.id);
     }
   }, [pages, requestSelection]);
+
+  const onScrollBeginDrag = useCallback(() => {
+    if (initialized.current && cancelJump.current) {
+      visiblePage.current = undefined;
+      cancelJump.current();
+    }
+  }, []);
 
   return (
     <SidebarSplitView appearance={appearance} contentMinWidth={340} sidebarMinWidth={180} sidebarWidth={200} titleBar={titleBar} style={styles.fill}
@@ -206,9 +228,9 @@ export function VirtualizedSettingsWindow<PageId extends string = string>(props:
         </Sidebar>
       }
       content={hasLayout ? (
-        <LegendList ref={listRef} data={pages} keyExtractor={pageKey} renderItem={renderPage} anchoredEndSpace={anchoredEndSpace}
+        <LegendList ref={listRef} data={pages} dataVersion={measureThrough} keyExtractor={pageKey} renderItem={renderPage} anchoredEndSpace={anchoredEndSpace} alwaysRender={alwaysRender}
           contentContainerStyle={styles.listContent} contentInsetAdjustmentBehavior="never"
-          onFirstVisibleItemChanged={onScroll} onScroll={onScroll} scrollEventThrottle={16} style={styles.fill} />
+          onFirstVisibleItemChanged={onScroll} onScroll={onScroll} onScrollBeginDrag={onScrollBeginDrag} scrollEventThrottle={16} style={styles.fill} />
       ) : null}
     />
   );

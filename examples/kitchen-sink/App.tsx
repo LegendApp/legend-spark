@@ -18,7 +18,7 @@ import { Shell } from "./shell/Shell";
 import { testDriver } from "./test-driver";
 import { argument, reportLaunch, type ReportFlag } from "./launch";
 
-type Props = Partial<app.AppContext> & { windowId?: string; windowProps?: { overlay?: boolean; message?: string; readyFile?: string } };
+type Props = Partial<app.AppContext> & { windowId?: string; settingsPageId?: "editor" | "shortcuts"; windowProps?: { overlay?: boolean; message?: string; readyFile?: string } };
 const reports: Record<ReportFlag, (report: string, args: readonly string[]) => ReactElement> = {
   "--spark-auth-report": (report, args) => <AuthChecks report={report} provider={argument(args, "--spark-auth-provider")!} />,
   "--spark-audio-report": (report, args) => <AudioChecks report={report} source={argument(args, "--spark-audio-source")!} />,
@@ -31,7 +31,7 @@ const reports: Record<ReportFlag, (report: string, args: readonly string[]) => R
 };
 export default function App(props: Props) {
   const args = props.launchArguments ?? [];
-  if (props.windowId === SETTINGS_DEMO_WINDOW) return <SettingsDemoWindow />;
+  if (props.windowId === SETTINGS_DEMO_WINDOW) return <SettingsDemoWindow defaultPageId={props.settingsPageId} />;
   if (props.windowId && props.windowId !== "main") return <SecondaryWindow {...props} />;
   const launch = reportLaunch(args);
   if (launch) return reports[launch.flag](launch.report, args);

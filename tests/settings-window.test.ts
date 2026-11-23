@@ -4,7 +4,7 @@ import React, { act, StrictMode } from "react";
 const { create } = createRequire(import.meta.url)("react-test-renderer");
 const { showWindow, setWindowOptions, scrollToIndex, listState, platform } = vi.hoisted(() => ({
   showWindow: vi.fn(), setWindowOptions: vi.fn(), scrollToIndex: vi.fn(),
-  listState: { scroll: 0, start: 0, positionAtIndex: (index: number) => index * 100 },
+  listState: { scroll: 0, start: 0, sizes: new Map<string, number>(), positionAtIndex: (index: number) => index * 100 },
   platform: { OS: "macos" },
 }));
 
@@ -22,7 +22,10 @@ vi.mock("react-native", () => ({
 }));
 vi.mock("@legendapp/list/react-native", () => ({
   LegendList: React.forwardRef((props: any, ref) => {
-    React.useImperativeHandle(ref, () => ({ scrollToIndex, getState: () => listState }));
+    React.useImperativeHandle(ref, () => ({
+      scrollToIndex,
+      getState: () => ({ ...listState, sizeAtIndex: (index: number) => listState.sizes.get(props.data[index].id) }),
+    }));
     return React.createElement("List", props, props.data.map((item: any, index: number) =>
       React.createElement(React.Fragment, { key: item.id }, props.renderItem({ item, index }))));
   }),
@@ -66,6 +69,8 @@ beforeEach(() => {
   setWindowOptions.mockReset().mockResolvedValue(undefined);
   scrollToIndex.mockReset().mockResolvedValue(undefined);
   listState.start = 0; listState.scroll = 0;
+  listState.sizes = new Map([["general", 100], ["advanced", 100]]);
+  listState.positionAtIndex = index => index * 100;
   const original = console.error;
   vi.spyOn(console, "error").mockImplementation((...args) => {
     if (!String(args[0]).startsWith("react-test-renderer is deprecated")) original(...args);
@@ -124,6 +129,43 @@ test("sidebar selects and scrolls to the requested page while scroll changes upd
   expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "General", appearance: "system" });
 });
 
+test.each(["initial open", "sidebar jump"])("%s aligns a long last page after measurement", async entry => {
+  const initialOpen = entry === "initial open";
+  const children = React.createElement(React.Fragment, null, pages,
+    React.createElement(SettingsPage, { id: "licenses", title: "Licenses", icon: "doc", children: "License text" }));
+  if (initialOpen) listState.sizes.delete("general");
+  await mount(React.createElement(SettingsWindow, { ...settings, children, defaultPageId: initialOpen ? "licenses" : "general" }));
+  await resize();
+  if (!initialOpen) {
+    await runFrames();
+    scrollToIndex.mockClear();
+    listState.sizes.delete("advanced");
+    await act(async () => sidebar().onSelectionChange({ id: "licenses" }));
+  }
+  listState.positionAtIndex = index => [0, 100, 520][index];
+  scrollToIndex.mockImplementation(({ index, viewOffset }) => {
+    listState.scroll = listState.positionAtIndex(index) + 52 - viewOffset;
+    return Promise.resolve();
+  });
+  await runFrames();
+  expect(scrollToIndex).not.toHaveBeenCalled();
+  expect(list()).toMatchObject({ alwaysRender: { top: 3 }, dataVersion: 3 });
+  if (initialOpen) expect(showWindow).not.toHaveBeenCalled();
+
+  listState.sizes.set("licenses", 1200);
+  await runFrames();
+  expect(scrollToIndex).not.toHaveBeenCalled();
+
+  listState.sizes.set(initialOpen ? "general" : "advanced", 100);
+  listState.positionAtIndex = index => [0, 100, 200][index];
+  await runFrames();
+  expect(scrollToIndex).toHaveBeenCalledExactlyOnceWith({ index: 2, animated: !initialOpen, viewOffset: 52, viewPosition: 0 });
+  expect(listState.positionAtIndex(2) + 52 - listState.scroll).toBe(52);
+  expect(sidebar().selectedId).toBe("licenses");
+  expect(list()).toMatchObject({ alwaysRender: undefined, dataVersion: 0 });
+  expect(showWindow).toHaveBeenCalledExactlyOnceWith("settings");
+});
+
 test("scroll selection changes at the visible pane boundary in either direction", async () => {
   const onSelectionChange = vi.fn();
   await mount(React.createElement(SettingsWindow, { ...settings, onSelectionChange }));
@@ -164,6 +206,23 @@ test("canceling a sidebar jump before it starts leaves manual scroll enabled", a
   expect(scrollToIndex).toHaveBeenCalledTimes(1);
   await scroll(100, 0);
   expect(sidebar().selectedId).toBe("advanced");
+});
+
+test("a user scroll cancels a jump waiting on page measurement", async () => {
+  await mount(React.createElement(SettingsWindow, settings));
+  await resize(); await runFrames();
+  listState.sizes.delete("advanced");
+  await act(async () => sidebar().onSelectionChange({ id: "advanced" }));
+  await runFrames();
+  expect(list().alwaysRender).toEqual({ top: 2 });
+
+  await act(async () => list().onScrollBeginDrag());
+  await scroll(30, 0);
+  listState.sizes.set("advanced", 1200);
+  await runFrames();
+  expect(sidebar().selectedId).toBe("general");
+  expect(scrollToIndex).toHaveBeenCalledTimes(1);
+  expect(list().alwaysRender).toBeUndefined();
 });
 
 test("a page can override or hide its heading without changing navigation labels", async () => {
@@ -300,9 +359,14 @@ test("image choices expose radios and handle arrows without adding tab stops", a
 });
 
 test("settings options retain the hidden overlay-window defaults", () => {
-  expect(createSettingsWindowOptions({ title: "Preferences" })).toMatchObject({
+  expect(createSettingsWindowOptions({ title: "Preferences", macos: { titleBar: { titleVisibility: undefined } } })).toMatchObject({
     title: "Preferences", show: false, titleBarStyle: "overlay", size: { width: 820, height: 640 },
+    macos: { titleBar: { titleVisibility: "hidden" } },
   });
+});
+
+test("settings options can show the native title explicitly", () => {
+  expect(createSettingsWindowOptions({ macos: { titleBar: { titleVisibility: "visible" } } }).macos?.titleBar?.titleVisibility).toBe("visible");
 });
 
 test("windows that mount together keep their native owners", async () => {
