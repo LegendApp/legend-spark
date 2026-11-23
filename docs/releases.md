@@ -100,7 +100,7 @@ separate checks from source migrations.
 Back up data, rebuild custom hosts, and follow the packaged
 [0.0.4 migration notes](../packages/desktop/skills/spark/UPGRADING.md#004).
 
-Legend Spark currently identifies itself as `0.0.6` and publishes through
+Legend Spark currently identifies itself as `0.0.7` and publishes through
 the `latest` npm channel. That identity remains experimental until the
 [release readiness matrix](release-readiness.md) and a completed
 [release evidence dossier](release-test-dossier.md) support a deliberate
