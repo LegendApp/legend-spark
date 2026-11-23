@@ -26,28 +26,43 @@ const densities = [
   { label: "Extra spacious", value: "extra-spacious" },
 ];
 
+const preferences = [
+  { title: "Files", icon: "doc", rows: ["Default file format", "New file encoding", "Show hidden files"] },
+  { title: "Search", icon: "magnifyingglass", rows: ["Match case", "Search ignored files"] },
+  { title: "Appearance", icon: "paintbrush", rows: ["Color theme", "Accent color", "Show the status bar", "Sidebar icon size"] },
+  { title: "Tabs", icon: "rectangle.on.rectangle", rows: ["Open files in a new tab"] },
+  { title: "Formatting", icon: "text.alignleft", rows: ["Indent width", "Use tabs for indentation", "Trim trailing whitespace", "Insert final newline"] },
+  { title: "Backups", icon: "clock.arrow.circlepath", rows: ["Backup location", "Keep previous versions", "Remove old backups"] },
+  { title: "Privacy", icon: "lock", rows: ["Remember recent documents"] },
+  { title: "Notifications", icon: "bell", rows: ["Notify when a backup finishes", "Play an alert sound"] },
+  { title: "Accessibility", icon: "accessibility", rows: ["Reduce motion", "Increase contrast", "Show focus indicators"] },
+];
+
 export function SettingsDemo() {
   const [error, setError] = useState("");
+  const open = (settingsPageId: "editor" | "shortcuts") => {
+    setError("");
+    void openWindow({
+      ...createSettingsWindowOptions(),
+      id: SETTINGS_DEMO_WINDOW,
+      component: "main",
+      props: { windowId: SETTINGS_DEMO_WINDOW, settingsPageId },
+    }).catch(cause => setError(errorText(cause)));
+  };
   return (
     <Panel title="Settings window">
       {Platform.OS === "macos" ? (
-        <Button testID="settings-demo-open" onPress={() => {
-          setError("");
-          void openWindow({
-            ...createSettingsWindowOptions(),
-            id: SETTINGS_DEMO_WINDOW,
-            component: "main",
-            props: { windowId: SETTINGS_DEMO_WINDOW },
-          })
-            .catch(cause => setError(errorText(cause)));
-        }}>Open settings</Button>
+        <>
+          <Button testID="settings-demo-open" onPress={() => open("editor")}>Open settings</Button>
+          <Button testID="settings-demo-open-shortcuts" onPress={() => open("shortcuts")}>Open Shortcuts directly</Button>
+        </>
       ) : <Status testID="settings-demo-unavailable">Settings windows require macOS.</Status>}
       {error ? <Status testID="settings-demo-error">{error}</Status> : null}
     </Panel>
   );
 }
 
-export function SettingsDemoWindow() {
+export function SettingsDemoWindow({ defaultPageId = "editor" }: { defaultPageId?: "editor" | "shortcuts" }) {
   const [layout, setLayout] = useState("canvas");
   const [lineNumbers, setLineNumbers] = useState(true);
   const [wrap, setWrap] = useState(false);
@@ -57,7 +72,7 @@ export function SettingsDemoWindow() {
   const [name, setName] = useState("Untitled");
   const [reopen, setReopen] = useState(true);
   return (
-    <SettingsWindow windowId={SETTINGS_DEMO_WINDOW} defaultPageId="editor">
+    <SettingsWindow windowId={SETTINGS_DEMO_WINDOW} defaultPageId={defaultPageId}>
       <SettingsPage id="general" title="General" icon="gearshape">
         <SettingsSection title="Startup">
           <SettingsSwitchRow label="Reopen documents" description="Restore your documents when the app launches." value={reopen} onValueChange={setReopen} />
@@ -81,10 +96,29 @@ export function SettingsDemoWindow() {
           <SettingsSelectRow label="Save changes automatically" options={intervals} value={interval} onValueChange={setInterval} />
         </SettingsSection>
       </SettingsPage>
+      {preferences.map(({ title, icon, rows }) => (
+        <SettingsPage key={title} id={title.toLowerCase()} title={title} icon={icon}>
+          <SettingsSection>
+            {rows.map(label => <SettingsRow key={label} label={label} />)}
+          </SettingsSection>
+        </SettingsPage>
+      ))}
       <SettingsPage id="shortcuts" title="Shortcuts" icon="keyboard">
         <SettingsSection title="Editing">
           <SettingsRow label="Find in document" description="Search the currently open document." />
           <SettingsRow label="Show command palette" description="Find and run editor commands." />
+        </SettingsSection>
+        <SettingsSection title="Navigation">
+          <SettingsRow label="Go to line" description="Jump to a line in the current document." />
+          <SettingsRow label="Go to definition" description="Open the definition at the cursor." />
+          <SettingsRow label="Next tab" description="Select the tab to the right." />
+          <SettingsRow label="Previous tab" description="Select the tab to the left." />
+        </SettingsSection>
+        <SettingsSection title="Window">
+          <SettingsRow label="New window" description="Open another editor window." />
+          <SettingsRow label="Close window" description="Close the active editor window." />
+          <SettingsRow label="Toggle sidebar" description="Show or hide the document outline." />
+          <SettingsRow label="Toggle full screen" description="Enter or leave full screen." />
         </SettingsSection>
       </SettingsPage>
     </SettingsWindow>

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- ui: Align macOS settings pages below the titlebar on direct open and sidebar jumps, including a last page taller than the window.
+- [Behavior change] `createSettingsWindowOptions()` hides native titlebar text by default. Use the in-pane `SettingsPage` heading, or pass `{ macos: { titleBar: { titleVisibility: "visible" } } }` to keep showing the native title.
+
 ## 0.0.6
 
 macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
