@@ -143,7 +143,7 @@ int main(){@autoreleasepool{
  controller.splitViewItems[0].collapsed=!controller.splitViewItems[0].collapsed;spin();[v layout];checkCollapsed(true);assert(changes==std::vector<bool>{true});
  [v updateProps:props oldProps:props];[v layout];spin();checkCollapsed(true);assert(changes.size()==1);
 
- [v unmountChildComponentView:sidebar index:0];sidebar=[RCTViewComponentView new];
+ [v unmountChildComponentView:sidebar index:0];assert(!sidebar.superview && !sidebar.hidden && sidebar.autoresizingMask==NSViewNotSizable);sidebar=[RCTViewComponentView new];
  [v mountChildComponentView:sidebar index:0];
  assert(sidebar.hidden && sidebar.frame.size.width==0);
  spin();checkCollapsed(true);
@@ -210,7 +210,7 @@ int main(){@autoreleasepool{
  [v updateProps:winningEcho oldProps:current];spin();checkCollapsed(true);
  assert(changes.size()==eventCount && resizes.size()==resizeCount+1);
  puts("PASS full component winning echo forces one settled layout for unobserved native toggle");
- [v prepareForRecycle];spin();assert(!controller.splitViewItems[0].collapsed);
+ [v prepareForRecycle];spin();assert(!controller.splitViewItems[0].collapsed);assert(!content.superview && content.autoresizingMask==NSViewNotSizable);
  changes.clear();resizes.clear();[v updateEventEmitter:std::make_shared<SidebarSplitViewEventEmitter>()];
  auto fresh=std::make_shared<SidebarSplitViewProps>();[v updateProps:fresh oldProps:v->_props];
  [v mountChildComponentView:sidebar index:0];[v mountChildComponentView:content index:1];[v layout];spin();checkCollapsed(false);assert(changes.empty());
