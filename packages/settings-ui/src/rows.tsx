@@ -5,6 +5,7 @@ import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { Children, Fragment, useState, type ReactNode } from "react";
 import * as RN from "react-native";
 import type { ColorValue, ImageSourcePropType, NativeSyntheticEvent } from "react-native";
+import { SettingsHeading, settingsHeadingGap, settingsRowInset } from "./heading";
 
 const { Image, Platform, PlatformColor, Pressable, StyleSheet, Text, View } = RN;
 
@@ -59,7 +60,7 @@ export function SettingsSection({ title, children }: SettingsSectionProps) {
   if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Settings sections require macOS");
   return (
     <View style={styles.section}>
-      {title ? <Text accessibilityRole="header" style={[styles.heading, { color: PlatformColor("labelColor") }]}>{title}</Text> : null}
+      {title ? <SettingsHeading title={title} /> : null}
       <View style={styles.card}>
         {Children.toArray(children).map((child, index) => (
           <Fragment key={typeof child === "object" && "key" in child ? child.key : index}>
@@ -159,14 +160,11 @@ export function SettingsImageChoiceRow({ options, value, onValueChange, disabled
   );
 }
 
-const rowInset = 12;
-
 const styles = StyleSheet.create({
-  section: { gap: 10 },
-  heading: { fontSize: 13, lineHeight: 16, fontWeight: "600", marginHorizontal: rowInset },
+  section: { gap: settingsHeadingGap },
   card: { backgroundColor: cardColor, borderRadius: 10, overflow: "hidden" },
-  divider: { height: StyleSheet.hairlineWidth, marginHorizontal: rowInset },
-  row: { flexDirection: "row", alignItems: "center", minHeight: 42, paddingHorizontal: rowInset, paddingVertical: 10, gap: 12 },
+  divider: { height: StyleSheet.hairlineWidth, marginHorizontal: settingsRowInset },
+  row: { flexDirection: "row", alignItems: "center", minHeight: 42, paddingHorizontal: settingsRowInset, paddingVertical: 10, gap: 12 },
   rowText: { flex: 1, minWidth: 0, gap: 3 },
   rowWithDescription: { paddingVertical: 11 },
   labelLine: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
