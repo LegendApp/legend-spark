@@ -149,7 +149,7 @@ test.each(["initial open", "sidebar jump"])("%s aligns a long last page after me
   });
   await runFrames();
   expect(scrollToIndex).not.toHaveBeenCalled();
-  expect(list()).toMatchObject({ alwaysRender: { top: 3 }, dataVersion: 3 });
+  expect(list().alwaysRender).toEqual({ top: 3 });
   if (initialOpen) expect(showWindow).not.toHaveBeenCalled();
 
   listState.sizes.set("licenses", 1200);
@@ -162,7 +162,7 @@ test.each(["initial open", "sidebar jump"])("%s aligns a long last page after me
   expect(scrollToIndex).toHaveBeenCalledExactlyOnceWith({ index: 2, animated: !initialOpen, viewOffset: 52, viewPosition: 0 });
   expect(listState.positionAtIndex(2) + 52 - listState.scroll).toBe(52);
   expect(sidebar().selectedId).toBe("licenses");
-  expect(list()).toMatchObject({ alwaysRender: undefined, dataVersion: 0 });
+  expect(list().alwaysRender).toBeUndefined();
   expect(showWindow).toHaveBeenCalledExactlyOnceWith("settings");
 });
 

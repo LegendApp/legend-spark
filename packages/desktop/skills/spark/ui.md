@@ -46,7 +46,7 @@ export function Preferences() {
 
 ## Settings windows on macOS
 
-Use `@legendapp/spark/ui/settings` with `@legendapp/list` installed. Register a hidden window with `createSettingsWindowOptions()` and pass the registered `windowId` to `SettingsWindow` (also exported as `VirtualizedSettingsWindow`). The sidebar scrolls the shared list and follows its current page. Use `defaultPageId` or `selectedPageId` with `onSelectionChange`. Other platforms throw `E_UNSUPPORTED_PLATFORM` on render.
+Use `@legendapp/spark/ui/settings` with `@legendapp/list` 3.7.3 or later installed. Register a hidden window with `createSettingsWindowOptions()` and pass the registered `windowId` to `SettingsWindow` (also exported as `VirtualizedSettingsWindow`). The sidebar scrolls the shared list and follows its current page. Use `defaultPageId` or `selectedPageId` with `onSelectionChange`. Other platforms throw `E_UNSUPPORTED_PLATFORM` on render.
 
 ```tsx
 import { useState } from 'react';

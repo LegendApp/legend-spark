@@ -217,7 +217,7 @@ The swipe AppKit fixture runs the actual implementation for axis replay, rest/ar
 
 ## Settings windows
 
-Import the macOS settings composition from `@legendapp/spark/ui/settings` with `@legendapp/list` 3.3.4 or later installed. `SettingsWindow` and `VirtualizedSettingsWindow` are the same LegendList window. Clicking the icon sidebar scrolls to a page. Scrolling updates the sidebar selection and native window title. Other platforms throw `E_UNSUPPORTED_PLATFORM` when rendering the window.
+Import the macOS settings composition from `@legendapp/spark/ui/settings` with `@legendapp/list` 3.7.3 or later installed. `SettingsWindow` and `VirtualizedSettingsWindow` are the same LegendList window. Clicking the icon sidebar scrolls to a page. Scrolling updates the sidebar selection and native window title. Other platforms throw `E_UNSUPPORTED_PLATFORM` when rendering the window.
 
 Use `createSettingsWindowOptions()` when registering or opening the window. It starts hidden and becomes visible after split-view layout and the initial scroll. Pass its registered ID as `windowId` and remount to change it. `appearance` defaults to `"system"` and also accepts `"light"` and `"dark"`. `onError` receives native and scroll failures.
 
